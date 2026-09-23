@@ -22,7 +22,27 @@ CRM-delen kan bygges ovenpå uden at rive noget ned.
 ```bash
 cp .env.example .env          # udfyld værdier lokalt – aldrig i git
 docker compose up -d          # starter PostgreSQL med vedvarende data
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/alembic upgrade head   # bygger/opdaterer databasens tabeller
 ```
+
+## Struktur
+- `app/config.py` – indstillinger fra `.env` (hemmeligheder som `SecretStr`).
+- `app/db.py` – databaseforbindelse (`hide_parameters=True`, så værdier ikke logges).
+- `app/kunder/models.py` – kundekartotek (`clients`) og adgange (`credentials`).
+  Kundedata holdes her, adskilt fra kommende afstemningslogik.
+- `app/sikkerhed/kryptering.py` – kryptering/dekryptering og maskering af tokens.
+- `migrations/` – Alembic-migreringer (ændringer af databasens opbygning).
+
+## Databaseændringer (Alembic)
+- Ret modellerne i `app/`, og lav så en migrering:
+  `.venv/bin/alembic revision --autogenerate -m "kort beskrivelse"`
+- Gennemlæs altid den genererede fil i `migrations/versions/` før den køres.
+- Kør: `.venv/bin/alembic upgrade head`. Fortryd seneste: `.venv/bin/alembic downgrade -1`.
+- Ændr aldrig en migrering, der allerede er kørt i en delt database – lav en ny.
+- Tokens gemmes kun via `Credential.saet_token()` og læses kun via
+  `Credential.hent_token()` lige før brug. En trigger i databasen afviser
+  ukrypterede tokens uden at gentage værdien i fejlbeskeden.
 
 ## FASTE REGLER (skal altid overholdes)
 
