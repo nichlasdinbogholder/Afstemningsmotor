@@ -56,6 +56,11 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   Følger `pagination.nextPage` og nægter at sende nøgler til andre værter.
 - `app/adaptere/economic/kontoplan.py` – henter kontoplanen for én kunde:
   `python -m app.adaptere.economic.kontoplan --kundenummer <nr>` (eller `--kunde <id>`).
+  `--alle` henter for alle kunder med aktiv e-conomic-adgang (ikke opsagte);
+  én kundes fejl stopper ikke resten.
+- `app/planlaegning/natlig_kontoplan.py` – tidsplan på Mac (launchd): kører
+  `--alle` ÉN gang i døgnet (standard kl. 02:30). Log: `logs/kontoplan.log`.
+  `python -m app.planlaegning.natlig_kontoplan installer|status|koer-nu|afinstaller`.
 - `app/regnskab/models.py` – regnskabsdata fra kundernes systemer (`accounts`
   med `tenant_id` = kunden). Holdt adskilt fra CRM-tabellerne.
 - `tests/` – kør med `.venv/bin/pytest` (kræver kørende database).

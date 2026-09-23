@@ -16,6 +16,7 @@ KOMMANDOER = [
     "app.kunder.gem_token",
     "app.adaptere.economic.kontoplan",
     "app.sikkerhed.ny_noegle",
+    "app.planlaegning.natlig_kontoplan",
     "app.kunder.adgange",
 ]
 
@@ -44,7 +45,7 @@ def test_kommando_kender_alle_tabeller(modul):
         assert resultat.returncode == 0, resultat.stderr[-800:]
 
 
-@pytest.mark.parametrize("modul", KOMMANDOER[:3])
+@pytest.mark.parametrize("modul", KOMMANDOER[:4])
 def test_kommando_viser_hjaelp(modul):
     resultat = subprocess.run(
         [sys.executable, "-m", modul, "--help"], cwd=ROD, capture_output=True, text=True

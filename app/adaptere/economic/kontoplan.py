@@ -2,6 +2,11 @@
 
     python -m app.adaptere.economic.kontoplan --kunde 12
     python -m app.adaptere.economic.kontoplan --kundenummer K-1001
+    python -m app.adaptere.economic.kontoplan --alle
+
+--alle henter for alle kunder, der ikke er opsagt og har en aktiv
+e-conomic-adgang. Fejler én kunde, fortsætter den med de næste. Bruges af
+den natlige kørsel (se app/planlaegning/natlig_kontoplan.py).
 
 Scriptet LÆSER kun fra e-conomic – det bogfører og ændrer intet dér.
 Kontoplanen i vores database bliver en kopi af e-conomics: nye konti
@@ -14,6 +19,7 @@ import sys
 from decimal import Decimal
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -24,7 +30,7 @@ from app.adaptere.economic.klient import EconomicFejl, EconomicKlient
 from app.audit.models import AuditLog
 from app.config import get_settings
 from app.db import ny_session
-from app.kunder.models import Client
+from app.kunder.models import Client, Credential
 from app.regnskab.models import Account
 from app.sikkerhed.kryptering import KrypteringsFejl
 from app.sikkerhed.hemmeligheder import HemmeligtToken
@@ -124,19 +130,77 @@ def _find_kunde(session: Session, kunde_id: int | None, kundenummer: str | None)
     return kunde
 
 
+FORVENTEDE_FEJL = (KontoplanFejl, EconomicFejl, AdgangMangler, KrypteringsFejl)
+
+
+def kunder_med_economic(session: Session) -> list[Client]:
+    """Kunder, der ikke er opsagt og har en aktiv e-conomic-adgang."""
+    return list(session.scalars(
+        select(Client)
+        .join(Credential, Credential.client_id == Client.id)
+        .where(
+            Credential.system == SYSTEM,
+            Credential.status == "aktiv",
+            Client.status != "opsagt",
+        )
+        .order_by(Client.kundenummer)
+    ))
+
+
+def hent_for_alle(session: Session, transport=None, vent=None) -> dict:
+    """Hent kontoplanen for alle e-conomic-kunder. Én kundes fejl stopper ikke de andre."""
+    _app_secret_token()  # stop straks, hvis app-nøglen mangler – så fejler alle alligevel
+    kunder = [(k.id, k.kundenummer, k.navn) for k in kunder_med_economic(session)]
+    ok, fejlede = [], []
+    for kunde_id, kundenummer, navn in kunder:
+        try:
+            resultat = hent_og_gem_kontoplan(session, kunde_id, transport=transport, vent=vent)
+        except (*FORVENTEDE_FEJL, SQLAlchemyError) as fejl:
+            session.rollback()
+            besked = str(fejl).splitlines()[0][:300]
+            log.error("Kunde %s (%s): kontoplan IKKE hentet – %s", kundenummer, navn, besked)
+            fejlede.append(kundenummer)
+            continue
+        log.info(
+            "Kunde %s (%s): %s konti, %s fjernet",
+            kundenummer, navn, resultat["antal_konti"], resultat["fjernet"],
+        )
+        ok.append(kundenummer)
+    return {"antal_kunder": len(kunder), "ok": ok, "fejlede": fejlede}
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Hent kontoplan fra e-conomic for én kunde.")
+    parser = argparse.ArgumentParser(description="Hent kontoplan fra e-conomic.")
     gruppe = parser.add_mutually_exclusive_group(required=True)
     gruppe.add_argument("--kunde", type=int, help="kundens id i clients")
     gruppe.add_argument("--kundenummer", help="kundens kundenummer")
+    gruppe.add_argument("--alle", action="store_true", help="alle kunder med aktiv e-conomic-adgang")
     args = parser.parse_args(argv)
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    if args.alle:
+        with ny_session() as session:
+            try:
+                resultat = hent_for_alle(session)
+            except KontoplanFejl as fejl:
+                log.error("Natlig kørsel stoppet: %s", fejl)
+                return 1
+        log.info(
+            "Færdig: %s kunder, %s hentet, %s fejlede%s",
+            resultat["antal_kunder"], len(resultat["ok"]), len(resultat["fejlede"]),
+            f" ({', '.join(resultat['fejlede'])})" if resultat["fejlede"] else "",
+        )
+        return 1 if resultat["fejlede"] else 0
 
     with ny_session() as session:
         try:
             kunde = _find_kunde(session, args.kunde, args.kundenummer)
             resultat = hent_og_gem_kontoplan(session, kunde.id)
-        except (KontoplanFejl, EconomicFejl, AdgangMangler, KrypteringsFejl) as fejl:
+        except FORVENTEDE_FEJL as fejl:
             print(f"Fejl: {fejl}", file=sys.stderr)
             return 1
     print(
