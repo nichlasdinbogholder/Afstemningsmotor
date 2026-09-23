@@ -56,8 +56,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   Følger `pagination.nextPage` og nægter at sende nøgler til andre værter.
 - `app/adaptere/economic/kontoplan.py` – henter kontoplanen for én kunde:
   `python -m app.adaptere.economic.kontoplan --kundenummer <nr>` (eller `--kunde <id>`).
-  `--alle` henter for alle kunder med aktiv e-conomic-adgang (ikke opsagte);
-  én kundes fejl stopper ikke resten.
+  `--alle` henter for alle AKTIVE kunder med aktiv e-conomic-adgang (aldrig
+  opsagt/pause); én kundes fejl stopper ikke resten. Registreres i sync_state
+  som ressourcen `accounts`.
 - `app/planlaegning/natlig_kontoplan.py` – tidsplan på Mac (launchd): kører
   `--alle` ÉN gang i døgnet (standard kl. 12:30). Log: `logs/kontoplan.log`.
   `python -m app.planlaegning.natlig_kontoplan installer|status|koer-nu|afinstaller`.
@@ -71,6 +72,14 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     hemmeligheder.
   - `worker.py`: `python -m app.jobs.worker` – henter med `FOR UPDATE SKIP LOCKED`,
     prøver igen med fordoblet ventetid (30 s … 1 t), frigiver job i gang > 15 min.
+- `app/synk/` – synkroniseringstilstand (tabel `sync_state`, én række pr. kunde pr.
+  ressource; visningen `synk_kraever_handling` viser kunder, der er bagud/fejler).
+  - REGEL: al hentning med bogmærke (cursor) skal ske i `synk_transaktion(...)`;
+    kald `synk.gennemfoert(ny_cursor, type, antal_hentet=...)` efter data er skrevet.
+    Data og bogmærke gemmes samlet – aldrig bogmærket alene.
+  - Kun kunder med status `aktiv` synkroniseres (aldrig `opsagt` eller `pause`).
+  - Efter 5 fejl i træk: status `fejlet`. Ventetid 5 min, 10 min, … højst 24 t.
+  - `python -m app.synk.kommando oversigt|status|nulstil|deaktiver|aktiver`.
 - `app/regnskab/models.py` – regnskabsdata fra kundernes systemer (`accounts`
   med `tenant_id` = kunden). Holdt adskilt fra CRM-tabellerne.
 - `tests/` – kør med `.venv/bin/pytest` (kræver kørende database).

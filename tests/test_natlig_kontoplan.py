@@ -29,6 +29,7 @@ def _kunde(session, nr, token, status="aktiv"):
     session.add(k)
     session.flush()
     gem_token(session, k.id, "economic", token + nr)
+    session.commit()
     return k
 
 

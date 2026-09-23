@@ -6,6 +6,7 @@ from app.jobs.models import Job
 from app.kunder.models import Client, Contact, Credential
 from app.personale.models import Staff
 from app.regnskab.models import Account
+from app.synk.models import SyncState
 
 __all__ = [
     "Account",
@@ -18,6 +19,7 @@ __all__ = [
     "Job",
     "Note",
     "Staff",
+    "SyncState",
     "Task",
     "TimeEntry",
 ]

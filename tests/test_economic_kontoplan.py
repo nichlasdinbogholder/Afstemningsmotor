@@ -52,7 +52,7 @@ def kunde(db_session, token):
     adgang.saet_token(token)
     k.credentials.append(adgang)
     db_session.add(k)
-    db_session.flush()
+    db_session.commit()
     return k
 
 
@@ -164,7 +164,7 @@ def test_tom_kontoplan_sletter_ikke_den_gemte(db_session, kunde, app_secret):
 def test_mangler_adgang(db_session, app_secret):
     uden = Client(navn="Uden adgang", kundenummer="KP-2", regnskabssystem="economic")
     db_session.add(uden)
-    db_session.flush()
+    db_session.commit()
     with pytest.raises(AdgangMangler):
         _hent(db_session, uden, FalskEconomic([[]]))
 

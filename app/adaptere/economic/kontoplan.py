@@ -4,7 +4,7 @@
     python -m app.adaptere.economic.kontoplan --kundenummer K-1001
     python -m app.adaptere.economic.kontoplan --alle
 
---alle henter for alle kunder, der ikke er opsagt og har en aktiv
+--alle henter for alle AKTIVE kunder (aldrig opsagt eller pause) med aktiv
 e-conomic-adgang. Fejler én kunde, fortsætter den med de næste. Bruges af
 den natlige kørsel (se app/planlaegning/natlig_kontoplan.py).
 
@@ -16,6 +16,7 @@ tilføjes, ændrede opdateres, og konti der ikke længere findes, fjernes.
 import argparse
 import logging
 import sys
+from datetime import timedelta
 from decimal import Decimal
 
 from sqlalchemy import delete, func, select
@@ -34,10 +35,13 @@ from app.kunder.models import Client, Credential
 from app.regnskab.models import Account
 from app.sikkerhed.kryptering import KrypteringsFejl
 from app.sikkerhed.hemmeligheder import HemmeligtToken
+from app.synk.models import SyncState
+from app.synk.tilstand import SynkFejl, synk_transaktion
 
 log = logging.getLogger(__name__)
 
 SYSTEM = "economic"
+RESSOURCE = "accounts"
 
 
 class KontoplanFejl(Exception):
@@ -102,21 +106,27 @@ def gem_kontoplan(session: Session, tenant_id: int, konti: list[dict]) -> dict:
 def hent_og_gem_kontoplan(
     session: Session, tenant_id: int, transport=None, vent=None
 ) -> dict:
-    """Hent kontoplanen fra e-conomic for én kunde og gem den."""
-    adgang = hent_adgang(session, tenant_id, SYSTEM)
-    with EconomicKlient(
-        app_secret_token=_app_secret_token(),
-        agreement_grant_token=adgang.token,
-        base_url=get_settings().economic_api_base_url,
-        transport=transport,
-        vent=vent,
-    ) as klient:
-        konti = list(klient.hent_alle("/accounts"))
-    if not konti:
-        # En tom kontoplan er næsten altid en fejl – slet ikke den gemte kopi.
-        raise KontoplanFejl("e-conomic returnerede ingen konti – intet er ændret")
-    resultat = gem_kontoplan(session, tenant_id, konti)
-    session.commit()
+    """Hent kontoplanen fra e-conomic for én kunde og gem den.
+
+    Kontoplanen hentes altid fuldt (ingen cursor). Resultatet – eller fejlen –
+    registreres i sync_state for ressourcen 'accounts', i samme transaktion som
+    kontoplanen gemmes.
+    """
+    with synk_transaktion(session, tenant_id, RESSOURCE, interval=timedelta(days=1)) as synk:
+        adgang = hent_adgang(session, tenant_id, SYSTEM)
+        with EconomicKlient(
+            app_secret_token=_app_secret_token(),
+            agreement_grant_token=adgang.token,
+            base_url=get_settings().economic_api_base_url,
+            transport=transport,
+            vent=vent,
+        ) as klient:
+            konti = list(klient.hent_alle("/accounts"))
+        if not konti:
+            # En tom kontoplan er næsten altid en fejl – slet ikke den gemte kopi.
+            raise KontoplanFejl("e-conomic returnerede ingen konti – intet er ændret")
+        resultat = gem_kontoplan(session, tenant_id, konti)
+        synk.gennemfoert(None, antal_hentet=len(konti))
     return resultat
 
 
@@ -130,18 +140,23 @@ def _find_kunde(session: Session, kunde_id: int | None, kundenummer: str | None)
     return kunde
 
 
-FORVENTEDE_FEJL = (KontoplanFejl, EconomicFejl, AdgangMangler, KrypteringsFejl)
+FORVENTEDE_FEJL = (KontoplanFejl, EconomicFejl, AdgangMangler, KrypteringsFejl, SynkFejl)
 
 
 def kunder_med_economic(session: Session) -> list[Client]:
-    """Kunder, der ikke er opsagt og har en aktiv e-conomic-adgang."""
+    """Aktive kunder med aktiv e-conomic-adgang. Opsagte og kunder på pause køres aldrig,
+    og heller ikke kunder, hvor synkronisering af kontoplanen er slået fra."""
+    deaktiveret = select(SyncState.client_id).where(
+        SyncState.ressource == RESSOURCE, SyncState.status == "deaktiveret"
+    )
     return list(session.scalars(
         select(Client)
         .join(Credential, Credential.client_id == Client.id)
         .where(
             Credential.system == SYSTEM,
             Credential.status == "aktiv",
-            Client.status != "opsagt",
+            Client.status == "aktiv",
+            Client.id.not_in(deaktiveret),
         )
         .order_by(Client.kundenummer)
     ))
