@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     # Hovednøgle til kryptering af kundernes tokens (Fernet).
     credentials_key: SecretStr
 
+    # e-conomic: app-nøglen (X-AppSecretToken) er fælles for alle kunder og ligger
+    # derfor her. Kundens egen nøgle (X-AgreementGrantToken) ligger krypteret i
+    # credentials-tabellen.
+    economic_app_secret_token: SecretStr | None = None
+    economic_api_base_url: str = "https://restapi.e-conomic.com"
+
     allow_booking: bool = False
 
 

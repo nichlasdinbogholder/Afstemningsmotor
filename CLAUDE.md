@@ -46,6 +46,13 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   (`python -m app.sikkerhed.ny_noegle [--gem]`).
 - `app/adaptere/` – adapter-laget til e-conomic/Dinero. Henter adgang via
   `hent_adgang()`, som er den eneste, der kalder dekrypteringen.
+- `app/adaptere/economic/klient.py` – læse-klient til e-conomics REST API
+  (httpx + tenacity: 5 forsøg med eksponentiel ventetid ved 429/5xx/netværksfejl).
+  Følger `pagination.nextPage` og nægter at sende nøgler til andre værter.
+- `app/adaptere/economic/kontoplan.py` – henter kontoplanen for én kunde:
+  `python -m app.adaptere.economic.kontoplan --kundenummer <nr>` (eller `--kunde <id>`).
+- `app/regnskab/models.py` – regnskabsdata fra kundernes systemer (`accounts`
+  med `tenant_id` = kunden). Holdt adskilt fra CRM-tabellerne.
 - `tests/` – kør med `.venv/bin/pytest` (kræver kørende database).
 - `migrations/` – Alembic-migreringer (ændringer af databasens opbygning).
 
@@ -75,6 +82,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - Brug `HemmeligtToken.klartekst()` kun direkte i kaldet til e-conomic/Dinero,
   aldrig i log-, fejl- eller print-sætninger.
 - Skift aldrig `CREDENTIALS_KEY` uden først at have omkrypteret alle tokens.
+- e-conomic: `X-AppSecretToken` (fælles for vores app) ligger i `.env` som
+  `ECONOMIC_APP_SECRET_TOKEN`; `X-AgreementGrantToken` (pr. kunde) ligger
+  krypteret i `credentials`.
 
 ## FASTE REGLER (skal altid overholdes)
 

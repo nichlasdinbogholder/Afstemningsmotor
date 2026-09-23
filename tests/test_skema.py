@@ -16,7 +16,7 @@ from app.personale.models import Staff
 
 TABELLER = {
     "staff", "clients", "credentials", "contacts", "tasks", "time_entries",
-    "notes", "documents", "handovers", "audit_log",
+    "notes", "documents", "handovers", "audit_log", "accounts",
 }
 
 
