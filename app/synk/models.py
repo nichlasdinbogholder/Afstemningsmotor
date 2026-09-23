@@ -16,7 +16,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base, kun_vaerdier
 
-RESSOURCER = ("accounts", "entries", "invoices", "journals", "suppliers")
+RESSOURCER = (
+    "accounts", "customers", "suppliers", "entries", "open_entries", "invoices", "journals",
+)
 CURSOR_TYPER = ("dato", "id", "token")
 SYNK_STATUSSER = ("ok", "forsinket", "fejlet", "deaktiveret")
 

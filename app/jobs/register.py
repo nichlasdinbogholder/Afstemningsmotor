@@ -22,11 +22,23 @@ from dataclasses import dataclass, field
 from sqlalchemy.orm import Session
 
 # Moduler med jobtyper. Tilføj nye moduler her, så workeren kender dem.
-JOBTYPE_MODULER = ("app.jobs.typer",)
+JOBTYPE_MODULER = ("app.jobs.typer", "app.synk.jobs")
 
 
 class UkendtJobtype(Exception):
     pass
+
+
+class UdskydJob(Exception):
+    """Rejses af en jobfunktion, der skal vente og prøve igen – fx ved rate limit.
+
+    Jobbet lægges i kø igen om `sekunder`, og forsøget tælles IKKE med, så det
+    aldrig ender som 'fejlet' af den grund.
+    """
+
+    def __init__(self, sekunder: float, grund: str) -> None:
+        super().__init__(grund)
+        self.sekunder = sekunder
 
 
 @dataclass(frozen=True)

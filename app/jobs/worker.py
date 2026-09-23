@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401  (alle tabeller skal være kendt)
 from app.db import get_engine, ny_session
-from app.jobs.register import JobKontekst, UkendtJobtype, hent_funktion
+from app.jobs.register import JobKontekst, UdskydJob, UkendtJobtype, hent_funktion
 from app.sikkerhed.hemmeligheder import rediger
 
 log = logging.getLogger(__name__)
@@ -68,6 +68,14 @@ MARKER_FEJL = text("""
         sidste_fejl = :fejl, laast_af = NULL, laast_tidspunkt = NULL
     WHERE id = :id AND status = 'i_gang' AND laast_af = :worker
     RETURNING status, planlagt_til
+""")
+
+UDSKYD = text("""
+    UPDATE jobs
+    SET status = 'koe', forsoeg = greatest(forsoeg - 1, 0),
+        planlagt_til = now() + make_interval(secs => :vent),
+        sidste_fejl = :grund, laast_af = NULL, laast_tidspunkt = NULL
+    WHERE id = :id AND status = 'i_gang' AND laast_af = :worker
 """)
 
 FRIGIV_HAENGENDE = text("""
@@ -109,6 +117,7 @@ class Worker:
         haengende_efter: float = 15 * 60,
         pause: float = 2.0,
         kun_typer: list[str] | None = None,
+        planlaeg: bool = False,
     ) -> None:
         self.navn = navn or f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}"
         self._engine = engine or get_engine()
@@ -118,6 +127,7 @@ class Worker:
         self._haengende_efter = haengende_efter
         self._pause = pause
         self._typer = list(kun_typer) if kun_typer else None  # None = alle typer
+        self._planlaeg = planlaeg
         self._stop = threading.Event()
 
     # --- Enkelte skridt -----------------------------------------------------
@@ -183,6 +193,15 @@ class Worker:
                 # Jobbet er frigivet og måske taget af en anden – gem ikke vores arbejde.
                 session.rollback()
                 log.warning("Job %s var ikke længere vores – arbejdet er rullet tilbage", job.id)
+        except UdskydJob as udskyd:
+            # Vent og prøv igen – tæller ikke som et fejlet forsøg.
+            session.rollback()
+            with self._engine.begin() as forbindelse:
+                forbindelse.execute(UDSKYD, {
+                    "id": job.id, "worker": self.navn, "vent": max(udskyd.sekunder, 1),
+                    "grund": rediger(f"Udskudt: {udskyd}")[:4000],
+                })
+            log.info("Job %s (%s) udskudt %.0f s: %s", job.id, job.type, udskyd.sekunder, udskyd)
         except Exception as fejl:  # noqa: BLE001 – ét jobs fejl må aldrig stoppe workeren
             session.rollback()
             self._marker_fejl(job, f"{type(fejl).__name__}: {fejl}")
@@ -201,12 +220,15 @@ class Worker:
             for sig in (signal.SIGINT, signal.SIGTERM):
                 signal.signal(sig, lambda *_: self._stop_blidt())
         log.info("Worker %s startet", self.navn)
-        sidste_oprydning = float("-inf")
+        sidste_oprydning = sidste_planlaegning = float("-inf")
         while not self._stop.is_set():
             try:
                 if time.monotonic() - sidste_oprydning >= oprydning_hvert:
                     self.frigiv_haengende()
                     sidste_oprydning = time.monotonic()
+                if self._planlaeg and time.monotonic() - sidste_planlaegning >= 3600:
+                    self._koer_planlaegger()
+                    sidste_planlaegning = time.monotonic()
                 fik_job = self.koer_et_job()
             except Exception:  # noqa: BLE001 – fx databasen er nede: vent og prøv igen
                 log.exception("Fejl i worker %s – fortsætter om lidt", self.navn)
@@ -219,6 +241,16 @@ class Worker:
                 self._stop.wait(self._pause)
         log.info("Worker %s stoppet", self.navn)
 
+    def _koer_planlaegger(self) -> None:
+        """Planlæg dagens synkronisering (sikkert at gentage – samme job lægges kun i kø én gang)."""
+        from app.synk.planlaegger import planlaeg_dag
+
+        with self._session_fabrik() as session:
+            r = planlaeg_dag(session)
+            session.commit()
+        if r.nye_job:
+            log.info("Planlægger: %s nye synkroniseringsjob for %s kunder", r.nye_job, r.kunder)
+
     def _stop_blidt(self) -> None:
         log.info("Stopper, når det aktuelle job er færdigt …")
         self._stop.set()
@@ -228,6 +260,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Kør jobkøens worker.")
     parser.add_argument("--stop-naar-tom", action="store_true", help="stop, når køen er tom")
     parser.add_argument("--pause", type=float, default=2.0, help="sekunder mellem tjek, når køen er tom")
+    parser.add_argument("--planlaeg", action="store_true",
+                        help="læg dagens synkronisering i kø automatisk (tjekkes hver time)")
     parser.add_argument("--kun-typer", nargs="+", help="kør kun disse jobtyper (standard: alle)")
     parser.add_argument("--haengende-efter", type=float, default=15 * 60,
                         help="sekunder, før et job i gang regnes som hængende (standard 900)")
@@ -235,7 +269,8 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
-    worker = Worker(pause=args.pause, haengende_efter=args.haengende_efter, kun_typer=args.kun_typer)
+    worker = Worker(pause=args.pause, haengende_efter=args.haengende_efter, kun_typer=args.kun_typer,
+                    planlaeg=args.planlaeg)
     worker.koer(stop_naar_tom=args.stop_naar_tom)
     return 0
 

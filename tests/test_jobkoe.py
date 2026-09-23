@@ -23,7 +23,7 @@ from app.jobs.koe import KoeFejl, genkoer, laeg_i_koe
 from app.jobs.register import afregistrer, jobtype
 from app.jobs.worker import HENT_NAESTE, MARKER_FAERDIG, Worker, ventetid
 
-TEST_TYPER = ["test_taeller", "test_fejler", "test_ok", "test_ukendt"]
+TEST_TYPER = ["test_taeller", "test_fejler", "test_ok", "test_ukendt", "test_venter"]
 
 
 def _ryd_op():
@@ -67,8 +67,14 @@ def udfoert():
         )
         raise RuntimeError("bum")
 
+    @jobtype("test_venter")
+    def venter(job):
+        from app.jobs.register import UdskydJob
+
+        raise UdskydJob(30, "for mange kald")
+
     yield liste
-    for navn in ("test_taeller", "test_ok", "test_fejler"):
+    for navn in ("test_taeller", "test_ok", "test_fejler", "test_venter"):
         afregistrer(navn)
 
 
@@ -298,3 +304,16 @@ def test_eksempeljobbet_logger_client_id(db_session, caplog):
         max_forsoeg=5, session=db_session,
     ))
     assert "client_id=40850635" in caplog.text
+
+
+def test_udskudt_job_taeller_ikke_som_forsoeg_og_ender_aldrig_som_fejlet(ren_koe, udfoert):
+    (job_id,) = _laeg("test_venter", max_forsoeg=2)
+    w = _worker()
+    for _ in range(5):  # flere gange end max_forsoeg
+        assert w.koer_et_job()
+        job = _job(job_id)
+        assert (job.status, job.forsoeg) == ("koe", 0)
+        assert 25 <= job.om.total_seconds() <= 31
+        assert "for mange kald" in job.sidste_fejl
+        with get_engine().begin() as f:
+            f.execute(text("UPDATE jobs SET planlagt_til = now() WHERE id = :id"), {"id": job_id})

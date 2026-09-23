@@ -27,7 +27,8 @@ from sqlalchemy.orm import Session
 import app.models  # noqa: F401  (alle tabeller skal være kendt, fx staff for audit_log)
 
 from app.adaptere.adgang import AdgangMangler, hent_adgang
-from app.adaptere.economic.klient import EconomicFejl, EconomicKlient
+from app.adaptere.economic.klient import EconomicFejl, EconomicKlient, app_secret_token
+from app.adaptere.regnskab.base import AdapterFejl
 from app.audit.models import AuditLog
 from app.config import get_settings
 from app.db import ny_session
@@ -49,10 +50,10 @@ class KontoplanFejl(Exception):
 
 
 def _app_secret_token() -> HemmeligtToken:
-    vaerdi = get_settings().economic_app_secret_token
-    if vaerdi is None or not vaerdi.get_secret_value():
-        raise KontoplanFejl("ECONOMIC_APP_SECRET_TOKEN mangler i .env")
-    return HemmeligtToken(vaerdi.get_secret_value())
+    try:
+        return app_secret_token()
+    except EconomicFejl as fejl:
+        raise KontoplanFejl(str(fejl)) from None
 
 
 def _decimal(vaerdi) -> Decimal | None:
@@ -140,7 +141,7 @@ def _find_kunde(session: Session, kunde_id: int | None, kundenummer: str | None)
     return kunde
 
 
-FORVENTEDE_FEJL = (KontoplanFejl, EconomicFejl, AdgangMangler, KrypteringsFejl, SynkFejl)
+FORVENTEDE_FEJL = (KontoplanFejl, AdapterFejl, AdgangMangler, KrypteringsFejl, SynkFejl)
 
 
 def kunder_med_economic(session: Session) -> list[Client]:

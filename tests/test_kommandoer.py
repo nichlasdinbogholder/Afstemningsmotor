@@ -20,6 +20,8 @@ KOMMANDOER = [
     "app.jobs.worker",
     "app.jobs.koe",
     "app.synk.kommando",
+    "app.synk.koer",
+    "app.synk.planlaegger",
     "app.kunder.adgange",
 ]
 
@@ -48,7 +50,7 @@ def test_kommando_kender_alle_tabeller(modul):
         assert resultat.returncode == 0, resultat.stderr[-800:]
 
 
-@pytest.mark.parametrize("modul", KOMMANDOER[:7])
+@pytest.mark.parametrize("modul", KOMMANDOER[:9])
 def test_kommando_viser_hjaelp(modul):
     resultat = subprocess.run(
         [sys.executable, "-m", modul, "--help"], cwd=ROD, capture_output=True, text=True

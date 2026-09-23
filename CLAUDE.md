@@ -51,6 +51,17 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   Tokenet indtastes skjult – aldrig som argument på kommandolinjen.
 - `app/adaptere/` – adapter-laget til e-conomic/Dinero. `hent_adgang()` og
   `hent_token(session, client_id, system)` er de eneste, der kalder dekrypteringen.
+- `app/adaptere/regnskab/base.py` – ADAPTER-LAGET: fælles format (Kunde, Leverandoer,
+  Postering, AabenPost) og de fire faste funktioner `hent_customers`, `hent_suppliers`,
+  `hent_entries(efter)`, `hent_open_entries()`. Hent en adapter med
+  `hent_adapter(session, client_id)`. Resten af systemet må ALDRIG importere
+  `app.adaptere.economic` eller kalde e-conomic direkte (test håndhæver det).
+  Ny adapter (Dinero): nyt modul + `@registrer_adapter("dinero")` + `ADAPTER_MODULER`.
+  Adaptere gætter aldrig: manglende felter bliver None; manglende id'er giver fejl.
+  Rate limit rejses som `ForMangeKald` (ikke en fejl – job udskydes).
+- `app/adaptere/economic/adapter.py` – e-conomic-adapteren (REST: /customers,
+  /suppliers, /accounting-years/{år}/entries; entries inkrementelt med
+  `entryNumber$gt:<cursor>`, åbne poster fuldt med `remainder$ne:0`).
 - `app/adaptere/economic/klient.py` – læse-klient til e-conomics REST API
   (httpx + tenacity: 5 forsøg med eksponentiel ventetid ved 429/5xx/netværksfejl).
   Følger `pagination.nextPage` og nægter at sende nøgler til andre værter.
@@ -80,8 +91,17 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   - Kun kunder med status `aktiv` synkroniseres (aldrig `opsagt` eller `pause`).
   - Efter 5 fejl i træk: status `fejlet`. Ventetid 5 min, 10 min, … højst 24 t.
   - `python -m app.synk.kommando oversigt|status|nulstil|deaktiver|aktiver`.
+- `app/synk/ressourcer.py` – `synk_customers/suppliers/entries/open_entries(session,
+  client_id)`: cursor -> adapter -> upsert i cache-tabel -> ny cursor, i ÉN transaktion.
+  Åbne poster altid fuldt (betalte fjernes); entries inkrementelt.
+- `app/synk/jobs.py` – jobtyperne `synk_<ressource>`; rate limit -> `UdskydJob`.
+- `app/synk/planlaegger.py` – lægger dagens job i kø for aktive kunder, jævnt
+  fordelt over døgnet; idempotensnøgle `<ressource>:<client_id>:<dato>`.
+  Køres automatisk af `python -m app.jobs.worker --planlaeg`.
+- `app/synk/koer.py` – manuel synkronisering af én kunde.
 - `app/regnskab/models.py` – regnskabsdata fra kundernes systemer (`accounts`
-  med `tenant_id` = kunden). Holdt adskilt fra CRM-tabellerne.
+  med `tenant_id` = kunden; cache-tabellerne `customers`, `suppliers`, `entries`,
+  `open_entries` med unik (client_id, systemets id)). Holdt adskilt fra CRM.
 - `tests/` – kør med `.venv/bin/pytest` (kræver kørende database).
 - `migrations/` – Alembic-migreringer (ændringer af databasens opbygning).
 

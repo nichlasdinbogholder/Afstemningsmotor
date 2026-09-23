@@ -5,7 +5,7 @@ from app.crm.models import Document, Handover, Note, Task, TimeEntry
 from app.jobs.models import Job
 from app.kunder.models import Client, Contact, Credential
 from app.personale.models import Staff
-from app.regnskab.models import Account
+from app.regnskab.models import Account, CustomerCache, EntryCache, OpenEntryCache, SupplierCache
 from app.synk.models import SyncState
 
 __all__ = [
@@ -14,11 +14,15 @@ __all__ = [
     "Client",
     "Contact",
     "Credential",
+    "CustomerCache",
     "Document",
+    "EntryCache",
     "Handover",
     "Job",
     "Note",
+    "OpenEntryCache",
     "Staff",
+    "SupplierCache",
     "SyncState",
     "Task",
     "TimeEntry",

@@ -17,6 +17,7 @@ from app.personale.models import Staff
 TABELLER = {
     "staff", "clients", "credentials", "contacts", "tasks", "time_entries",
     "notes", "documents", "handovers", "audit_log", "accounts", "jobs", "sync_state",
+    "customers", "suppliers", "entries", "open_entries",
 }
 
 
@@ -93,6 +94,8 @@ def test_alle_staff_kolonner_peger_paa_staff(inspektor):
         ("sync_state", "status"),
         ("sync_state", "ressource"),
         ("sync_state", "cursor_type"),
+        ("open_entries", "type"),
+        ("entries", "entry_type"),
     ],
 )
 def test_statusfelter_er_laast_til_faste_vaerdier(inspektor, tabel, kolonne):

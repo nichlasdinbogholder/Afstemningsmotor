@@ -271,8 +271,11 @@ def synk_transaktion(
         # Rul delmærket tilbage – også når en fejlet skrivning allerede har låst det.
         if session.get_nested_transaction() is kørsel:
             kørsel.rollback()  # hverken kørslens data eller bogmærke gemmes
-        if isinstance(fejl, Exception):
+        # "Vent og prøv igen" (fx rate limit) er ikke en fejl og tælles ikke med.
+        if isinstance(fejl, Exception) and not getattr(fejl, "taeller_ikke_som_fejl", False):
             registrer_fejl(session, client_id, ressource, fejl, startet=startet)
+        elif session.in_transaction():
+            session.commit()
         raise
     try:
         session.commit()  # data + bogmærke gemmes endeligt i ÉN commit
