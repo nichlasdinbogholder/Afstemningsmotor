@@ -59,7 +59,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   `--alle` henter for alle kunder med aktiv e-conomic-adgang (ikke opsagte);
   én kundes fejl stopper ikke resten.
 - `app/planlaegning/natlig_kontoplan.py` – tidsplan på Mac (launchd): kører
-  `--alle` ÉN gang i døgnet (standard kl. 02:30). Log: `logs/kontoplan.log`.
+  `--alle` ÉN gang i døgnet (standard kl. 12:30). Log: `logs/kontoplan.log`.
   `python -m app.planlaegning.natlig_kontoplan installer|status|koer-nu|afinstaller`.
 - `app/regnskab/models.py` – regnskabsdata fra kundernes systemer (`accounts`
   med `tenant_id` = kunden). Holdt adskilt fra CRM-tabellerne.

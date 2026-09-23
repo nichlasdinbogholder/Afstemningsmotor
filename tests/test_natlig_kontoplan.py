@@ -12,7 +12,7 @@ from app.adaptere.economic.kontoplan import KontoplanFejl, hent_for_alle
 from app.config import get_settings
 from app.kunder.adgange import gem_token
 from app.kunder.models import Client
-from app.planlaegning.natlig_kontoplan import ETIKET, _tjek_tid, lav_plist
+from app.planlaegning.natlig_kontoplan import ETIKET, _tjek_tid, lav_plist, main
 from app.regnskab.models import Account
 
 
@@ -84,3 +84,12 @@ def test_gyldige_tidspunkter(tid, forventet):
 def test_ugyldige_tidspunkter(tid):
     with pytest.raises(SystemExit):
         _tjek_tid(tid)
+
+
+def test_standardtidspunkt_er_12_30(monkeypatch):
+    brugt = {}
+    monkeypatch.setattr(
+        "app.planlaegning.natlig_kontoplan.installer", lambda tid: brugt.setdefault("tid", tid)
+    )
+    main(["installer"])
+    assert _tjek_tid(brugt["tid"]) == (12, 30)

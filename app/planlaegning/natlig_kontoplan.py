@@ -1,6 +1,6 @@
-"""Natlig hentning af kontoplaner – én gang i døgnet – via macOS' indbyggede planlægger (launchd).
+"""Daglig hentning af kontoplaner – én gang i døgnet – via macOS' indbyggede planlægger (launchd).
 
-    python -m app.planlaegning.natlig_kontoplan installer            # hver nat kl. 02:30
+    python -m app.planlaegning.natlig_kontoplan installer            # hver dag kl. 12:30
     python -m app.planlaegning.natlig_kontoplan installer --tid 04:00
     python -m app.planlaegning.natlig_kontoplan status
     python -m app.planlaegning.natlig_kontoplan koer-nu              # prøv den med det samme
@@ -29,7 +29,7 @@ LOG_STI = PROJEKT / "logs" / "kontoplan.log"
 def _tjek_tid(tid: str) -> tuple[int, int]:
     fundet = re.fullmatch(r"([01]?\d|2[0-3]):([0-5]\d)", tid)
     if not fundet:
-        raise SystemExit(f"Ugyldigt tidspunkt '{tid}' – skriv fx 02:30")
+        raise SystemExit(f"Ugyldigt tidspunkt '{tid}' – skriv fx 12:30")
     return int(fundet.group(1)), int(fundet.group(2))
 
 
@@ -114,10 +114,10 @@ def koer_nu() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Natlig hentning af kontoplaner på din Mac.")
+    parser = argparse.ArgumentParser(description="Daglig hentning af kontoplaner på din Mac.")
     under = parser.add_subparsers(dest="handling", required=True)
-    inst = under.add_parser("installer", help="kør hver nat (én gang i døgnet)")
-    inst.add_argument("--tid", default="02:30", help="klokkeslæt, fx 02:30 (standard)")
+    inst = under.add_parser("installer", help="kør hver dag (én gang i døgnet)")
+    inst.add_argument("--tid", default="12:30", help="klokkeslæt, fx 12:30 (standard)")
     under.add_parser("afinstaller", help="stop den natlige kørsel")
     under.add_parser("status", help="vis om den er installeret og seneste kørsel")
     under.add_parser("koer-nu", help="kør den med det samme (til test)")
