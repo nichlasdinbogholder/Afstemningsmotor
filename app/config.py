@@ -17,7 +17,8 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     database_url: SecretStr
-    token_encryption_key: SecretStr
+    # Hovednøgle til kryptering af kundernes tokens (Fernet).
+    credentials_key: SecretStr
 
     allow_booking: bool = False
 

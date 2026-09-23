@@ -20,7 +20,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
-from app.sikkerhed.kryptering import dekrypter_token, krypter_token
+from app.sikkerhed.kryptering import krypter_token
 
 SYSTEMER = ("economic", "dinero")
 KUNDE_STATUSSER = ("aktiv", "pause", "ophoert")
@@ -64,8 +64,9 @@ class Client(Base):
 class Credential(Base):
     """En kundes adgang til e-conomic eller Dinero.
 
-    Tokenet gemmes kun krypteret. Brug `saet_token()` til at gemme og
-    `hent_token()` lige før det skal bruges. Tokenet må aldrig logges.
+    Tokenet gemmes kun krypteret: brug `saet_token()`. Modellen kan IKKE
+    dekryptere – det sker kun i adapter-laget via
+    `app.adaptere.adgang.hent_adgang()`. Tokenet må aldrig logges.
 
     Sikkerhedsnet i databasen: triggeren `credentials_kraev_krypteret_token`
     (se første migrering) afviser alt, der ikke er krypteret med Fernet
@@ -96,9 +97,6 @@ class Credential(Base):
 
     def saet_token(self, klartekst: str) -> None:
         self.token_krypteret = krypter_token(klartekst)
-
-    def hent_token(self) -> str:
-        return dekrypter_token(self.token_krypteret)
 
     def __repr__(self) -> str:
         # Tokenet (heller ikke det krypterede) vises aldrig.

@@ -22,7 +22,8 @@ CRM-delen kan bygges ovenpå uden at rive noget ned.
 ```bash
 cp .env.example .env          # udfyld værdier lokalt – aldrig i git
 docker compose up -d          # starter PostgreSQL med vedvarende data
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m app.sikkerhed.ny_noegle --gem   # egen hovednøgle i .env
 .venv/bin/alembic upgrade head   # bygger/opdaterer databasens tabeller
 ```
 
@@ -31,7 +32,16 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 - `app/db.py` – databaseforbindelse (`hide_parameters=True`, så værdier ikke logges).
 - `app/kunder/models.py` – kundekartotek (`clients`) og adgange (`credentials`).
   Kundedata holdes her, adskilt fra kommende afstemningslogik.
-- `app/sikkerhed/kryptering.py` – kryptering/dekryptering og maskering af tokens.
+- `app/sikkerhed/kryptering.py` – kryptering af tokens med Fernet og hovednøglen
+  `CREDENTIALS_KEY`. Indeholder det ENESTE sted, der dekrypterer:
+  `dekrypter_token_til_adapter()`.
+- `app/sikkerhed/hemmeligheder.py` – `HemmeligtToken` (vises altid maskeret) og
+  filter, der skjuler kendte tokens i logs og fejludskrifter.
+- `app/sikkerhed/ny_noegle.py` – kommando til ny hovednøgle
+  (`python -m app.sikkerhed.ny_noegle [--gem]`).
+- `app/adaptere/` – adapter-laget til e-conomic/Dinero. Henter adgang via
+  `hent_adgang()`, som er den eneste, der kalder dekrypteringen.
+- `tests/` – kør med `.venv/bin/pytest` (kræver kørende database).
 - `migrations/` – Alembic-migreringer (ændringer af databasens opbygning).
 
 ## Databaseændringer (Alembic)
@@ -40,9 +50,16 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 - Gennemlæs altid den genererede fil i `migrations/versions/` før den køres.
 - Kør: `.venv/bin/alembic upgrade head`. Fortryd seneste: `.venv/bin/alembic downgrade -1`.
 - Ændr aldrig en migrering, der allerede er kørt i en delt database – lav en ny.
-- Tokens gemmes kun via `Credential.saet_token()` og læses kun via
-  `Credential.hent_token()` lige før brug. En trigger i databasen afviser
+- Tokens gemmes kun via `Credential.saet_token()` og læses kun i adapter-laget
+  via `app.adaptere.adgang.hent_adgang()`. En trigger i databasen afviser
   ukrypterede tokens uden at gentage værdien i fejlbeskeden.
+
+## Regler for tokens i koden
+- Kald aldrig `.decrypt(` eller `dekrypter_token_til_adapter()` uden for
+  `app/sikkerhed/kryptering.py` og `app/adaptere/` – testene fejler, hvis det sker.
+- Brug `HemmeligtToken.klartekst()` kun direkte i kaldet til e-conomic/Dinero,
+  aldrig i log-, fejl- eller print-sætninger.
+- Skift aldrig `CREDENTIALS_KEY` uden først at have omkrypteret alle tokens.
 
 ## FASTE REGLER (skal altid overholdes)
 

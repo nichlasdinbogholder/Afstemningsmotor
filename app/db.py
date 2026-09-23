@@ -1,7 +1,9 @@
 """Fælles databaseopsætning (SQLAlchemy)."""
 
-from sqlalchemy import MetaData, create_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from functools import lru_cache
+
+from sqlalchemy import Engine, MetaData, create_engine
+from sqlalchemy.orm import DeclarativeBase, Session
 
 from app.config import get_settings
 
@@ -19,7 +21,8 @@ class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 
-def make_engine():
+@lru_cache
+def get_engine() -> Engine:
     # hide_parameters=True: værdier i SQL-sætninger kommer aldrig med i
     # fejlbeskeder eller logs – heller ikke krypterede tokens.
     return create_engine(
@@ -29,4 +32,5 @@ def make_engine():
     )
 
 
-SessionLocal = sessionmaker(bind=make_engine(), expire_on_commit=False)
+def ny_session() -> Session:
+    return Session(get_engine(), expire_on_commit=False)
