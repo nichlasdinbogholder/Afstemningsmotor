@@ -17,6 +17,8 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+import app.models  # noqa: F401  (alle tabeller skal være kendt, fx staff for audit_log)
+
 from app.adaptere.adgang import AdgangMangler, hent_adgang
 from app.adaptere.economic.klient import EconomicFejl, EconomicKlient
 from app.audit.models import AuditLog

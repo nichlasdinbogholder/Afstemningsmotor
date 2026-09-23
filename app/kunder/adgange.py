@@ -8,6 +8,8 @@ kun kryptere – dekryptering sker udelukkende i adapter-laget
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+import app.models  # noqa: F401  (alle tabeller skal være kendt, fx staff for audit_log)
+
 from app.audit.models import AuditLog
 from app.kunder.models import SYSTEMER, Client, Credential
 

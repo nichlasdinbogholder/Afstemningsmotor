@@ -33,6 +33,10 @@ def get_engine() -> Engine:
 
 
 def ny_session() -> Session:
+    # Sørg for, at alle tabeller er kendt, så henvisninger mellem dem (fx
+    # audit_log -> staff) altid kan findes – uanset hvilke moduler der er indlæst.
+    import app.models  # noqa: F401
+
     return Session(get_engine(), expire_on_commit=False)
 
 
