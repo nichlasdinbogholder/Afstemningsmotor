@@ -1,0 +1,61 @@
+# --- Hemmeligheder (må ALDRIG i git) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+secrets/
+secrets.*
+credentials*.json
+service-account*.json
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# --- Virtuelle miljøer ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- Test og værktøjer ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.hypothesis/
+
+# --- Logs og lokale data ---
+*.log
+logs/
+*.sqlite3
+*.db
+pgdata/
+*.dump
+*.sql.gz
+
+# --- Editor og styresystem ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- Lokale Claude-indstillinger ---
+.claude/settings.local.json
