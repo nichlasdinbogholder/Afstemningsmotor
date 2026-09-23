@@ -31,7 +31,7 @@ def hent_adgang(session: Session, client_id: int, system: str) -> Adgang:
     credential = session.scalars(
         select(Credential).where(
             Credential.client_id == client_id,
-            Credential.systemnavn == system,
+            Credential.system == system,
             Credential.status == "aktiv",
         )
     ).one_or_none()
@@ -39,7 +39,7 @@ def hent_adgang(session: Session, client_id: int, system: str) -> Adgang:
         raise AdgangMangler(f"Kunde {client_id} har ingen aktiv adgang til {system}")
     return Adgang(
         client_id=credential.client_id,
-        system=credential.systemnavn,
+        system=credential.system,
         organisation_id=credential.organisation_id,
         token=dekrypter_token_til_adapter(credential.token_krypteret),
     )

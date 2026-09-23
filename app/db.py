@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from sqlalchemy import Engine, MetaData, create_engine
+from sqlalchemy import CheckConstraint, Engine, MetaData, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session
 
 from app.config import get_settings
@@ -34,3 +34,9 @@ def get_engine() -> Engine:
 
 def ny_session() -> Session:
     return Session(get_engine(), expire_on_commit=False)
+
+
+def kun_vaerdier(kolonne: str, vaerdier: tuple[str, ...], navn: str | None = None) -> CheckConstraint:
+    """Regel i databasen: kolonnen må kun indeholde de faste værdier (eller være tom)."""
+    liste = ", ".join(f"'{v}'" for v in vaerdier)
+    return CheckConstraint(f"{kolonne} IN ({liste})", name=navn or f"{kolonne}_gyldig")

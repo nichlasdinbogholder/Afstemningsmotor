@@ -30,8 +30,13 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 ## Struktur
 - `app/config.py` – indstillinger fra `.env` (hemmeligheder som `SecretStr`).
 - `app/db.py` – databaseforbindelse (`hide_parameters=True`, så værdier ikke logges).
-- `app/kunder/models.py` – kundekartotek (`clients`) og adgange (`credentials`).
-  Kundedata holdes her, adskilt fra kommende afstemningslogik.
+- `app/models.py` – samler alle tabeller (bruges af Alembic og tests).
+- `app/personale/models.py` – medarbejdere (`staff`).
+- `app/kunder/models.py` – kundekartotek (`clients`), kontaktpersoner (`contacts`)
+  og adgange (`credentials`). Adskilt fra kommende afstemningslogik.
+- `app/crm/models.py` – `tasks`, `time_entries`, `notes`, `documents`, `handovers`.
+- `app/audit/models.py` – `audit_log` (kan kun tilføjes til; må aldrig
+  indeholde tokens eller andre hemmeligheder).
 - `app/sikkerhed/kryptering.py` – kryptering af tokens med Fernet og hovednøglen
   `CREDENTIALS_KEY`. Indeholder det ENESTE sted, der dekrypterer:
   `dekrypter_token_til_adapter()`.
@@ -50,6 +55,16 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - Gennemlæs altid den genererede fil i `migrations/versions/` før den køres.
 - Kør: `.venv/bin/alembic upgrade head`. Fortryd seneste: `.venv/bin/alembic downgrade -1`.
 - Ændr aldrig en migrering, der allerede er kørt i en delt database – lav en ny.
+- Alembic opdager IKKE omdøbte kolonner (den laver slet + tilføj, og data går
+  tabt) og heller ikke ændrede CHECK-regler. Ret dem i hånden med
+  `op.alter_column(..., new_column_name=...)` og `op.create_check_constraint`.
+- Databasens krav (tjekkes af `tests/test_skema.py`):
+  - Alle fremmednøgler er rigtige relationer og har et indeks.
+  - Alle tabeller med `client_id` har indeks på den.
+  - Status- og valgfelter er låst med CHECK-regler (faste værdier uden æøå,
+    fx `aaben`, `loest`, `maaned`), aldrig fri tekst.
+  - Kunder og medarbejdere slettes ikke (historik blokerer); brug
+    `status='opsagt'` hhv. `aktiv=false`.
 - Tokens gemmes kun via `Credential.saet_token()` og læses kun i adapter-laget
   via `app.adaptere.adgang.hent_adgang()`. En trigger i databasen afviser
   ukrypterede tokens uden at gentage værdien i fejlbeskeden.

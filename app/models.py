@@ -1,0 +1,19 @@
+"""Samler alle tabeller, så Alembic og testene kender dem alle."""
+
+from app.audit.models import AuditLog
+from app.crm.models import Document, Handover, Note, Task, TimeEntry
+from app.kunder.models import Client, Contact, Credential
+from app.personale.models import Staff
+
+__all__ = [
+    "AuditLog",
+    "Client",
+    "Contact",
+    "Credential",
+    "Document",
+    "Handover",
+    "Note",
+    "Staff",
+    "Task",
+    "TimeEntry",
+]

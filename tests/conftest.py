@@ -13,6 +13,7 @@ from cryptography.fernet import Fernet
 os.environ["CREDENTIALS_KEY"] = Fernet.generate_key().decode()
 
 from app.config import get_settings  # noqa: E402
+import app.models  # noqa: E402,F401  (registrerer alle tabeller)
 
 get_settings.cache_clear()
 

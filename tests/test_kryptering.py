@@ -26,8 +26,8 @@ APP = Path(__file__).resolve().parent.parent / "app"
 
 
 def _opret_kunde_med_token(session, token: str) -> Credential:
-    kunde = Client(navn="Testkunde ApS", kundenummer="TEST-1", system="dinero")
-    adgang = Credential(systemnavn="dinero", organisation_id="12345")
+    kunde = Client(navn="Testkunde ApS", kundenummer="TEST-1", regnskabssystem="dinero")
+    adgang = Credential(system="dinero", organisation_id="12345")
     adgang.saet_token(token)
     kunde.credentials.append(adgang)
     session.add(kunde)
@@ -79,7 +79,7 @@ def test_samme_token_krypteres_forskelligt_hver_gang(token):
 
 
 def test_databasen_afviser_ukrypterede_tokens_uden_at_vise_dem(db_session, token):
-    kunde = Client(navn="Testkunde ApS", kundenummer="TEST-2", system="dinero")
+    kunde = Client(navn="Testkunde ApS", kundenummer="TEST-2", regnskabssystem="dinero")
     db_session.add(kunde)
     db_session.flush()
 
@@ -87,7 +87,7 @@ def test_databasen_afviser_ukrypterede_tokens_uden_at_vise_dem(db_session, token
         with db_session.begin_nested():
             db_session.execute(
                 text(
-                    "INSERT INTO credentials (client_id, systemnavn, token_krypteret) "
+                    "INSERT INTO credentials (client_id, system, token_krypteret) "
                     "VALUES (:c, 'dinero', :t)"
                 ),
                 {"c": kunde.id, "t": token},
