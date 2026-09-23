@@ -61,6 +61,16 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/planlaegning/natlig_kontoplan.py` – tidsplan på Mac (launchd): kører
   `--alle` ÉN gang i døgnet (standard kl. 12:30). Log: `logs/kontoplan.log`.
   `python -m app.planlaegning.natlig_kontoplan installer|status|koer-nu|afinstaller`.
+- `app/jobs/` – jobkø i databasen (tabel `jobs`, status `koe`/`i_gang`/`faerdig`/`fejlet`).
+  - `register.py`: jobtyper registreres med `@jobtype("navn")`; nye moduler
+    med jobtyper tilføjes i `JOBTYPE_MODULER`. Jobfunktioner skal tåle at køre
+    mere end én gang, og deres DB-skrivninger (via `job.session`) gemmes samlet
+    med status `faerdig`.
+  - `koe.py`: `laeg_i_koe(session, type, client_id=, payload=, idempotens_noegle=)`
+    samt kommandoerne `vis`, `genkoer` og `tilfoej`. Payload må aldrig indeholde
+    hemmeligheder.
+  - `worker.py`: `python -m app.jobs.worker` – henter med `FOR UPDATE SKIP LOCKED`,
+    prøver igen med fordoblet ventetid (30 s … 1 t), frigiver job i gang > 15 min.
 - `app/regnskab/models.py` – regnskabsdata fra kundernes systemer (`accounts`
   med `tenant_id` = kunden). Holdt adskilt fra CRM-tabellerne.
 - `tests/` – kør med `.venv/bin/pytest` (kræver kørende database).
