@@ -99,6 +99,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   fordelt over døgnet; idempotensnøgle `<ressource>:<client_id>:<dato>`.
   Køres automatisk af `python -m app.jobs.worker --planlaeg`.
 - `app/synk/koer.py` – manuel synkronisering af én kunde.
+- `app/synk/bekraeft.py` – bekræft mod det rigtige system: synkroniserer, henter igen
+  og sammenligner, tjekker dubletter og bogmærke. Slutter med BEKRÆFTET/IKKE BEKRÆFTET:
+  `python -m app.synk.bekraeft --kundenummer <nr>`.
 - `app/regnskab/models.py` – regnskabsdata fra kundernes systemer (`accounts`
   med `tenant_id` = kunden; cache-tabellerne `customers`, `suppliers`, `entries`,
   `open_entries` med unik (client_id, systemets id)). Holdt adskilt fra CRM.
