@@ -227,6 +227,58 @@ def test_forskellig_modpart_er_ikke_dublet(db_session, kunde, poster):
     assert [f.detail["beloeb"] for f in _fund(db_session, kunde)] == ["200.00"]
 
 
+def _faktura(poster, nr, bilag, dato, kunde, beloeb="10200.00", konto=1010):
+    """En salgsfaktura som i e-conomic: debitorlinje (med kunde), salgslinje og momslinje."""
+    b = Decimal(beloeb)
+    poster(nr, dato, 5600, str(b * Decimal("1.25")), tekst=f"Faktura {bilag}", bilag=bilag, modpart=kunde)
+    poster(nr + 1, dato, konto, str(-b), tekst=f"Faktura {bilag}", bilag=bilag)
+    poster(nr + 2, dato, 6902, str(-b / 4), tekst=f"Faktura {bilag}", bilag=bilag)
+
+
+def test_samme_pris_til_forskellige_kunder_er_ikke_dublet(db_session, kunde, poster):
+    """A: faste honorarer til mange kunder med samme pris (målt: 10.504 af 12.053 fund)."""
+    _faktura(poster, 10, 501, "2026-05-31", "debitor:1")
+    _faktura(poster, 20, 502, "2026-05-31", "debitor:2")
+    _faktura(poster, 30, 503, "2026-05-31", "debitor:3")
+    assert _koer(db_session, kunde).fundet == 0
+
+
+def test_samme_kunde_faktureret_to_gange_er_et_fund(db_session, kunde, poster):
+    """A må ikke skjule en rigtig dobbeltfakturering: samme kunde, samme beløb, to bilag."""
+    _faktura(poster, 10, 501, "2026-05-31", "debitor:7")
+    _faktura(poster, 20, 502, "2026-06-01", "debitor:7")
+    _koer(db_session, kunde)
+    fund = _fund(db_session, kunde)
+    assert len(fund) == 1
+    assert fund[0].detail["kunde_leverandoer"] == "debitor:7"
+
+
+def test_et_fund_pr_bilagspar(db_session, kunde, poster):
+    """C: debitor-, salgs- og momslinje fra samme dobbeltbogføring giver ÉT fund, ikke tre."""
+    _faktura(poster, 10, 501, "2026-05-31", "debitor:7")
+    _faktura(poster, 20, 502, "2026-05-31", "debitor:7")
+    _koer(db_session, kunde)
+    fund = _fund(db_session, kunde)
+    assert len(fund) == 1
+    f = fund[0]
+    assert len(f.entry_ids) == 6 and f.detail["linjepar"] == 3 and f.detail["bilag"] == ["501", "502"]
+    assert f.title == ("Muligt dobbeltbogført beløb: 12.750,00 kr. på konto 5600 den 31.05.2026 "
+                       "(bilag 501 og 502, 6 linjer)")
+    assert f.fingerprint == fingerprint([str(n) for n in (10, 11, 12, 20, 21, 22)])
+
+
+def test_dobbeltbogfoert_og_tilbagefoert_er_ikke_dublet(db_session, kunde, poster):
+    """B: betalingen er bogført to gange, og den ene er tilbageført igen – sagen er udlignet.
+    (Det rigtige regnskab med 48 sådanne betalinger ville ellers have givet 48+ falske fund.)"""
+    for i in range(48):
+        dag = (date(2026, 1, 5) + timedelta(days=i * 7)).isoformat()
+        beloeb = f"{2000 + i}.00"
+        poster(1000 + 3 * i, dag, 5820, beloeb, tekst="Indbetaling", bilag=7000 + 3 * i)
+        poster(1001 + 3 * i, dag, 5820, beloeb, tekst="Indbetaling", bilag=7001 + 3 * i)
+        poster(1002 + 3 * i, dag, 5820, f"-{beloeb}", tekst="Tilbageført", bilag=7002 + 3 * i)
+    assert _koer(db_session, kunde).fundet == 0
+
+
 def test_andre_kunders_poster_blandes_ikke_ind(db_session, kunde, poster):
     anden = Client(navn="Anden ApS", kundenummer="DUP-2", regnskabssystem="economic")
     db_session.add(anden)
@@ -244,7 +296,7 @@ def test_hver_koersel_noteres_i_rule_runs(db_session, kunde, poster):
     _koer(db_session, kunde)
     _koer(db_session, kunde)
     koersler = db_session.scalars(select(RuleRun).where(RuleRun.client_id == kunde.id)).all()
-    assert [(k.rule_code, k.rule_version, k.fund) for k in koersler] == [(REGEL, 2, 1), (REGEL, 2, 1)]
+    assert [(k.rule_code, k.rule_version, k.fund) for k in koersler] == [(REGEL, 3, 1), (REGEL, 3, 1)]
 
 
 # --- Status og log ---------------------------------------------------------------
@@ -309,7 +361,7 @@ def test_ingen_aendring_ingen_log(db_session, kunde, poster):
 def test_regel_er_registreret():
     regler = {r.code: r for r in alle_regler()}
     assert regler[REGEL].name_da == "Muligt dobbeltbogført beløb"
-    assert regler[REGEL].version == 2
+    assert regler[REGEL].version == 3
 
 
 def test_jobtypen_run_rules(db_session, kunde, poster):

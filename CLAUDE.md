@@ -137,7 +137,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     opdaterer kun last_seen_at/detail/severity/updated_at. Status røres ALDRIG af en kørsel.
   - `status.py`: `saet_status(...)` – ENESTE sted, der ændrer status. Trigger skriver finding_events
     og afviser statusændring uden actor. findings/finding_events kan ikke slettes.
-  - `duplicate_entries.py`: dubletregel v2 (self join, samme konto, `VINDUE_DAGE = 3`).
+  - `duplicate_entries.py`: dubletregel v3 (self join, samme konto, `VINDUE_DAGE = 3`, forskellig
+    kunde/leverandør på bilaget og tilbageførte beløb udelukkes, ét fund pr. bilagspar).
+    `scripts/maal_dubletfund.sql` måler, hvorfor fundene opstår (kun læsning).
     `rule_runs` logger hver kørsel; `findings` viser kun aktuelle fund (`--alle` viser også gamle). `jobs.py`: jobtype `run_rules`,
     planlægges kl. 23:30 for aktive kunder af `python -m app.jobs.worker --planlaeg`.
   - CLI: `python -m app.cli run-rules <id>`, `findings <id> [--status] [--severity] [--alle]`,

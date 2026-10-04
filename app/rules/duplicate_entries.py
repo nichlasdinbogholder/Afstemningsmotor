@@ -1,6 +1,6 @@
-"""Regel: duplicate_entries – samme beløb bogført to gange.
+"""Regel: duplicate_entries – samme bilag bogført to gange.
 
-Et par af posteringer er et muligt dobbeltbogført beløb, når:
+Et par af posteringslinjer er et muligt dobbeltbogført beløb, når:
 - de hører til samme kunde,
 - de står på SAMME KONTO (en dobbeltbogføring gentager sig på den samme konto),
 - beløbet er ens MED SAMME FORTEGN (+5.000 og −5.000 er en tilbageførsel, ikke en dublet),
@@ -8,20 +8,29 @@ Et par af posteringer er et muligt dobbeltbogført beløb, når:
 - datoerne ligger højst VINDUE_DAGE fra hinanden (faste månedlige betalinger falder udenfor),
 - de er to forskellige posteringer (forskelligt posteringsnummer),
 - de er IKKE fra samme bilag (et bilags egne linjer er ikke dubletter af hinanden),
-- modparten (kunde/leverandør) er den samme, når begge har en.
+- bilagenes kunde/leverandør er den samme, når begge bilag har en (A),
+- ingen af dem er tilbageført: der findes ingen postering med MODSAT beløb på samme
+  konto inden for vinduet (B).
+Linjepar mellem de samme to bilag samles til ÉT fund (C) – så salgslinje, momslinje
+og banklinje fra samme dobbeltbogføring ikke giver tre fund.
 
 Alvorlighed:
-  high   – samme dato og samme tekst
+  high   – samme dato og samme tekst (på mindst ét linjepar)
   medium – inden for vinduet
 
-Version 2 (04.10.2026), strammet efter kontrol på demo-aftalen: 59 fund på 138
-posteringer, heraf 56 'low' (ens runde beløb på forskellige konti). Vinduet er
-sænket fra 7 til 3 dage, og samme konto er nu et krav ('low' findes ikke længere).
+Historik:
+- Version 2 (04.10.2026): demo-aftalen gav 59 fund på 138 posteringer, heraf 56 med
+  ens runde beløb på forskellige konti. Vindue 7 -> 3 dage, og samme konto kræves.
+- Version 3 (04.10.2026): Din Bogholder ApS (43.463 posteringer) gav 12.053 fund.
+  Målt: 10.504 var fakturaer til FORSKELLIGE kunder med samme pris (A), 2.332 var
+  tilbageført (B); efter A og B 589 linjepar = 306 bilagspar (C).
 
-Hele sammenligningen er ÉN SQL-forespørgsel (tabellen entries sammenlignet med sig
-selv) – ingen Python-løkke over alle posteringer. Reglen læser kun vores egen database.
+Sammenligningen er ÉN SQL-forespørgsel (entries sammenlignet med sig selv). Python
+samler kun de fundne par pr. bilagspar – ingen løkke over alle posteringer.
+Reglen læser kun vores egen database.
 """
 
+from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 
@@ -36,6 +45,13 @@ from app.rules.base import FindingDraft, fingerprint, registrer_regel
 VINDUE_DAGE = 3
 
 PAR_SQL = text("""
+WITH bilag AS (
+    -- Kunde/leverandør pr. bilag: står på debitor-/kreditorlinjen, ikke på salgs-/udgiftslinjen.
+    SELECT bilagsnummer, dato, min(modpart) AS modpart
+    FROM entries
+    WHERE client_id = :client_id AND modpart IS NOT NULL AND bilagsnummer IS NOT NULL
+    GROUP BY bilagsnummer, dato
+)
 SELECT a.id            AS a_id,           b.id            AS b_id,
        a.bogfoert_id   AS a_nr,           b.bogfoert_id   AS b_nr,
        a.dato          AS a_dato,         b.dato          AS b_dato,
@@ -43,6 +59,7 @@ SELECT a.id            AS a_id,           b.id            AS b_id,
        a.tekst         AS a_tekst,        b.tekst         AS b_tekst,
        a.bilagsnummer  AS a_bilag,        b.bilagsnummer  AS b_bilag,
        a.modpart       AS a_modpart,      b.modpart       AS b_modpart,
+       ba.modpart      AS a_bilag_modpart, bb.modpart     AS b_bilag_modpart,
        a.beloeb        AS beloeb,         a.valuta        AS valuta,
        CASE
            WHEN a.dato = b.dato AND a.tekst IS NOT DISTINCT FROM b.tekst THEN 'high'
@@ -56,11 +73,27 @@ JOIN entries b
   AND b.valuta      IS NOT DISTINCT FROM a.valuta
   AND b.bogfoert_id > a.bogfoert_id                 -- forskellige poster, hvert par kun én gang
   AND b.dato BETWEEN a.dato - :vindue AND a.dato + :vindue
+LEFT JOIN bilag ba ON ba.bilagsnummer = a.bilagsnummer AND ba.dato = a.dato
+LEFT JOIN bilag bb ON bb.bilagsnummer = b.bilagsnummer AND bb.dato = b.dato
+-- B: er beløbet tilbageført på samme konto inden for vinduet, er sagen udlignet.
+-- (LATERAL + LIMIT 1 = ét direkte opslag i indekset pr. par, også når samme beløb går igen
+-- tusindvis af gange.)
+LEFT JOIN LATERAL (
+    SELECT 1 AS fundet FROM entries c
+    WHERE c.client_id   = a.client_id
+      AND c.kontonummer = a.kontonummer
+      AND c.beloeb      = -a.beloeb
+      AND c.dato BETWEEN least(a.dato, b.dato) - :vindue AND greatest(a.dato, b.dato) + :vindue
+    LIMIT 1
+) tilbagefoert ON TRUE
 WHERE a.client_id = :client_id
   AND a.beloeb <> 0
   AND a.dato IS NOT NULL
   AND (a.bilagsnummer IS NULL OR b.bilagsnummer IS NULL OR a.bilagsnummer <> b.bilagsnummer)
   AND (a.modpart IS NULL OR b.modpart IS NULL OR a.modpart = b.modpart)
+  -- A: to bilag med hver sin kunde/leverandør er ikke samme bilag bogført to gange.
+  AND (ba.modpart IS NULL OR bb.modpart IS NULL OR ba.modpart = bb.modpart)
+  AND tilbagefoert.fundet IS NULL                   -- B (se LATERAL ovenfor)
   AND (CAST(:since AS date) IS NULL OR greatest(a.dato, b.dato) >= :since)
 ORDER BY a.dato, a.bogfoert_id, b.bogfoert_id
 """)
@@ -93,31 +126,58 @@ def _post(r, side: str) -> dict:
     }
 
 
+def _bilag_noegle(r, side: str) -> tuple:
+    """Bilaget, linjen hører til. Uden bilagsnummer står linjen alene."""
+    bilag = getattr(r, f"{side}_bilag")
+    if bilag is None:
+        return ("post", getattr(r, f"{side}_nr"))
+    return ("bilag", bilag, getattr(r, f"{side}_dato"))
+
+
 @registrer_regel
 class DuplicateEntries:
     code = "duplicate_entries"
-    version = 2
+    version = 3
     name_da = "Muligt dobbeltbogført beløb"
 
     def run(self, session: Session, client_id: int, since: date | None) -> list[FindingDraft]:
         par = session.execute(PAR_SQL, {"client_id": client_id, "vindue": VINDUE_DAGE, "since": since})
-        fund = []
+
+        # C: saml linjepar mellem de samme to bilag til ét fund.
+        grupper: dict[tuple, list] = defaultdict(list)
         for r in par:
+            grupper[tuple(sorted([_bilag_noegle(r, "a"), _bilag_noegle(r, "b")]))].append(r)
+
+        fund = []
+        for linjepar in grupper.values():
+            hoved = max(linjepar, key=lambda r: (abs(r.beloeb), r.severity == "high"))
+            linjer: dict[int, tuple] = {}
+            for r in linjepar:
+                linjer[r.a_id] = (r.a_nr, _post(r, "a"))
+                linjer[r.b_id] = (r.b_nr, _post(r, "b"))
+            posteringer = [p for _, p in sorted(linjer.values(), key=lambda x: (x[1]["dato"], x[0]))]
+            datoer = [r.a_dato for r in linjepar] + [r.b_dato for r in linjepar]
+            titel = (f"Muligt dobbeltbogført beløb: {_kr(hoved.beloeb, hoved.valuta)} på konto "
+                     f"{hoved.a_konto} {_datoer(hoved.a_dato, hoved.b_dato)}")
+            if len(linjepar) > 1:
+                titel += f" (bilag {hoved.a_bilag} og {hoved.b_bilag}, {len(linjer)} linjer)"
             fund.append(FindingDraft(
-                fingerprint=fingerprint([str(r.a_nr), str(r.b_nr)]),
-                severity=r.severity,
-                title=f"Muligt dobbeltbogført beløb: {_kr(r.beloeb, r.valuta)} på konto {r.a_konto} "
-                      f"{_datoer(r.a_dato, r.b_dato)}",
+                fingerprint=fingerprint([str(nr) for nr, _ in linjer.values()]),
+                severity="high" if any(r.severity == "high" for r in linjepar) else "medium",
+                title=titel,
                 detail={
-                    "beloeb": str(r.beloeb),
-                    "valuta": r.valuta,
+                    "beloeb": str(hoved.beloeb),
+                    "valuta": hoved.valuta,
                     "vindue_dage": VINDUE_DAGE,
                     "regel_version": self.version,
-                    "dage_imellem": abs((r.b_dato - r.a_dato).days),
-                    "posteringer": [_post(r, "a"), _post(r, "b")],
+                    "dage_imellem": abs((hoved.b_dato - hoved.a_dato).days),
+                    "bilag": sorted({str(p["bilagsnummer"]) for p in posteringer}),
+                    "kunde_leverandoer": hoved.a_bilag_modpart or hoved.b_bilag_modpart,
+                    "linjepar": len(linjepar),
+                    "posteringer": posteringer,
                 },
-                entry_ids=sorted([r.a_id, r.b_id]),
-                period_start=min(r.a_dato, r.b_dato),
-                period_end=max(r.a_dato, r.b_dato),
+                entry_ids=sorted(linjer),
+                period_start=min(datoer),
+                period_end=max(datoer),
             ))
         return fund

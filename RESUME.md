@@ -99,7 +99,7 @@ bogmærket forkert.
 - En kørsel opdaterer kun `last_seen_at`, `detail`, `severity` og `updated_at`. Status røres aldrig.
 - Forsvinder problemet, bliver fundet stående med sin gamle `last_seen_at`.
 
-## Dubletreglen (duplicate_entries, version 2)
+## Dubletreglen (duplicate_entries, version 3)
 - **Vindue: 3 dage** (`VINDUE_DAGE` øverst i `app/rules/duplicate_entries.py`). Version 1
   brugte 7 dage. Kort vindue, så husleje, leasing og abonnementer (samme beløb hver måned)
   ikke rammes.
@@ -107,6 +107,14 @@ bogmærket forkert.
   højst 3 dage imellem, forskellige posteringer, ikke samme bilag, og samme modpart hvis
   begge har en.
 - Modsat fortegn (+5.000 / −5.000) er en tilbageførsel og aldrig et fund.
+- **A (v3):** har begge bilag en kunde/leverandør (debitor-/kreditorlinjen i bilaget), og
+  er de forskellige, er det ikke en dublet – fx samme abonnementspris til to kunder.
+  Samme kunde faktureret to gange giver stadig et fund.
+- **B (v3):** findes der en postering med MODSAT beløb på samme konto inden for vinduet,
+  regnes sagen som tilbageført/udlignet – intet fund.
+- **C (v3):** alle linjepar mellem de samme to bilag samles til ÉT fund (salgs-, moms- og
+  debitorlinje giver ikke tre fund). Fingerprintet er hash af ALLE de involverede
+  posteringsnumre, sorteret.
 - Vi har ikke et leverandørfelt på almindelige udgiftsposter (`modpart` er kun udfyldt på
   poster bogført direkte på en kunde/leverandør). Derfor matches der på konto og beløb.
 - Alvor: `high` = samme dato og tekst. `medium` = inden for vinduet. (`low` = forskellige
@@ -149,6 +157,24 @@ bogmærket forkert.
   på baggrund af den; næste kontrol skal ske på en rigtig kunde.
 - Demo-aftalen er e-conomics eksempeldata, ikke et rigtigt regnskab. Kontrollen skal
   gentages på en rigtig kunde, før regel nr. 2 bygges.
+
+**Version 2 kørt 04.10.2026 på Din Bogholder ApS (rigtig kunde, 43.463 posteringer
+2019–2026): 12.053 fund** (high/medium: 406/11.647). Uanvendeligt. Målt med
+`scripts/maal_dubletfund.sql`:
+
+| Årsag | Fund |
+|---|---|
+| A. Bilagene har forskellig kunde/leverandør (samme pris til forskellige kunder) | 10.504 |
+| B. Tilbageført (modsat beløb, samme konto, ±3 dage) | 2.332 |
+| Tilbage efter A og B | 589 |
+| … talt som bilagspar (C) | 306 |
+
+Flest fund på: 6902 Udgående moms (2.465), 1150 Fenerum fordelingskonto (2.189),
+1035 Stor abonnementspakke (1.383), 1110 Bogholderibeskrivelse (1.158),
+1065 E-Boks service (1.020). Skridt 3 i den aftalte rækkefølge ("udelad konti med faste
+beløb") er IKKE brugt: det ville gøre reglen blind for dobbeltfakturering af samme kunde.
+A, B og C rammer i stedet præcis de målte årsager → version 3. Forventet ca. 306 fund.
+**Mangler: kør version 3 og kontrollér 5 tilfældige fund i e-conomic.**
 
 Skabelon:
 
