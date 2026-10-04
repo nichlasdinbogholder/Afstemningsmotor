@@ -205,8 +205,12 @@ fra tekst, bilag og beløb (IKKE slået op i e-conomic):
 **Kontrol i e-conomic (bogholderen, 04.10.2026):** 10699, 24170, 24184, Best One og 24188.
 - Bogholderen: "Periodiseringer er ikke en fejl. Her bruges typisk samme bilagsnummer."
   → Best One-fundet var FALSK → version 6 udelukker periodiseringer (E).
-- De fire øvrige: afventer præcisering af svaret "Jeg kan ikke finde fejl i de fem kontroller".
-**Mangler: kør version 6; afklar resultatet af de fire øvrige kontroller.**
+- De fire øvrige (10699 faktura 8279, 24170 betalingsliste med 6 kunder, 24184 AUB,
+  24188 EasyPark): ingen fejl i bogføringen → også FALSKE.
+- **Resultat: 0 rigtige, 5 falske (falsk-positiv-rate 100 %)** – selv på fund, der ud fra
+  tekst og beløb lignede klare dubletter. Indtil nu er der IKKE set én bekræftet rigtig
+  dublet. Reglen må ikke bruges, og regel nr. 2 bygges ikke, før det er løst.
+**Mangler: årsagen til, at de fire ikke er fejl – det er den, der skal bygges ind.**
 
 Skabelon:
 
