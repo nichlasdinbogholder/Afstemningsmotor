@@ -29,6 +29,8 @@ Historik:
   to forskellige fakturaer/kunder, hvor kunden kun står i teksten (fakturaer fra et
   eksternt faktureringssystem uden debitor i regnskabssystemet). Samme tekst kræves nu (D).
   Pris: et bilag bogført to gange med FORSKELLIG tekst fanges ikke.
+- Version 4 gav 30 fund. Et bilagspar med linjer på flere datoer (periodisering over
+  12 måneder) gav 12 fund; nu samles der pr. bilagsnummer uanset dato -> ét fund.
 
 Sammenligningen er ÉN SQL-forespørgsel (entries sammenlignet med sig selv). Python
 samler kun de fundne par pr. bilagspar – ingen løkke over alle posteringer.
@@ -132,17 +134,19 @@ def _post(r, side: str) -> dict:
 
 
 def _bilag_noegle(r, side: str) -> tuple:
-    """Bilaget, linjen hører til. Uden bilagsnummer står linjen alene."""
+    """Bilaget, linjen hører til. Uden bilagsnummer står linjen alene.
+    Datoen er IKKE med: et bilag kan have linjer på flere datoer (fx en periodisering
+    over 12 måneder), og det er stadig ét bilag – og dermed ét fund."""
     bilag = getattr(r, f"{side}_bilag")
     if bilag is None:
         return ("post", getattr(r, f"{side}_nr"))
-    return ("bilag", bilag, getattr(r, f"{side}_dato"))
+    return ("bilag", bilag)
 
 
 @registrer_regel
 class DuplicateEntries:
     code = "duplicate_entries"
-    version = 4
+    version = 5
     name_da = "Muligt dobbeltbogført beløb"
 
     def run(self, session: Session, client_id: int, since: date | None) -> list[FindingDraft]:

@@ -99,7 +99,7 @@ bogmærket forkert.
 - En kørsel opdaterer kun `last_seen_at`, `detail`, `severity` og `updated_at`. Status røres aldrig.
 - Forsvinder problemet, bliver fundet stående med sin gamle `last_seen_at`.
 
-## Dubletreglen (duplicate_entries, version 4)
+## Dubletreglen (duplicate_entries, version 5)
 - **Vindue: 3 dage** (`VINDUE_DAGE` øverst i `app/rules/duplicate_entries.py`). Version 1
   brugte 7 dage. Kort vindue, så husleje, leasing og abonnementer (samme beløb hver måned)
   ikke rammes.
@@ -187,7 +187,18 @@ A, B og C rammer i stedet præcis de målte årsager → version 3. Forventet ca
 Årsag: fakturaerne kommer fra et eksternt faktureringssystem og bogføres via
 1150 Fenerum fordelingskonto, ikke på en debitor – kunden står KUN i teksten, så A virker
 ikke. → Version 4 kræver samme tekst (D).
-**Mangler: kør version 4 og kontrollér 5 tilfældige fund i e-conomic.**
+
+**Version 4 kørt 04.10.2026 på Din Bogholder ApS: 30 fund** (fra 12.053). Gennemgået ud
+fra tekst, bilag og beløb (IKKE slået op i e-conomic):
+- Ligner rigtige dobbeltbogføringer: 10699 (samme faktura nr. 8279 som bilag 8279 og
+  910161), 10652 (IMERCO, samme reference 2600084), 24184 (AUB, samme referencenr.),
+  24170 (samme 6 kunder og beløb i bilag 80158 og 80159), 24196 (Adobe 3 gange),
+  3473 (Lars Lyngby VVS), 24195 (Mofibo).
+- Uafklaret – gentagne småudgifter, kan være rigtige eller en dobbelt indlæst bankfil:
+  Brobizz (5), EasyPark (3 fund for samme 3 bilag), Overførselsservice (2), zenegy (1).
+- 12 af de 30 var ÉT problem (Best One-periodisering i bilag 50301 og 50302, én linje
+  pr. måned) → version 5 samler pr. bilagsnummer uanset dato. Forventet ca. 19 fund.
+**Mangler: kør version 5 og slå mindst 5 op i e-conomic.**
 
 Skabelon:
 
