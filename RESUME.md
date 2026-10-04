@@ -228,7 +228,26 @@ fra tekst, bilag og beløb (IKKE slået op i e-conomic):
 øvrige: "det er ikke fejl. Det er rettelser, hvor samme bilagsnummer, tekst og beløb
 benyttes." → version 8 (H). Og: "hvis der skal være tale om en dobbeltbogføring, skal
 modkonto være bank i balancen." → version 9 (I).
-**Mangler: kør version 9 på Din Bogholder ApS og kontrollér fundene.**
+
+**Version 9 kørt 04.10.2026 på Din Bogholder ApS: 11 fund** (fra 12.053 i version 2).
+- 24184 AUB: bekræftet rigtig dobbeltbogføring.
+- EasyPark (24188, 24189, 24190): i bogføringen er der TRE betalinger fra banken på
+  169 kr. (bilag 20942, 20943, 20946). Bogholderens rettelse (konto 2214 → 2770, samme
+  dag) ses ikke i de bogførte posteringer. Om det er fejl, kan kun kontoudtoget afgøre.
+- Brobizz (24176, 24186, 24187, 24191, 24192), 24170 (de 6 kunder) og 3473 (Lars Lyngby
+  VVS): ikke afgjort.
+
+## Konklusion (aftalt med bogholderen 04.10.2026)
+Reglen strammes ikke mere. De resterende fund kan ikke skilles fra rigtige fejl ud fra
+bogføringen alene (fx gentagne småbeløb, som kun kontoudtoget kan afgøre), og yderligere
+stramning ville fjerne rigtige fejl som AUB (320 kr. – en beløbsgrænse ville skjule den).
+
+**Reglen foreslår – medarbejderen afgør.** Usikre fund godkendes (`accepted`) eller
+ignoreres (`ignored`) af en medarbejder med en note. Statusændringen logges i
+finding_events, og takket være fingerprintet kommer et ignoreret fund ikke igen ved
+næste nattekørsel.
+
+Status: 11 fund på 43.463 posteringer over 7 år, heraf 1 bekræftet rigtig. Klar til brug.
 
 Skabelon:
 
