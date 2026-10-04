@@ -14,6 +14,36 @@
   `python -m app.cli sync-entries <client_id>`, der viser hentet / nye /
   opdaterede og det nye bogmærke.
 
+## Felter vi faktisk fik fra e-conomic (demo-aftalen, 2022)
+Set i det rå svar fra `/accounting-years/{år}/entries`. Alt gemmes også uændret i
+`entries.raa_data`.
+
+| e-conomic-felt | Kolonne i `entries` | Bemærkning |
+|---|---|---|
+| `entryNumber` | `bogfoert_id` | Unik pr. aftale. Bruges som bogmærke. Altid med. |
+| `voucherNumber` | `bilagsnummer` | Flere poster deler samme bilag. |
+| `date` | `dato` | |
+| `account.accountNumber` | `kontonummer` | |
+| `text` | `tekst` | **Mangler på nogle poster** (fx nr. 131) – bliver tom (NULL). |
+| `amount` | `beloeb` | NUMERIC(18,2). |
+| `amountInBaseCurrency` | `beloeb_dkk` | NUMERIC(18,2). |
+| `currency` | `valuta` | |
+| `entryType` | `entry_type` | Set: `systemEntry`, `customerPayment`. |
+| `customer.customerNumber` | `modpart` = `debitor:<nr>` | Kun på kundeposter. |
+| `supplier.supplierNumber` | `modpart` = `kreditor:<nr>` | Dokumenteret, ikke set i demo. |
+| `project.projectNumber` | – | Kun i `raa_data`. |
+| `vatAccount.vatCode` | – | Kun i `raa_data`. Har mellemrum bagefter (`"I25  "`) – brug `trim()`. |
+| `remainder`, `remainderInBaseCurrency` | – | Restbeløb hører til tabellen `open_entries`. |
+| `self` | – | Kun i `raa_data`. |
+
+**Felter der IKKE findes i entries – brug i stedet:**
+- **Kontonavn:** findes ikke. Slå op i `accounts` på `kontonummer` (`accounts.tenant_id` = kunden).
+- **Modkonto:** findes ikke på bogførte poster (kun i kassekladder). Poster på samme bilag
+  findes via `bilagsnummer`.
+- **Kunde-/leverandørnavn:** findes ikke. Slå op i `customers`/`suppliers` på nummeret i `modpart`.
+- **Momskode, projekt:** `raa_data->'vatAccount'->>'vatCode'` og `raa_data->'project'->>'projectNumber'`.
+- **Forfaldsdato, fakturanummer, restbeløb:** brug `open_entries` (åbne poster).
+
 ## Bogmærket (cursor): højeste `entryNumber`
 Vi gemmer det **højeste entryNumber**, vi har hentet, og spørger næste gang kun
 efter poster med et højere nummer (`filter=entryNumber$gt:<bogmærke>`).
