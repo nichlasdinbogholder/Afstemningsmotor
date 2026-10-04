@@ -99,7 +99,7 @@ bogmærket forkert.
 - En kørsel opdaterer kun `last_seen_at`, `detail`, `severity` og `updated_at`. Status røres aldrig.
 - Forsvinder problemet, bliver fundet stående med sin gamle `last_seen_at`.
 
-## Dubletreglen (duplicate_entries, version 5)
+## Dubletreglen (duplicate_entries, version 6)
 - **Vindue: 3 dage** (`VINDUE_DAGE` øverst i `app/rules/duplicate_entries.py`). Version 1
   brugte 7 dage. Kort vindue, så husleje, leasing og abonnementer (samme beløb hver måned)
   ikke rammes.
@@ -114,6 +114,9 @@ bogmærket forkert.
   regnes sagen som tilbageført/udlignet – intet fund.
 - **D (v4):** samme tekst kræves (uden forskel på store/små bogstaver og ekstra mellemrum).
   Pris: bogføres samme bilag to gange med FORSKELLIG tekst, fanges det ikke.
+- **E (v6):** periodiseringer er ikke dubletter. En periodisering bruger samme bilagsnummer
+  måned efter måned; har et bilag linjer på mindst 3 datoer inden for ±200 dage, udelukkes
+  det. (3 datoer, så et bilagsnummer der går igen år efter år, ikke tages for en periodisering.)
 - **C (v3):** alle linjepar mellem de samme to bilag samles til ÉT fund (salgs-, moms- og
   debitorlinje giver ikke tre fund). Fingerprintet er hash af ALLE de involverede
   posteringsnumre, sorteret.
@@ -198,7 +201,12 @@ fra tekst, bilag og beløb (IKKE slået op i e-conomic):
   Brobizz (5), EasyPark (3 fund for samme 3 bilag), Overførselsservice (2), zenegy (1).
 - 12 af de 30 var ÉT problem (Best One-periodisering i bilag 50301 og 50302, én linje
   pr. måned) → version 5 samler pr. bilagsnummer uanset dato. Forventet ca. 19 fund.
-**Mangler: kør version 5 og slå mindst 5 op i e-conomic.**
+
+**Kontrol i e-conomic (bogholderen, 04.10.2026):** 10699, 24170, 24184, Best One og 24188.
+- Bogholderen: "Periodiseringer er ikke en fejl. Her bruges typisk samme bilagsnummer."
+  → Best One-fundet var FALSK → version 6 udelukker periodiseringer (E).
+- De fire øvrige: afventer præcisering af svaret "Jeg kan ikke finde fejl i de fem kontroller".
+**Mangler: kør version 6; afklar resultatet af de fire øvrige kontroller.**
 
 Skabelon:
 

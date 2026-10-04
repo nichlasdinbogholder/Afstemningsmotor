@@ -10,6 +10,7 @@ Et par af posteringslinjer er et muligt dobbeltbogført beløb, når:
 - de er IKKE fra samme bilag (et bilags egne linjer er ikke dubletter af hinanden),
 - SAMME TEKST (uden forskel på store/små bogstaver og ekstra mellemrum) (D),
 - bilagenes kunde/leverandør er den samme, når begge bilag har en (A),
+- ingen af bilagene er en periodisering (samme bilagsnummer måned efter måned) (E),
 - ingen af dem er tilbageført: der findes ingen postering med MODSAT beløb på samme
   konto inden for vinduet (B).
 Linjepar mellem de samme to bilag samles til ÉT fund (C) – så salgslinje, momslinje
@@ -31,6 +32,9 @@ Historik:
   Pris: et bilag bogført to gange med FORSKELLIG tekst fanges ikke.
 - Version 4 gav 30 fund. Et bilagspar med linjer på flere datoer (periodisering over
   12 måneder) gav 12 fund; nu samles der pr. bilagsnummer uanset dato -> ét fund.
+- Version 6 (04.10.2026): bogholderen: "periodiseringer er ikke en fejl – her bruges
+  typisk samme bilagsnummer". Bilag med linjer på mindst 3 datoer inden for ±200 dage
+  regnes som periodisering og udelukkes (E).
 
 Sammenligningen er ÉN SQL-forespørgsel (entries sammenlignet med sig selv). Python
 samler kun de fundne par pr. bilagspar – ingen løkke over alle posteringer.
@@ -51,6 +55,12 @@ from app.rules.base import FindingDraft, fingerprint, registrer_regel
 # Version 1 brugte 7 dage; sænket til 3 efter kontrollen på demo-aftalen.
 VINDUE_DAGE = 3
 
+# Periodisering: samme bilagsnummer på mindst PERIODISERING_DATOER forskellige datoer
+# inden for ±PERIODISERING_DAGE. Mindst 3 datoer, så et bilagsnummer, der blot går igen
+# fra år til år (nummerering forfra hvert år), ikke tages for en periodisering.
+PERIODISERING_DATOER = 3
+PERIODISERING_DAGE = 200
+
 PAR_SQL = text(r"""
 WITH bilag AS (
     -- Kunde/leverandør pr. bilag: står på debitor-/kreditorlinjen, ikke på salgs-/udgiftslinjen.
@@ -58,7 +68,8 @@ WITH bilag AS (
     FROM entries
     WHERE client_id = :client_id AND modpart IS NOT NULL AND bilagsnummer IS NOT NULL
     GROUP BY bilagsnummer, dato
-)
+),
+kandidater AS MATERIALIZED (
 SELECT a.id            AS a_id,           b.id            AS b_id,
        a.bogfoert_id   AS a_nr,           b.bogfoert_id   AS b_nr,
        a.dato          AS a_dato,         b.dato          AS b_dato,
@@ -102,7 +113,21 @@ WHERE a.client_id = :client_id
   AND (ba.modpart IS NULL OR bb.modpart IS NULL OR ba.modpart = bb.modpart)
   AND tilbagefoert.fundet IS NULL                   -- B (se LATERAL ovenfor)
   AND (CAST(:since AS date) IS NULL OR greatest(a.dato, b.dato) >= :since)
-ORDER BY a.dato, a.bogfoert_id, b.bogfoert_id
+)
+SELECT k.*
+FROM kandidater k
+-- E: en periodisering bruger samme bilagsnummer måned efter måned. Har et af bilagene
+-- linjer på mindst :periode_datoer forskellige datoer omkring parret, er det en
+-- periodisering og ikke en dublet. (Kun på de få kandidater – derfor MATERIALIZED.)
+WHERE NOT EXISTS (
+    SELECT 1 FROM entries p
+    WHERE p.client_id = :client_id
+      AND p.bilagsnummer IN (k.a_bilag, k.b_bilag)
+      AND p.dato BETWEEN k.a_dato - :periode_dage AND k.a_dato + :periode_dage
+    GROUP BY p.bilagsnummer
+    HAVING count(DISTINCT p.dato) >= :periode_datoer
+)
+ORDER BY k.a_dato, k.a_nr, k.b_nr
 """)
 
 
@@ -146,11 +171,14 @@ def _bilag_noegle(r, side: str) -> tuple:
 @registrer_regel
 class DuplicateEntries:
     code = "duplicate_entries"
-    version = 5
+    version = 6
     name_da = "Muligt dobbeltbogført beløb"
 
     def run(self, session: Session, client_id: int, since: date | None) -> list[FindingDraft]:
-        par = session.execute(PAR_SQL, {"client_id": client_id, "vindue": VINDUE_DAGE, "since": since})
+        par = session.execute(PAR_SQL, {
+            "client_id": client_id, "vindue": VINDUE_DAGE, "since": since,
+            "periode_datoer": PERIODISERING_DATOER, "periode_dage": PERIODISERING_DAGE,
+        })
 
         # C: saml linjepar mellem de samme to bilag til ét fund.
         grupper: dict[tuple, list] = defaultdict(list)

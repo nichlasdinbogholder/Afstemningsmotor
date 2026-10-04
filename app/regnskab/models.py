@@ -121,6 +121,8 @@ class EntryCache(Base):
         # på kunde + konto alene.
         Index("ix_entries_kunde_konto_beloeb_dato", "client_id", "kontonummer", "beloeb", "dato"),
         Index("ix_entries_kunde_beloeb", "client_id", "beloeb"),
+        # Dubletreglen: genkend periodiseringer (samme bilagsnummer på flere datoer).
+        Index("ix_entries_kunde_bilag_dato", "client_id", "bilagsnummer", "dato"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

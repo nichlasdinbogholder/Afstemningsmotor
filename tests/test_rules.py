@@ -276,22 +276,40 @@ def test_et_fund_pr_bilagspar(db_session, kunde, poster):
     assert f.fingerprint == fingerprint([str(n) for n in (10, 11, 12, 20, 21, 22)])
 
 
-def test_periodisering_over_flere_maaneder_er_et_fund(db_session, kunde, poster):
-    """To ens periodiseringer (bilag 50301 og 50302) med en linje pr. måned i et år = ÉT fund."""
-    nr = 1
-    for maaned in range(1, 13):
-        dag = f"2022-{maaned:02d}-01"
-        for bilag in (50301, 50302):
-            tekst = f"Best One - periodisering {maaned}"
-            poster(nr, dag, 2805, "1066.66", tekst=tekst, bilag=bilag)
-            poster(nr + 1, dag, 5660, "-1333.33", tekst=tekst, bilag=bilag)
-            poster(nr + 2, dag, 6903, "266.67", tekst=tekst, bilag=bilag)
-            nr += 3
+def _periodisering(poster, start_nr, bilag, maaneder, aar=2022):
+    nr = start_nr
+    for maaned in maaneder:
+        dag = f"{aar}-{maaned:02d}-01"
+        tekst = f"Best One - periodisering {maaned}"
+        poster(nr, dag, 2805, "1066.66", tekst=tekst, bilag=bilag)
+        poster(nr + 1, dag, 5660, "-1333.33", tekst=tekst, bilag=bilag)
+        poster(nr + 2, dag, 6903, "266.67", tekst=tekst, bilag=bilag)
+        nr += 3
+
+
+def test_periodisering_er_ikke_dublet(db_session, kunde, poster):
+    """E: to ens periodiseringer (bilag 50301 og 50302, samme bilagsnummer hver måned)."""
+    _periodisering(poster, 1, 50301, range(1, 13))
+    _periodisering(poster, 1000, 50302, range(1, 13))
+    assert _koer(db_session, kunde).fundet == 0
+
+
+def test_bilagsnummer_der_gaar_igen_aar_efter_aar_er_ikke_periodisering(db_session, kunde, poster):
+    """Starter nummereringen forfra hvert år, må bilag 5 i 2025 og 2026 ikke skjule en dublet."""
+    poster(1, "2025-03-10", 6000, "100.00", tekst="Gammelt bilag 5", bilag=5)
+    poster(2, "2026-03-09", 6000, "999.00", tekst="Nyt bilag 5", bilag=5)
+    poster(3, "2026-03-10", 6000, "999.00", tekst="Nyt bilag 5", bilag=6)
+    assert _koer(db_session, kunde).fundet == 1
+
+
+def test_et_bilag_med_linjer_paa_to_datoer_er_et_fund(db_session, kunde, poster):
+    """C: linjepar mellem samme to bilag på flere datoer samles til ét fund (uden at være periodisering)."""
+    for bilag, start in ((50301, 1), (50302, 100)):
+        poster(start, "2022-01-01", 6000, "500.00", tekst="Bilag i to dele", bilag=bilag)
+        poster(start + 1, "2022-01-02", 6010, "250.00", tekst="Bilag i to dele", bilag=bilag)
     _koer(db_session, kunde)
     fund = _fund(db_session, kunde)
-    assert len(fund) == 1
-    assert len(fund[0].entry_ids) == 72 and fund[0].detail["bilag"] == ["50301", "50302"]
-    assert (fund[0].period_start, fund[0].period_end) == (date(2022, 1, 1), date(2022, 12, 1))
+    assert len(fund) == 1 and len(fund[0].entry_ids) == 4
 
 
 def test_dobbeltbogfoert_og_tilbagefoert_er_ikke_dublet(db_session, kunde, poster):
@@ -323,7 +341,7 @@ def test_hver_koersel_noteres_i_rule_runs(db_session, kunde, poster):
     _koer(db_session, kunde)
     _koer(db_session, kunde)
     koersler = db_session.scalars(select(RuleRun).where(RuleRun.client_id == kunde.id)).all()
-    assert [(k.rule_code, k.rule_version, k.fund) for k in koersler] == [(REGEL, 5, 1), (REGEL, 5, 1)]
+    assert [(k.rule_code, k.rule_version, k.fund) for k in koersler] == [(REGEL, 6, 1), (REGEL, 6, 1)]
 
 
 # --- Status og log ---------------------------------------------------------------
@@ -388,7 +406,7 @@ def test_ingen_aendring_ingen_log(db_session, kunde, poster):
 def test_regel_er_registreret():
     regler = {r.code: r for r in alle_regler()}
     assert regler[REGEL].name_da == "Muligt dobbeltbogført beløb"
-    assert regler[REGEL].version == 5
+    assert regler[REGEL].version == 6
 
 
 def test_jobtypen_run_rules(db_session, kunde, poster):
