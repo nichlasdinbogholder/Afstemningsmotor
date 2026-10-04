@@ -99,7 +99,7 @@ bogmærket forkert.
 - En kørsel opdaterer kun `last_seen_at`, `detail`, `severity` og `updated_at`. Status røres aldrig.
 - Forsvinder problemet, bliver fundet stående med sin gamle `last_seen_at`.
 
-## Dubletreglen (duplicate_entries, version 7)
+## Dubletreglen (duplicate_entries, version 9)
 - **Vindue: 3 dage** (`VINDUE_DAGE` øverst i `app/rules/duplicate_entries.py`). Version 1
   brugte 7 dage. Kort vindue, så husleje, leasing og abonnementer (samme beløb hver måned)
   ikke rammes.
@@ -122,6 +122,12 @@ bogmærket forkert.
   profitAndLoss i kontoplanen) inden for 365 dage, er dobbeltbogføringen rettet, og hele
   bilagsparret udelukkes. Gælder ikke status-/balancekonti (bank, debitorer), hvor et
   modsat beløb blot er den normale betaling. Er kontoplanen ikke hentet, tæller det ikke.
+- **H (v8):** rettelser bogføres med SAMME bilagsnummer. Har et af bilagene et modsat beløb
+  på samme konto (tilbageførslen, inden for 365 dage), er det en rettelse – intet fund.
+- **I (v9):** modkontoen skal være BANK i balancen: begge bilag skal have en linje på en
+  bankkonto, og mindst én linje ud over banklinjen skal gå igen. Bankkonti genkendes som
+  balancekonti (status) med "bank" i navnet (`BANK_NAVN`). Uden hentet kontoplan: ingen
+  bankkonti og ingen fund. En faktura bogført to gange mod debitorer er IKKE et fund.
 - **C (v3):** alle linjepar mellem de samme to bilag samles til ÉT fund (salgs-, moms- og
   debitorlinje giver ikke tre fund). Fingerprintet er hash af ALLE de involverede
   posteringsnumre, sorteret.
@@ -217,7 +223,12 @@ fra tekst, bilag og beløb (IKKE slået op i e-conomic):
   - 24170 de 6 kunder: falsk – den ene er faktura, den anden betaling.
 - **Resultat: 1 rigtig, 4 falske (falsk-positiv-rate 80 %).** Alle fire falske har nu en
   regel: periodisering (E, v6), rettet senere (F, v7), faktura/betaling (G, v7).
-**Mangler: kør version 7 på Din Bogholder ApS og kontrollér 5 nye fund.**
+
+**Version 7 kørt på Din Bogholder ApS:** AUB-fundet er stadig med. Bogholderen om de
+øvrige: "det er ikke fejl. Det er rettelser, hvor samme bilagsnummer, tekst og beløb
+benyttes." → version 8 (H). Og: "hvis der skal være tale om en dobbeltbogføring, skal
+modkonto være bank i balancen." → version 9 (I).
+**Mangler: kør version 9 på Din Bogholder ApS og kontrollér fundene.**
 
 Skabelon:
 

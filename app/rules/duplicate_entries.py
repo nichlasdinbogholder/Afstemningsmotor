@@ -14,6 +14,11 @@ Et par af posteringslinjer er et muligt dobbeltbogført beløb, når:
 - samme slags postering, fx to fakturaer – ikke en faktura og en betaling (G),
 - bilagsparret er ikke rettet senere: intet modsat beløb på samme driftskonto inden for
   KORREKTION_DAGE (F) – gælder hele bilagsparret, hvis blot ét linjepar er rettet,
+- MODKONTOEN ER BANK: begge bilag har en linje på en bankkonto i balancen (I), og der
+  går mindst én linje igen, som IKKE er banklinjen (ellers er det blot to forskellige
+  udgifter med samme beløb),
+- ingen af bilagene er et rettelsesbilag: samme bilagsnummer med MODSAT beløb på samme
+  konto (H) – rettelser bogføres med samme bilagsnummer,
 - ingen af dem er tilbageført: der findes ingen postering med MODSAT beløb på samme
   konto inden for vinduet (B).
 Linjepar mellem de samme to bilag samles til ÉT fund (C) – så salgslinje, momslinje
@@ -42,6 +47,12 @@ Historik:
   samme referencenummer to gange), 4 falske: periodisering (E), "rettet senere" (2) og
   "faktura og betaling" (1). Nu kræves samme posteringstype (G), og bilagspar, der er
   rettet senere på en driftskonto, udelukkes (F).
+- Version 8 (04.10.2026): bogholderen om de resterende fund: "det er ikke fejl. Det er
+  rettelser, hvor samme bilagsnummer, tekst og beløb benyttes." Bilag med eget modsat
+  beløb på samme konto (tilbageførslen) udelukkes nu (H).
+- Version 9 (04.10.2026): bogholderen: "hvis der skal være tale om en dobbeltbogføring,
+  skal modkonto være bank i balancen." Begge bilag skal have en linje på en bankkonto (I).
+  Bankkonti genkendes som balancekonti (status) med "bank" i navnet (BANK_NAVN).
 
 Sammenligningen er ÉN SQL-forespørgsel (entries sammenlignet med sig selv). Python
 samler kun de fundne par pr. bilagspar – ingen løkke over alle posteringer.
@@ -68,6 +79,10 @@ VINDUE_DAGE = 3
 PERIODISERING_DATOER = 3
 PERIODISERING_DAGE = 200
 
+# Bankkonti: balancekonti (status) hvis navn matcher BANK_NAVN (uden forskel på store/små
+# bogstaver), fx "5820 Bankkonto". Kontoplanen skal være hentet – ellers ingen bankkonti.
+BANK_NAVN = "%bank%"
+
 # Rettet senere: et modsat beløb på samme driftskonto inden for så mange dage efter
 # betyder, at dobbeltbogføringen er rettet.
 KORREKTION_DAGE = 365
@@ -79,6 +94,10 @@ WITH bilag AS (
     FROM entries
     WHERE client_id = :client_id AND modpart IS NOT NULL AND bilagsnummer IS NOT NULL
     GROUP BY bilagsnummer, dato
+),
+bank AS (
+    SELECT DISTINCT kontonummer FROM accounts
+    WHERE tenant_id = :client_id AND kontotype = 'status' AND navn ILIKE :bank_navn
 ),
 kandidater AS MATERIALIZED (
 SELECT a.id            AS a_id,           b.id            AS b_id,
@@ -142,7 +161,30 @@ SELECT k.*,
              AND c.beloeb      = -k.beloeb
              AND c.dato BETWEEN least(k.a_dato, k.b_dato)
                             AND least(k.a_dato, k.b_dato) + :korrektion_dage
-       ) AS rettet_senere
+       ) AS rettet_senere,
+       -- H: rettelsesbilag: rettes en bogføring, bruges samme bilagsnummer, og bilaget får
+       -- et MODSAT beløb på samme konto (tilbageførslen). Gælder alle konti – bilagsnummeret
+       -- er beviset. Inden for :korrektion_dage, så genbrugte bilagsnumre fra andre år ikke tæller.
+       EXISTS (
+           SELECT 1 FROM entries c
+           WHERE c.client_id    = :client_id
+             AND c.bilagsnummer IN (k.a_bilag, k.b_bilag)
+             AND c.kontonummer  = k.a_konto
+             AND c.beloeb       = -k.beloeb
+             AND c.dato BETWEEN least(k.a_dato, k.b_dato) - :korrektion_dage
+                            AND greatest(k.a_dato, k.b_dato) + :korrektion_dage
+       ) AS rettelsesbilag,
+       -- I: modkontoen skal være bank – begge bilag har en linje på en bankkonto.
+       EXISTS (
+           SELECT 1 FROM entries c JOIN bank ON bank.kontonummer = c.kontonummer
+           WHERE c.client_id = :client_id AND c.bilagsnummer = k.a_bilag
+             AND c.dato BETWEEN k.a_dato - :vindue AND k.a_dato + :vindue
+       ) AND EXISTS (
+           SELECT 1 FROM entries c JOIN bank ON bank.kontonummer = c.kontonummer
+           WHERE c.client_id = :client_id AND c.bilagsnummer = k.b_bilag
+             AND c.dato BETWEEN k.b_dato - :vindue AND k.b_dato + :vindue
+       ) AS bank_er_modkonto,
+       k.a_konto IN (SELECT kontonummer FROM bank) AS er_banklinje
 FROM kandidater k
 -- E: en periodisering bruger samme bilagsnummer måned efter måned. Har et af bilagene
 -- linjer på mindst :periode_datoer forskellige datoer omkring parret, er det en
@@ -199,14 +241,14 @@ def _bilag_noegle(r, side: str) -> tuple:
 @registrer_regel
 class DuplicateEntries:
     code = "duplicate_entries"
-    version = 7
+    version = 9
     name_da = "Muligt dobbeltbogført beløb"
 
     def run(self, session: Session, client_id: int, since: date | None) -> list[FindingDraft]:
         par = session.execute(PAR_SQL, {
             "client_id": client_id, "vindue": VINDUE_DAGE, "since": since,
             "periode_datoer": PERIODISERING_DATOER, "periode_dage": PERIODISERING_DAGE,
-            "korrektion_dage": KORREKTION_DAGE,
+            "korrektion_dage": KORREKTION_DAGE, "bank_navn": BANK_NAVN,
         })
 
         # C: saml linjepar mellem de samme to bilag til ét fund.
@@ -216,9 +258,14 @@ class DuplicateEntries:
 
         fund = []
         for linjepar in grupper.values():
-            if any(r.rettet_senere for r in linjepar):
-                continue  # F: dobbeltbogføringen er rettet senere
-            hoved = max(linjepar, key=lambda r: (abs(r.beloeb), r.severity == "high"))
+            if not any(r.bank_er_modkonto for r in linjepar):
+                continue  # I: modkontoen er ikke bank
+            if all(r.er_banklinje for r in linjepar):
+                continue  # kun banklinjerne går igen – to forskellige udgifter med samme beløb
+            if any(r.rettet_senere or r.rettelsesbilag for r in linjepar):
+                continue  # F/H: dobbeltbogføringen er rettet
+            # Titlen viser helst udgiften/indtægten – ikke banklinjen med samme beløb.
+            hoved = max(linjepar, key=lambda r: (not r.er_banklinje, abs(r.beloeb), r.severity == "high"))
             linjer: dict[int, tuple] = {}
             for r in linjepar:
                 linjer[r.a_id] = (r.a_nr, _post(r, "a"))
