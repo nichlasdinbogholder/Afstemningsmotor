@@ -5,7 +5,7 @@
 
 Hver kunde får fire job (customers, suppliers, entries, open_entries) lige efter
 hinanden, og kunderne spredes jævnt over døgnet (dansk tid), så vi ikke rammer
-e-conomics grænser ved at sende alt på én gang. Planlægges der midt på dagen,
+regnskabssystemets grænser ved at sende alt på én gang. Planlægges der midt på dagen,
 fordeles jobbene over resten af dagen.
 
 Idempotensnøgle: "<ressource>:<client_id>:<dato>", så planlæggeren kan køres så

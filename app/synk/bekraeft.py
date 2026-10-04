@@ -12,7 +12,7 @@ Kommandoen:
 
 Den skriver ✔ eller ✘ ud for hvert tjek og slutter med
 "BEKRÆFTET" (afslutningskode 0) eller "IKKE BEKRÆFTET" (afslutningskode 1).
-Den skriver kun til vores egen database – aldrig til e-conomic.
+Den skriver kun til vores egen database – aldrig til regnskabssystemet.
 """
 
 import argparse
@@ -95,9 +95,9 @@ def bekraeft(session: Session, kundenummer: str, adapter_fabrik=hent_adapter,
     print("3. Databasen stemmer med systemet (hentet igen direkte fra systemet)")
     try:
         with adapter_fabrik(session, kunde.id) as adapter:
-            kunder = {k.kundenummer for k in adapter.hent_customers()}
-            leverandoerer = {le.leverandoernummer for le in adapter.hent_suppliers()}
-            aabne = {p.bogfoert_id: p.restbeloeb for p in adapter.hent_open_entries()}
+            kunder = {k.kundenummer for k in adapter.fetch_customers()}
+            leverandoerer = {le.leverandoernummer for le in adapter.fetch_suppliers()}
+            aabne = {p.bogfoert_id: p.restbeloeb for p in adapter.fetch_open_entries()}
     except Exception as fejl:  # noqa: BLE001
         tjek(False, "Hent data fra systemet til sammenligning", _fejltekst(fejl))
         return _slut(tjek)

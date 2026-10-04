@@ -1,15 +1,16 @@
-"""Fælles adapter-lag til regnskabssystemer (e-conomic nu, Dinero senere).
+"""Fælles interface til regnskabssystemer: AccountingProvider.
 
-Resten af systemet henter ALDRIG data direkte fra et regnskabssystem – kun via
-de fire funktioner på en adapter:
+Resten af systemet henter ALDRIG data direkte fra et regnskabssystem og ved
+aldrig, hvilket system data kommer fra – det bruger kun AccountingProvider:
 
-    with hent_adapter(session, client_id) as adapter:
-        adapter.hent_customers()          -> list[Kunde]
-        adapter.hent_suppliers()          -> list[Leverandoer]
-        adapter.hent_entries(efter)       -> PosteringsSvar (kun nye siden `efter`)
-        adapter.hent_open_entries()       -> list[AabenPost] (altid alle)
-        adapter.hent_kassekladder()       -> list[Kassekladde]
-        adapter.hent_kassekladde_poster(nummer) -> list[KladdePost] (endnu ikke bogført)
+    with hent_adapter(session, client_id) as provider:
+        provider.fetch_accounts()                -> list[Konto]       (kontoplan)
+        provider.fetch_customers()               -> list[Kunde]
+        provider.fetch_suppliers()               -> list[Leverandoer]
+        provider.fetch_entries(efter)            -> PosteringsSvar    (kun nye siden `efter`)
+        provider.fetch_open_entries()            -> list[AabenPost]   (altid alle)
+        provider.fetch_journals()                -> list[Kassekladde]
+        provider.fetch_journal_entries(nummer)   -> list[KladdePost]  (endnu ikke bogført)
 
 Adapteren oversætter systemets felter til formatet herunder og gætter aldrig:
 et felt, systemet ikke har leveret, bliver None.
@@ -62,7 +63,29 @@ ENTRY_TYPER = (
 )
 
 
+# Kontotyper og debet/kredit i vores format (accounts.kontotype/debet_kredit).
+KONTOTYPER = (
+    "profitAndLoss", "status", "totalFrom", "heading", "headingStart", "sumInterval", "sumAlpha",
+)
+DEBET_KREDIT = ("debit", "credit")
+
+
 # --- Vores eget format ------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Konto:
+    kontonummer: int
+    navn: str
+    kontotype: str | None
+    debet_kredit: str | None
+    momskode: str | None
+    spaerret: bool | None
+    direkte_posteringer_blokeret: bool | None
+    saldo: Decimal | None
+    kladdesaldo: Decimal | None
+    # Systemets eget, uændrede svar – gemmes til opslag, må ALDRIG bruges af regler.
+    raa_data: dict
 
 
 @dataclass(frozen=True)
@@ -141,22 +164,26 @@ class PosteringsSvar:
     cursor_type: str | None
 
 
-class RegnskabsAdapter(Protocol):
+class AccountingProvider(Protocol):
+    """Det fælles interface, som hver adapter (e-conomic, senere Dinero) implementerer."""
+
     system: str
 
-    def hent_customers(self) -> list[Kunde]: ...
-    def hent_suppliers(self) -> list[Leverandoer]: ...
-    def hent_entries(self, efter: str | None) -> PosteringsSvar: ...
-    def hent_open_entries(self) -> list[AabenPost]: ...
-    def hent_kassekladder(self) -> list[Kassekladde]: ...
-    def hent_kassekladde_poster(self, nummer: int) -> list[KladdePost]: ...
-    def __enter__(self) -> "RegnskabsAdapter": ...
+    def fetch_accounts(self) -> list[Konto]: ...
+
+    def fetch_customers(self) -> list[Kunde]: ...
+    def fetch_suppliers(self) -> list[Leverandoer]: ...
+    def fetch_entries(self, efter: str | None) -> PosteringsSvar: ...
+    def fetch_open_entries(self) -> list[AabenPost]: ...
+    def fetch_journals(self) -> list[Kassekladde]: ...
+    def fetch_journal_entries(self, nummer: int) -> list[KladdePost]: ...
+    def __enter__(self) -> "AccountingProvider": ...
     def __exit__(self, *args) -> None: ...
 
 
 # --- Register ---------------------------------------------------------------
 
-AdapterFabrik = Callable[[Session, int], RegnskabsAdapter]
+AdapterFabrik = Callable[[Session, int], AccountingProvider]
 _FABRIKKER: dict[str, AdapterFabrik] = {}
 
 
@@ -178,7 +205,7 @@ def understoettede_systemer() -> list[str]:
     return sorted(_FABRIKKER)
 
 
-def hent_adapter(session: Session, client_id: int) -> RegnskabsAdapter:
+def hent_adapter(session: Session, client_id: int) -> AccountingProvider:
     """Adapteren til kundens regnskabssystem (fra clients.regnskabssystem)."""
     from app.kunder.models import Client
 

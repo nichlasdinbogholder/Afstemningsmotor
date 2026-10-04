@@ -31,7 +31,7 @@ def test_alt_virker_giver_bekraeftet(db_session, capsys):
 def test_fejl_fra_systemet_giver_ikke_bekraeftet(db_session, capsys):
     _kunde(db_session, "B-2")
     adapter = _fuld_adapter()
-    adapter.fejl["hent_customers"] = AdapterFejl("e-conomic svarede 401 – tjek nøglerne")
+    adapter.fejl["fetch_customers"] = AdapterFejl("e-conomic svarede 401 – tjek nøglerne")
     assert bekraeft(db_session, "B-2", _fabrik(adapter)) is False
     ud = capsys.readouterr().out
     assert "✘ customers: hentet" in ud and "401" in ud
@@ -53,13 +53,13 @@ def test_kunde_uden_adgang_giver_ikke_bekraeftet(db_session, capsys):
 def test_afvigelse_mellem_system_og_database_opdages(db_session, capsys):
     _kunde(db_session, "B-5")
     adapter = _fuld_adapter()
-    oprindelig = adapter.hent_open_entries
+    oprindelig = adapter.fetch_open_entries
     kald = {"n": 0}
 
     def skiftende():  # systemet svarer noget andet anden gang end det, der blev gemt
         kald["n"] += 1
         return oprindelig() if kald["n"] == 1 else [_aaben(2, rest="1.00")]
 
-    adapter.hent_open_entries = skiftende
+    adapter.fetch_open_entries = skiftende
     assert bekraeft(db_session, "B-5", _fabrik(adapter)) is False
     assert "✘ Åbne poster og restbeløb er præcis de samme" in capsys.readouterr().out

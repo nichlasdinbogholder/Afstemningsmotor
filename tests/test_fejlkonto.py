@@ -31,10 +31,10 @@ class KladdeAdapter:
     def __exit__(self, *_):
         pass
 
-    def hent_kassekladder(self):
+    def fetch_journals(self):
         return self.kladder
 
-    def hent_kassekladde_poster(self, nummer):
+    def fetch_journal_entries(self, nummer):
         self.hentede.append(nummer)
         return [p for p in self.linjer if p.kladde_nummer == nummer]
 

@@ -1,6 +1,8 @@
 """e-conomic-adapteren: de fire faste funktioner oversat fra e-conomics REST API.
 
 Endpoints og felter (fra e-conomics JSON-skemaer, restapi.e-conomic.com):
+- /accounts      : accountNumber, name, accountType, debitCredit, vatAccount.vatCode,
+                   barred, blockDirectEntries, balance, draftBalance   (kontoplan)
 - /customers     : customerNumber, name, corporateIdentificationNumber,
                    paymentTerms.paymentTermsNumber, barred, balance
 - /suppliers     : supplierNumber, name, corporateIdentificationNumber,
@@ -34,7 +36,10 @@ from app.adaptere.adgang import hent_adgang
 from app.adaptere.economic.klient import EconomicFejl, EconomicKlient, app_secret_token
 from app.adaptere.regnskab.base import (
     ENTRY_TYPER,
+    DEBET_KREDIT,
+    KONTOTYPER,
     AabenPost,
+    Konto,
     Kassekladde,
     KladdePost,
     Kunde,
@@ -82,6 +87,27 @@ def _dato(vaerdi) -> date | None:
 
 def _nummer(handler: dict | None, felt: str) -> int | None:
     return None if not handler else handler.get(felt)
+
+
+def _i_liste(vaerdi, tilladte: tuple, felt: str):
+    if vaerdi is not None and vaerdi not in tilladte:
+        raise EconomicFejl(f"Ukendt {felt} '{vaerdi}' fra e-conomic")
+    return vaerdi
+
+
+def oversaet_konto(d: dict) -> Konto:
+    return Konto(
+        kontonummer=_kraev(d, "accountNumber", "en konto"),
+        navn=_kraev(d, "name", "en konto"),
+        kontotype=_i_liste(d.get("accountType"), KONTOTYPER, "accountType"),
+        debet_kredit=_i_liste(d.get("debitCredit"), DEBET_KREDIT, "debitCredit"),
+        momskode=(d.get("vatAccount") or {}).get("vatCode"),
+        spaerret=d.get("barred"),
+        direkte_posteringer_blokeret=d.get("blockDirectEntries"),
+        saldo=_decimal(d.get("balance")),
+        kladdesaldo=_decimal(d.get("draftBalance")),
+        raa_data=d,
+    )
 
 
 def oversaet_kunde(d: dict) -> Kunde:
@@ -200,13 +226,16 @@ class EconomicAdapter:
     def _regnskabsaar(self) -> list[str]:
         return [kod_id(_kraev(a, "year", "et regnskabsår")) for a in self._klient.hent_alle("/accounting-years")]
 
-    def hent_customers(self) -> list[Kunde]:
+    def fetch_accounts(self) -> list[Konto]:
+        return [oversaet_konto(d) for d in self._klient.hent_alle("/accounts")]
+
+    def fetch_customers(self) -> list[Kunde]:
         return [oversaet_kunde(d) for d in self._klient.hent_alle("/customers")]
 
-    def hent_suppliers(self) -> list[Leverandoer]:
+    def fetch_suppliers(self) -> list[Leverandoer]:
         return [oversaet_leverandoer(d) for d in self._klient.hent_alle("/suppliers")]
 
-    def hent_entries(self, efter: str | None) -> PosteringsSvar:
+    def fetch_entries(self, efter: str | None) -> PosteringsSvar:
         if efter is not None and not efter.isdigit():
             raise EconomicFejl(f"Ugyldigt bogmærke for entries: '{efter}'")
         filter = f"entryNumber$gt:{efter}" if efter is not None else None
@@ -220,7 +249,7 @@ class EconomicAdapter:
         ny_cursor = str(hoejeste) if hoejeste is not None else efter
         return PosteringsSvar(poster, ny_cursor, "id" if ny_cursor is not None else None)
 
-    def hent_open_entries(self) -> list[AabenPost]:
+    def fetch_open_entries(self) -> list[AabenPost]:
         return [
             oversaet_aaben_post(d)
             for aar in self._regnskabsaar()
@@ -229,19 +258,22 @@ class EconomicAdapter:
         ]
 
 
-    def hent_kassekladder(self) -> list[Kassekladde]:
+    def fetch_journals(self) -> list[Kassekladde]:
         return [oversaet_kassekladde(d) for d in self._klient.hent_alle("/journals")]
 
-    def hent_kassekladde_poster(self, nummer: int) -> list[KladdePost]:
+    def fetch_journal_entries(self, nummer: int) -> list[KladdePost]:
         return [oversaet_kladdepost(nummer, d)
                 for d in self._klient.hent_alle(f"/journals/{int(nummer)}/entries")]
 
 
 @registrer_adapter(SYSTEM)
-def lav_economic_adapter(session: Session, client_id: int) -> EconomicAdapter:
+def lav_economic_adapter(session: Session, client_id: int, transport=None, vent=None) -> EconomicAdapter:
+    """`transport`/`vent` bruges kun af tests (simuleret e-conomic, ingen ventetid)."""
     adgang = hent_adgang(session, client_id, SYSTEM)
     return EconomicAdapter(EconomicKlient(
         app_secret_token=app_secret_token(),
         agreement_grant_token=adgang.token,
         base_url=get_settings().economic_api_base_url,
+        transport=transport,
+        vent=vent,
     ))

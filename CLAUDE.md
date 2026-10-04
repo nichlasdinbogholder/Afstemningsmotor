@@ -51,27 +51,31 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   Tokenet indtastes skjult – aldrig som argument på kommandolinjen.
 - `app/adaptere/` – adapter-laget til e-conomic/Dinero. `hent_adgang()` og
   `hent_token(session, client_id, system)` er de eneste, der kalder dekrypteringen.
-- `app/adaptere/regnskab/base.py` – ADAPTER-LAGET: fælles format (Kunde, Leverandoer,
-  Postering, AabenPost) og de fire faste funktioner `hent_customers`, `hent_suppliers`,
-  `hent_entries(efter)`, `hent_open_entries()`. Hent en adapter med
-  `hent_adapter(session, client_id)`. Resten af systemet må ALDRIG importere
-  `app.adaptere.economic` eller kalde e-conomic direkte (test håndhæver det).
-  Ny adapter (Dinero): nyt modul + `@registrer_adapter("dinero")` + `ADAPTER_MODULER`.
-  Adaptere gætter aldrig: manglende felter bliver None; manglende id'er giver fejl.
+- `app/adaptere/regnskab/base.py` – det fælles interface `AccountingProvider` med
+  `fetch_accounts`, `fetch_customers`, `fetch_suppliers`, `fetch_entries(efter)`,
+  `fetch_open_entries`, samt `fetch_journals`/`fetch_journal_entries(nr)` (kassekladder).
+  Fælles format: Konto, Kunde, Leverandoer, Postering, AabenPost, Kassekladde, KladdePost.
+  Hent en provider med `hent_adapter(session, client_id)`. Resten af systemet må ALDRIG
+  importere `app.adaptere.economic`, kalde et system direkte eller nævne et systemnavn
+  i app/synk, app/afstemning, app/jobs, app/regnskab, app/planlaegning (tests håndhæver det).
+  Ny adapter: nyt modul + `@registrer_adapter("<system>")` + `ADAPTER_MODULER`.
+  Adaptere gætter aldrig: manglende felter bliver None; manglende id'er/ukendte typer giver fejl.
   Rate limit rejses som `ForMangeKald` (ikke en fejl – job udskydes).
+- DINERO: endnu IKKE bygget – Dineros datamodel passer ikke ind i interfacet (id'er er
+  GUID'er, ikke tal; ingen liste over købsbilag/kreditorposter; posttyper og
+  betalingsbetingelser har andre begreber). Afventer beslutning om ændring af interfacet.
 - `app/adaptere/economic/adapter.py` – e-conomic-adapteren (REST: /customers,
   /suppliers, /accounting-years/{år}/entries; entries inkrementelt med
   `entryNumber$gt:<cursor>`, åbne poster fuldt med `remainder$ne:0`).
 - `app/adaptere/economic/klient.py` – læse-klient til e-conomics REST API
   (httpx + tenacity: 5 forsøg med eksponentiel ventetid ved 429/5xx/netværksfejl).
   Følger `pagination.nextPage` og nægter at sende nøgler til andre værter.
-- `app/adaptere/economic/kontoplan.py` – henter kontoplanen for én kunde:
-  `python -m app.adaptere.economic.kontoplan --kundenummer <nr>` (eller `--kunde <id>`).
-  `--alle` henter for alle AKTIVE kunder med aktiv e-conomic-adgang (aldrig
-  opsagt/pause); én kundes fejl stopper ikke resten. Registreres i sync_state
-  som ressourcen `accounts`.
+- `app/synk/kontoplan.py` – henter kontoplanen via `fetch_accounts` for én kunde
+  (`--kundenummer <nr>` / `--kunde <id>`) eller `--alle` AKTIVE kunder med aktiv adgang
+  (aldrig opsagt/pause); én kundes fejl stopper ikke resten. Registreres i sync_state
+  som `accounts`. (`app/adaptere/economic/kontoplan.py` er kun en gammel genvej hertil.)
 - `app/planlaegning/natlig_kontoplan.py` – tidsplan på Mac (launchd): kører
-  `--alle` ÉN gang i døgnet (standard kl. 12:30). Log: `logs/kontoplan.log`.
+  `python -m app.synk.kontoplan --alle` ÉN gang i døgnet (standard kl. 12:30). Log: `logs/kontoplan.log`.
   `python -m app.planlaegning.natlig_kontoplan installer|status|koer-nu|afinstaller`.
 - `app/jobs/` – jobkø i databasen (tabel `jobs`, status `koe`/`i_gang`/`faerdig`/`fejlet`).
   - `register.py`: jobtyper registreres med `@jobtype("navn")`; nye moduler
@@ -107,7 +111,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     som konto ELLER modkonto. Kladde: `--kladde`, ellers `clients.kassekladde_navn`,
     ellers alle. Læser kun. Kode 0 = ingen, 1 = fund, 2 = fejl:
     `python -m app.afstemning.fejlkonto --kundenummer <nr> [--konto 9900]`.
-  - Adapter-laget har dertil `hent_kassekladder()` og `hent_kassekladde_poster(nr)`
+  - Adapter-laget har dertil `fetch_journals()` og `fetch_journal_entries(nr)`
     (e-conomic: /journals og /journals/{nr}/entries).
 - `app/regnskab/models.py` – regnskabsdata fra kundernes systemer (`accounts`
   med `tenant_id` = kunden; cache-tabellerne `customers`, `suppliers`, `entries`,

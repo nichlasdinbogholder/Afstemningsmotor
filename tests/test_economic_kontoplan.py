@@ -1,8 +1,14 @@
-"""Test af hentning af kontoplan fra e-conomic – mod et falsk e-conomic (ingen netværk)."""
+"""Test af hentning af kontoplan fra e-conomic – mod et falsk e-conomic (ingen netværk).
+
+Kontoplanen hentes nu via AccountingProvider (app/synk/kontoplan.py). Testene kører
+hele kæden: kundens krypterede token -> e-conomic-adapteren -> HTTP mod et simuleret
+e-conomic -> gemning i accounts.
+"""
 
 import io
 import logging
 import secrets
+from functools import partial
 
 import httpx
 import pytest
@@ -11,7 +17,9 @@ from tenacity import wait_none
 
 from app.adaptere.adgang import AdgangMangler
 from app.adaptere.economic.klient import EconomicFejl
-from app.adaptere.economic.kontoplan import KontoplanFejl, hent_og_gem_kontoplan
+from app.adaptere.economic.adapter import lav_economic_adapter
+from app.adaptere.regnskab import base
+from app.synk.kontoplan import KontoplanFejl, hent_og_gem_kontoplan
 from app.audit.models import AuditLog
 from app.config import get_settings
 from app.kunder.models import Client, Credential
@@ -79,10 +87,21 @@ class FalskEconomic:
         return httpx.Response(200, json={"collection": self.sider[side], "pagination": pagination})
 
 
+@pytest.fixture(autouse=True)
+def _gem_monkeypatch(monkeypatch):
+    global _MONKEYPATCH
+    _MONKEYPATCH = monkeypatch
+
+
+def _brug_simuleret_economic(handler):
+    """Den rigtige e-conomic-adapter, men HTTP går til `handler` i stedet for e-conomic."""
+    _MONKEYPATCH.setitem(base._FABRIKKER, "economic", partial(
+        lav_economic_adapter, transport=httpx.MockTransport(handler), vent=wait_none()))
+
+
 def _hent(db_session, kunde, falsk):
-    return hent_og_gem_kontoplan(
-        db_session, kunde.id, transport=httpx.MockTransport(falsk), vent=wait_none()
-    )
+    _brug_simuleret_economic(falsk)
+    return hent_og_gem_kontoplan(db_session, kunde.id)
 
 
 def test_henter_alle_sider_og_gemmer_med_tenant_id(db_session, kunde, token, app_secret):
@@ -147,12 +166,9 @@ def test_sender_aldrig_noegler_til_anden_adresse(db_session, kunde, app_secret):
         })
 
     kald = []
+    _brug_simuleret_economic(lambda r: kald.append(r) or ondsindet(r))
     with pytest.raises(EconomicFejl, match="uden for e-conomic"):
-        hent_og_gem_kontoplan(
-            db_session, kunde.id,
-            transport=httpx.MockTransport(lambda r: kald.append(r) or ondsindet(r)),
-            vent=wait_none(),
-        )
+        hent_og_gem_kontoplan(db_session, kunde.id)
     assert all(r.url.host == "restapi.e-conomic.com" for r in kald)
 
 
@@ -160,7 +176,9 @@ def test_tom_kontoplan_sletter_ikke_den_gemte(db_session, kunde, app_secret):
     _hent(db_session, kunde, FalskEconomic([[_konto(1010, "Salg")]]))
     with pytest.raises(KontoplanFejl, match="ingen konti"):
         _hent(db_session, kunde, FalskEconomic([[]]))
-    assert db_session.scalar(text("SELECT count(*) FROM accounts")) == 1
+    assert db_session.scalar(
+        text("SELECT count(*) FROM accounts WHERE tenant_id = :k"), {"k": kunde.id}
+    ) == 1
 
 
 def test_mangler_adgang(db_session, app_secret):
@@ -175,7 +193,7 @@ def test_mangler_app_noegle(db_session, kunde, monkeypatch):
     monkeypatch.setenv("ECONOMIC_APP_SECRET_TOKEN", "")
     get_settings.cache_clear()
     try:
-        with pytest.raises(KontoplanFejl, match="ECONOMIC_APP_SECRET_TOKEN"):
+        with pytest.raises(EconomicFejl, match="ECONOMIC_APP_SECRET_TOKEN"):
             _hent(db_session, kunde, FalskEconomic([[]]))
     finally:
         get_settings.cache_clear()
@@ -198,3 +216,15 @@ def test_noegler_havner_ikke_i_logs(db_session, kunde, token, app_secret):
     log = buffer.getvalue()
     assert "prøver igen" in log  # genforsøget blev logget …
     assert token not in log and app_secret not in log  # … men uden nøgler
+
+
+def test_manglende_felter_gemmes_tomme_ikke_gaettet(db_session, kunde, app_secret):
+    _hent(db_session, kunde, FalskEconomic([[{"accountNumber": 1010, "name": "Salg"}]]))
+    konto = db_session.scalars(select(Account).where(Account.tenant_id == kunde.id)).one()
+    assert (konto.spaerret, konto.direkte_posteringer_blokeret, konto.kontotype, konto.saldo) == (
+        None, None, None, None)
+
+
+def test_ukendt_kontotype_afvises_i_stedet_for_at_gaette(db_session, kunde, app_secret):
+    with pytest.raises(EconomicFejl, match="accountType"):
+        _hent(db_session, kunde, FalskEconomic([[_konto(1010, "Salg", accountType="nyType")]]))

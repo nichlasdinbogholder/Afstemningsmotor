@@ -8,7 +8,11 @@ import pytest
 from sqlalchemy import func, select
 from tenacity import wait_none
 
-from app.adaptere.economic.kontoplan import KontoplanFejl, hent_for_alle
+from functools import partial
+
+from app.adaptere.economic.adapter import lav_economic_adapter
+from app.adaptere.regnskab import base
+from app.synk.kontoplan import hent_for_alle
 from app.config import get_settings
 from app.kunder.adgange import gem_token
 from app.kunder.models import Client
@@ -33,7 +37,7 @@ def _kunde(session, nr, token, status="aktiv"):
     return k
 
 
-def test_henter_alle_og_fortsaetter_efter_fejl(db_session, token, app_secret, caplog):
+def test_henter_alle_og_fortsaetter_efter_fejl(db_session, token, app_secret, caplog, monkeypatch):
     god = _kunde(db_session, "N-1", token)
     _kunde(db_session, "N-2", token)  # denne kundes nøgle afvises af e-conomic
     _kunde(db_session, "N-3", token, status="opsagt")  # springes over
@@ -46,7 +50,9 @@ def test_henter_alle_og_fortsaetter_efter_fejl(db_session, token, app_secret, ca
             "pagination": {"results": 1},
         })
 
-    resultat = hent_for_alle(db_session, transport=httpx.MockTransport(falsk), vent=wait_none())
+    monkeypatch.setitem(base._FABRIKKER, "economic", partial(
+        lav_economic_adapter, transport=httpx.MockTransport(falsk), vent=wait_none()))
+    resultat = hent_for_alle(db_session)
 
     # Kun testkunderne vurderes – databasen kan indeholde rigtige kunder.
     test_nr = {"N-1", "N-2", "N-3"}
@@ -59,15 +65,16 @@ def test_henter_alle_og_fortsaetter_efter_fejl(db_session, token, app_secret, ca
     assert token not in caplog.text
 
 
-def test_stopper_straks_uden_app_noegle(db_session, token, monkeypatch):
+def test_uden_app_noegle_fejler_kunden_men_koerslen_stopper_ikke(db_session, token, monkeypatch, caplog):
     _kunde(db_session, "N-1", token)
     monkeypatch.setenv("ECONOMIC_APP_SECRET_TOKEN", "")
     get_settings.cache_clear()
     try:
-        with pytest.raises(KontoplanFejl, match="ECONOMIC_APP_SECRET_TOKEN"):
-            hent_for_alle(db_session, transport=httpx.MockTransport(lambda r: 1 / 0))
+        resultat = hent_for_alle(db_session)
     finally:
         get_settings.cache_clear()
+    assert "N-1" in resultat["fejlede"]
+    assert "ECONOMIC_APP_SECRET_TOKEN" in caplog.text
 
 
 def test_tidsplan_er_en_gang_i_doegnet():
@@ -76,7 +83,7 @@ def test_tidsplan_er_en_gang_i_doegnet():
     assert plist["StartCalendarInterval"] == {"Hour": 2, "Minute": 30}
     # Ingen gentagelse inden for døgnet og ingen kørsel ved hver opstart.
     assert "StartInterval" not in plist and plist["RunAtLoad"] is False
-    assert plist["ProgramArguments"][1:] == ["-m", "app.adaptere.economic.kontoplan", "--alle"]
+    assert plist["ProgramArguments"][1:] == ["-m", "app.synk.kontoplan", "--alle"]
     plistlib.dumps(plist)  # gyldig indstillingsfil
 
 

@@ -83,16 +83,16 @@ class SimuleretAdapter:
         if metode in self.fejl:
             raise self.fejl[metode]
 
-    def hent_customers(self):
-        self._maaske_fejl("hent_customers")
+    def fetch_customers(self):
+        self._maaske_fejl("fetch_customers")
         return self.kunder
 
-    def hent_suppliers(self):
-        self._maaske_fejl("hent_suppliers")
+    def fetch_suppliers(self):
+        self._maaske_fejl("fetch_suppliers")
         return self.leverandoerer
 
-    def hent_entries(self, efter):
-        self._maaske_fejl("hent_entries")
+    def fetch_entries(self, efter):
+        self._maaske_fejl("fetch_entries")
         self.kaldt_med_cursor.append(efter)
         nye = [p for p in self.poster
                if self.ignorer_cursor or efter is None or p.bogfoert_id > int(efter)]
@@ -100,8 +100,8 @@ class SimuleretAdapter:
         ny = str(hoejeste) if hoejeste is not None else efter
         return PosteringsSvar(nye, ny, "id" if ny else None)
 
-    def hent_open_entries(self):
-        self._maaske_fejl("hent_open_entries")
+    def fetch_open_entries(self):
+        self._maaske_fejl("fetch_open_entries")
         return self.aabne
 
 
@@ -185,7 +185,7 @@ def test_cursor_rykkes_ikke_hvis_adapteren_fejler(db_session):
     adapter = SimuleretAdapter(poster=[_post(1)])
     synk_entries(db_session, k.id, adapter)
     adapter.poster.append(_post(2))
-    adapter.fejl["hent_entries"] = AdapterFejl("e-conomic svarede 500")
+    adapter.fejl["fetch_entries"] = AdapterFejl("e-conomic svarede 500")
 
     with pytest.raises(AdapterFejl):
         synk_entries(db_session, k.id, adapter)
@@ -218,7 +218,7 @@ def _job(session, client_id, type_):
 
 def test_rate_limit_udskyder_jobbet_og_taeller_ikke_som_fejl(db_session, monkeypatch):
     k = _kunde(db_session, "L-1")
-    adapter = SimuleretAdapter(fejl={"hent_entries": ForMangeKald("for mange kald", 42)})
+    adapter = SimuleretAdapter(fejl={"fetch_entries": ForMangeKald("for mange kald", 42)})
     monkeypatch.setitem(base._FABRIKKER, "economic", lambda s, c: adapter)
 
     with pytest.raises(UdskydJob) as udskyd:
@@ -229,7 +229,7 @@ def test_rate_limit_udskyder_jobbet_og_taeller_ikke_som_fejl(db_session, monkeyp
     assert (t.status, t.antal_fejl_i_traek) == ("ok", 0)
 
     # Næste forsøg lykkes.
-    del adapter.fejl["hent_entries"]
+    del adapter.fejl["fetch_entries"]
     adapter.poster = [_post(1)]
     hent_funktion("synk_entries")(_job(db_session, k.id, "synk_entries"))
     assert hent_cursor(db_session, k.id, "entries").vaerdi == "1"
@@ -247,7 +247,7 @@ def test_klienten_proever_igen_efter_429_med_retry_after(token):
 
     klient = EconomicKlient(HemmeligtToken("app-" + token), HemmeligtToken(token),
                             transport=httpx.MockTransport(e_conomic))
-    assert [k.kundenummer for k in EconomicAdapter(klient).hent_customers()] == [1]
+    assert [k.kundenummer for k in EconomicAdapter(klient).fetch_customers()] == [1]
     assert len(kald) == 2
 
 
@@ -256,7 +256,7 @@ def test_vedvarende_429_bliver_til_for_mange_kald_ikke_fejl(token):
     klient = EconomicKlient(HemmeligtToken("app-" + token), HemmeligtToken(token),
                             transport=httpx.MockTransport(lambda r: svar), vent=wait_none())
     with pytest.raises(ForMangeKald) as fejl:
-        EconomicAdapter(klient).hent_customers()
+        EconomicAdapter(klient).fetch_customers()
     assert fejl.value.vent_sekunder == 30
 
 
@@ -312,7 +312,7 @@ def test_fejl_hos_en_kunde_paavirker_ikke_andre(db_session):
         synk_entries(db_session, k.id, SimuleretAdapter(poster=[_post(1)]))
 
     with pytest.raises(AdapterFejl):
-        synk_entries(db_session, a.id, SimuleretAdapter(fejl={"hent_entries": AdapterFejl("nede")}))
+        synk_entries(db_session, a.id, SimuleretAdapter(fejl={"fetch_entries": AdapterFejl("nede")}))
     synk_entries(db_session, b.id, SimuleretAdapter(poster=[_post(1), _post(2)]))
 
     ta, tb = hent_tilstand(db_session, a.id, "entries"), hent_tilstand(db_session, b.id, "entries")
@@ -421,13 +421,13 @@ def test_e_conomic_adapter_bruger_filter_og_alle_regnskabsaar(token):
 
     klient = EconomicKlient(HemmeligtToken("app-" + token), HemmeligtToken(token),
                             transport=httpx.MockTransport(e_conomic))
-    svar = EconomicAdapter(klient).hent_entries("10")
+    svar = EconomicAdapter(klient).fetch_entries("10")
     assert (svar.ny_cursor, svar.cursor_type, len(svar.poster)) == ("12", "id", 2)
     assert ("/accounting-years/2025_6_2026/entries", "entryNumber$gt:10") in kald
     assert ("/accounting-years/2027/entries", "entryNumber$gt:10") in kald
 
     kald.clear()
-    assert len(EconomicAdapter(klient).hent_open_entries()) == 2
+    assert len(EconomicAdapter(klient).fetch_open_entries()) == 2
     assert all(f == "remainder$ne:0" for sti, f in kald if sti.endswith("/entries"))
 
 
@@ -444,3 +444,31 @@ def test_kun_adapter_laget_bruger_e_conomic_direkte():
         if re.search(r"(from|import)\s+app\.adaptere\.economic", indhold) or "e-conomic.com" in indhold:
             brud.append(rel)
     assert not brud, f"Kalder e-conomic uden om adapter-laget: {brud}"
+
+
+def test_reglerne_hoejere_oppe_kender_ikke_regnskabssystemet():
+    """Synkronisering, afstemning, jobs, regnskabsdata og planlægning må ikke nævne et system."""
+    brud = []
+    for mappe in ("synk", "afstemning", "jobs", "regnskab", "planlaegning"):
+        for fil in (APP / mappe).rglob("*.py"):
+            for nr, linje in enumerate(fil.read_text().splitlines(), 1):
+                kode = linje.split("#")[0]
+                if re.search(r"e-?conomic|dinero", kode, re.IGNORECASE):
+                    brud.append(f"{fil.relative_to(APP.parent)}:{nr}: {linje.strip()}")
+    assert not brud, "Systemnavn uden for adapter-laget:\n" + "\n".join(brud)
+
+
+def test_e_conomic_adapteren_implementerer_hele_interfacet():
+    import inspect
+
+    from app.adaptere.regnskab.base import AccountingProvider
+
+    krav = {n for n, v in vars(AccountingProvider).items()
+            if callable(v) and not n.startswith("_")} | {"__enter__", "__exit__"}
+    assert {"fetch_accounts", "fetch_customers", "fetch_suppliers", "fetch_entries",
+            "fetch_open_entries"} <= krav
+    for navn in krav:
+        assert callable(getattr(EconomicAdapter, navn, None)), f"EconomicAdapter mangler {navn}"
+        forventet = list(inspect.signature(getattr(AccountingProvider, navn)).parameters)
+        faktisk = list(inspect.signature(getattr(EconomicAdapter, navn)).parameters)
+        assert faktisk[:len(forventet)] == forventet, f"{navn}: {faktisk} != {forventet}"

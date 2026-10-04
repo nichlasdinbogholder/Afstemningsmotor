@@ -23,11 +23,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db import Base, kun_vaerdier
 from app.kunder.models import SYSTEMER
 
-# Værdier fra e-conomics skema for Account.accountType.
-ECONOMIC_KONTOTYPER = (
-    "profitAndLoss", "status", "totalFrom", "heading", "headingStart", "sumInterval", "sumAlpha",
-)
-DEBET_KREDIT = ("debit", "credit")
+from app.adaptere.regnskab.base import DEBET_KREDIT, KONTOTYPER  # noqa: E402  (vores eget format)
 
 
 class Account(Base):
@@ -36,7 +32,7 @@ class Account(Base):
     __tablename__ = "accounts"
     __table_args__ = (
         kun_vaerdier("system", SYSTEMER),
-        kun_vaerdier("kontotype", ECONOMIC_KONTOTYPER),
+        kun_vaerdier("kontotype", KONTOTYPER),
         kun_vaerdier("debet_kredit", DEBET_KREDIT),
         UniqueConstraint("tenant_id", "system", "kontonummer", name="uq_accounts_tenant_konto"),
     )
@@ -52,8 +48,9 @@ class Account(Base):
     kontotype: Mapped[str | None] = mapped_column(String(20))
     debet_kredit: Mapped[str | None] = mapped_column(String(10))
     momskode: Mapped[str | None] = mapped_column(String(5))
-    spaerret: Mapped[bool] = mapped_column(Boolean, server_default=false())
-    direkte_posteringer_blokeret: Mapped[bool] = mapped_column(Boolean, server_default=false())
+    # Tomme, hvis systemet ikke oplyser dem (vi gætter aldrig).
+    spaerret: Mapped[bool | None] = mapped_column(Boolean)
+    direkte_posteringer_blokeret: Mapped[bool | None] = mapped_column(Boolean)
     # Saldi er et øjebliksbillede fra tidspunktet i `hentet`.
     saldo: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     kladdesaldo: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))

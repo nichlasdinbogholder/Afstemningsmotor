@@ -25,7 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401
-from app.adaptere.regnskab.base import Kassekladde, KladdePost, RegnskabsAdapter, hent_adapter
+from app.adaptere.regnskab.base import Kassekladde, KladdePost, AccountingProvider, hent_adapter
 from app.db import ny_session
 from app.kunder.models import Client
 from app.regnskab.models import EntryCache
@@ -69,13 +69,13 @@ def vaelg_kladder(alle: list[Kassekladde], kladde: str | None, standard_navn: st
     return valgt
 
 
-def tjek_kassekladde(adapter: RegnskabsAdapter, kontonummer: int = STANDARD_FEJLKONTO,
+def tjek_kassekladde(adapter: AccountingProvider, kontonummer: int = STANDARD_FEJLKONTO,
                      kladde: str | None = None, standard_navn: str | None = None,
                      alle_kladder: bool = False) -> Resultat:
     resultat = Resultat(kontonummer)
-    resultat.kladder = vaelg_kladder(adapter.hent_kassekladder(), kladde, standard_navn, alle_kladder)
+    resultat.kladder = vaelg_kladder(adapter.fetch_journals(), kladde, standard_navn, alle_kladder)
     for k in resultat.kladder:
-        resultat.fund += [p for p in adapter.hent_kassekladde_poster(k.nummer)
+        resultat.fund += [p for p in adapter.fetch_journal_entries(k.nummer)
                           if kontonummer in (p.konto, p.modkonto)]
     return resultat
 

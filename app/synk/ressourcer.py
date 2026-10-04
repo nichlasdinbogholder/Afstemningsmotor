@@ -18,7 +18,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401  (alle tabeller skal være kendt)
-from app.adaptere.regnskab.base import RegnskabsAdapter, hent_adapter
+from app.adaptere.regnskab.base import AccountingProvider, hent_adapter
 from app.regnskab.models import CustomerCache, EntryCache, OpenEntryCache, SupplierCache
 from app.synk.tilstand import synk_transaktion
 
@@ -34,7 +34,7 @@ class SynkResultat:
 
 
 @contextmanager
-def _adapter(session: Session, client_id: int, adapter: RegnskabsAdapter | None) -> Iterator:
+def _adapter(session: Session, client_id: int, adapter: AccountingProvider | None) -> Iterator:
     if adapter is not None:
         yield adapter
     else:
@@ -58,42 +58,42 @@ def _upsert(session: Session, model, raekker: list[dict], noegle: list[str]) -> 
         )
 
 
-def synk_customers(session: Session, client_id: int, adapter: RegnskabsAdapter | None = None) -> SynkResultat:
+def synk_customers(session: Session, client_id: int, adapter: AccountingProvider | None = None) -> SynkResultat:
     with synk_transaktion(session, client_id, "customers") as synk:
         with _adapter(session, client_id, adapter) as a:
-            kunder = a.hent_customers()
+            kunder = a.fetch_customers()
         _upsert(session, CustomerCache,
                 [{"client_id": client_id, **asdict(k)} for k in kunder], ["kundenummer"])
         synk.gennemfoert(None, antal_hentet=len(kunder))
     return SynkResultat("customers", len(kunder))
 
 
-def synk_suppliers(session: Session, client_id: int, adapter: RegnskabsAdapter | None = None) -> SynkResultat:
+def synk_suppliers(session: Session, client_id: int, adapter: AccountingProvider | None = None) -> SynkResultat:
     with synk_transaktion(session, client_id, "suppliers") as synk:
         with _adapter(session, client_id, adapter) as a:
-            leverandoerer = a.hent_suppliers()
+            leverandoerer = a.fetch_suppliers()
         _upsert(session, SupplierCache,
                 [{"client_id": client_id, **asdict(le)} for le in leverandoerer], ["leverandoernummer"])
         synk.gennemfoert(None, antal_hentet=len(leverandoerer))
     return SynkResultat("suppliers", len(leverandoerer))
 
 
-def synk_entries(session: Session, client_id: int, adapter: RegnskabsAdapter | None = None) -> SynkResultat:
+def synk_entries(session: Session, client_id: int, adapter: AccountingProvider | None = None) -> SynkResultat:
     """Inkrementelt: kun poster nyere end bogmærket."""
     with synk_transaktion(session, client_id, "entries") as synk:
         with _adapter(session, client_id, adapter) as a:
-            svar = a.hent_entries(synk.cursor)
+            svar = a.fetch_entries(synk.cursor)
         _upsert(session, EntryCache,
                 [{"client_id": client_id, **asdict(p)} for p in svar.poster], ["bogfoert_id"])
         synk.gennemfoert(svar.ny_cursor, svar.cursor_type, antal_hentet=len(svar.poster))
     return SynkResultat("entries", len(svar.poster))
 
 
-def synk_open_entries(session: Session, client_id: int, adapter: RegnskabsAdapter | None = None) -> SynkResultat:
+def synk_open_entries(session: Session, client_id: int, adapter: AccountingProvider | None = None) -> SynkResultat:
     """Altid fuldt: restbeløb ændrer sig på gamle poster. Betalte poster fjernes."""
     with synk_transaktion(session, client_id, "open_entries") as synk:
         with _adapter(session, client_id, adapter) as a:
-            poster = a.hent_open_entries()
+            poster = a.fetch_open_entries()
         _upsert(session, OpenEntryCache,
                 [{"client_id": client_id, **asdict(p)} for p in poster], ["bogfoert_id"])
         fjernet = session.execute(

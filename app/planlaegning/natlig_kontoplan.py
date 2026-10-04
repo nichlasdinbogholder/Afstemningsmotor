@@ -37,7 +37,7 @@ def lav_plist(time: int, minut: int, python: str, projekt: Path, log: Path) -> d
     """Indstillingerne for jobbet: kør én gang i døgnet på det angivne klokkeslæt."""
     return {
         "Label": ETIKET,
-        "ProgramArguments": [python, "-m", "app.adaptere.economic.kontoplan", "--alle"],
+        "ProgramArguments": [python, "-m", "app.synk.kontoplan", "--alle"],
         "WorkingDirectory": str(projekt),
         # Én gang i døgnet. Var Mac'en i dvale, kører den ved opvågning (slukket: springes over).
         "StartCalendarInterval": {"Hour": time, "Minute": minut},
