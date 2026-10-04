@@ -11,6 +11,9 @@ Et par af posteringslinjer er et muligt dobbeltbogført beløb, når:
 - SAMME TEKST (uden forskel på store/små bogstaver og ekstra mellemrum) (D),
 - bilagenes kunde/leverandør er den samme, når begge bilag har en (A),
 - ingen af bilagene er en periodisering (samme bilagsnummer måned efter måned) (E),
+- samme slags postering, fx to fakturaer – ikke en faktura og en betaling (G),
+- bilagsparret er ikke rettet senere: intet modsat beløb på samme driftskonto inden for
+  KORREKTION_DAGE (F) – gælder hele bilagsparret, hvis blot ét linjepar er rettet,
 - ingen af dem er tilbageført: der findes ingen postering med MODSAT beløb på samme
   konto inden for vinduet (B).
 Linjepar mellem de samme to bilag samles til ÉT fund (C) – så salgslinje, momslinje
@@ -35,6 +38,10 @@ Historik:
 - Version 6 (04.10.2026): bogholderen: "periodiseringer er ikke en fejl – her bruges
   typisk samme bilagsnummer". Bilag med linjer på mindst 3 datoer inden for ±200 dage
   regnes som periodisering og udelukkes (E).
+- Version 7 (04.10.2026): bogholderens kontrol af 5 fund fra version 5: 1 rigtig (AUB,
+  samme referencenummer to gange), 4 falske: periodisering (E), "rettet senere" (2) og
+  "faktura og betaling" (1). Nu kræves samme posteringstype (G), og bilagspar, der er
+  rettet senere på en driftskonto, udelukkes (F).
 
 Sammenligningen er ÉN SQL-forespørgsel (entries sammenlignet med sig selv). Python
 samler kun de fundne par pr. bilagspar – ingen løkke over alle posteringer.
@@ -60,6 +67,10 @@ VINDUE_DAGE = 3
 # fra år til år (nummerering forfra hvert år), ikke tages for en periodisering.
 PERIODISERING_DATOER = 3
 PERIODISERING_DAGE = 200
+
+# Rettet senere: et modsat beløb på samme driftskonto inden for så mange dage efter
+# betyder, at dobbeltbogføringen er rettet.
+KORREKTION_DAGE = 365
 
 PAR_SQL = text(r"""
 WITH bilag AS (
@@ -106,6 +117,8 @@ WHERE a.client_id = :client_id
   AND a.dato IS NOT NULL
   AND (a.bilagsnummer IS NULL OR b.bilagsnummer IS NULL OR a.bilagsnummer <> b.bilagsnummer)
   AND (a.modpart IS NULL OR b.modpart IS NULL OR a.modpart = b.modpart)
+  -- G: samme slags postering (fx faktura/faktura – ikke faktura/betaling).
+  AND a.entry_type IS NOT DISTINCT FROM b.entry_type
   -- D: samme tekst. Kunden/fakturanummeret står ofte kun i teksten.
   AND lower(regexp_replace(trim(a.tekst), '\s+', ' ', 'g'))
       IS NOT DISTINCT FROM lower(regexp_replace(trim(b.tekst), '\s+', ' ', 'g'))
@@ -114,7 +127,22 @@ WHERE a.client_id = :client_id
   AND tilbagefoert.fundet IS NULL                   -- B (se LATERAL ovenfor)
   AND (CAST(:since AS date) IS NULL OR greatest(a.dato, b.dato) >= :since)
 )
-SELECT k.*
+SELECT k.*,
+       -- F: rettet senere: modsat beløb på samme DRIFTSKONTO inden for :korrektion_dage.
+       -- (På status-/balancekonti som bank og debitorer er et modsat beløb blot den
+       -- normale betaling – det tæller ikke.)
+       EXISTS (
+           SELECT 1 FROM accounts acc
+           WHERE acc.tenant_id = :client_id AND acc.kontonummer = k.a_konto
+             AND acc.kontotype = 'profitAndLoss'
+       ) AND EXISTS (
+           SELECT 1 FROM entries c
+           WHERE c.client_id   = :client_id
+             AND c.kontonummer = k.a_konto
+             AND c.beloeb      = -k.beloeb
+             AND c.dato BETWEEN least(k.a_dato, k.b_dato)
+                            AND least(k.a_dato, k.b_dato) + :korrektion_dage
+       ) AS rettet_senere
 FROM kandidater k
 -- E: en periodisering bruger samme bilagsnummer måned efter måned. Har et af bilagene
 -- linjer på mindst :periode_datoer forskellige datoer omkring parret, er det en
@@ -171,13 +199,14 @@ def _bilag_noegle(r, side: str) -> tuple:
 @registrer_regel
 class DuplicateEntries:
     code = "duplicate_entries"
-    version = 6
+    version = 7
     name_da = "Muligt dobbeltbogført beløb"
 
     def run(self, session: Session, client_id: int, since: date | None) -> list[FindingDraft]:
         par = session.execute(PAR_SQL, {
             "client_id": client_id, "vindue": VINDUE_DAGE, "since": since,
             "periode_datoer": PERIODISERING_DATOER, "periode_dage": PERIODISERING_DAGE,
+            "korrektion_dage": KORREKTION_DAGE,
         })
 
         # C: saml linjepar mellem de samme to bilag til ét fund.
@@ -187,6 +216,8 @@ class DuplicateEntries:
 
         fund = []
         for linjepar in grupper.values():
+            if any(r.rettet_senere for r in linjepar):
+                continue  # F: dobbeltbogføringen er rettet senere
             hoved = max(linjepar, key=lambda r: (abs(r.beloeb), r.severity == "high"))
             linjer: dict[int, tuple] = {}
             for r in linjepar:

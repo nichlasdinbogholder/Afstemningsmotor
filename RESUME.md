@@ -99,7 +99,7 @@ bogmærket forkert.
 - En kørsel opdaterer kun `last_seen_at`, `detail`, `severity` og `updated_at`. Status røres aldrig.
 - Forsvinder problemet, bliver fundet stående med sin gamle `last_seen_at`.
 
-## Dubletreglen (duplicate_entries, version 6)
+## Dubletreglen (duplicate_entries, version 7)
 - **Vindue: 3 dage** (`VINDUE_DAGE` øverst i `app/rules/duplicate_entries.py`). Version 1
   brugte 7 dage. Kort vindue, så husleje, leasing og abonnementer (samme beløb hver måned)
   ikke rammes.
@@ -117,6 +117,11 @@ bogmærket forkert.
 - **E (v6):** periodiseringer er ikke dubletter. En periodisering bruger samme bilagsnummer
   måned efter måned; har et bilag linjer på mindst 3 datoer inden for ±200 dage, udelukkes
   det. (3 datoer, så et bilagsnummer der går igen år efter år, ikke tages for en periodisering.)
+- **G (v7):** samme slags postering (posteringstype) – en faktura og en betaling er ikke en dublet.
+- **F (v7):** rettet senere: er der et modsat beløb på samme DRIFTSKONTO (kontotype
+  profitAndLoss i kontoplanen) inden for 365 dage, er dobbeltbogføringen rettet, og hele
+  bilagsparret udelukkes. Gælder ikke status-/balancekonti (bank, debitorer), hvor et
+  modsat beløb blot er den normale betaling. Er kontoplanen ikke hentet, tæller det ikke.
 - **C (v3):** alle linjepar mellem de samme to bilag samles til ÉT fund (salgs-, moms- og
   debitorlinje giver ikke tre fund). Fingerprintet er hash af ALLE de involverede
   posteringsnumre, sorteret.
@@ -205,12 +210,14 @@ fra tekst, bilag og beløb (IKKE slået op i e-conomic):
 **Kontrol i e-conomic (bogholderen, 04.10.2026):** 10699, 24170, 24184, Best One og 24188.
 - Bogholderen: "Periodiseringer er ikke en fejl. Her bruges typisk samme bilagsnummer."
   → Best One-fundet var FALSK → version 6 udelukker periodiseringer (E).
-- De fire øvrige (10699 faktura 8279, 24170 betalingsliste med 6 kunder, 24184 AUB,
-  24188 EasyPark): ingen fejl i bogføringen → også FALSKE.
-- **Resultat: 0 rigtige, 5 falske (falsk-positiv-rate 100 %)** – selv på fund, der ud fra
-  tekst og beløb lignede klare dubletter. Indtil nu er der IKKE set én bekræftet rigtig
-  dublet. Reglen må ikke bruges, og regel nr. 2 bygges ikke, før det er løst.
-**Mangler: årsagen til, at de fire ikke er fejl – det er den, der skal bygges ind.**
+- Bogholderens svar på de fire øvrige:
+  - 24184 AUB (samme referencenr. to gange): **RIGTIG FEJL** – første bekræftede dublet.
+  - 10699 faktura 8279: falsk – rettet senere (mere end 3 dage efter).
+  - 24188 EasyPark: falsk – rettet senere.
+  - 24170 de 6 kunder: falsk – den ene er faktura, den anden betaling.
+- **Resultat: 1 rigtig, 4 falske (falsk-positiv-rate 80 %).** Alle fire falske har nu en
+  regel: periodisering (E, v6), rettet senere (F, v7), faktura/betaling (G, v7).
+**Mangler: kør version 7 på Din Bogholder ApS og kontrollér 5 nye fund.**
 
 Skabelon:
 

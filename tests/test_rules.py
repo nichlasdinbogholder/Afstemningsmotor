@@ -18,7 +18,7 @@ from sqlalchemy.exc import DBAPIError
 import app.cli
 from app.jobs.register import JobKontekst, hent_funktion
 from app.kunder.models import Client
-from app.regnskab.models import EntryCache
+from app.regnskab.models import Account, EntryCache
 from app.rules import duplicate_entries
 from app.rules.base import alle_regler, fingerprint
 from app.rules.jobs import planlaeg_regler
@@ -45,11 +45,12 @@ def kunde(db_session):
 @pytest.fixture
 def poster(db_session, kunde):
     """Læg kendte posteringer ind: poster(nr, "2026-04-28", konto, "17516.70", tekst=..., bilag=...)."""
-    def tilfoej(nr, dato, konto, beloeb, tekst="Faktura", bilag=None, modpart=None, valuta="DKK"):
+    def tilfoej(nr, dato, konto, beloeb, tekst="Faktura", bilag=None, modpart=None, valuta="DKK",
+                entry_type="financeVoucher"):
         post = EntryCache(client_id=kunde.id, bogfoert_id=nr, bilagsnummer=bilag if bilag is not None else nr,
                           dato=date.fromisoformat(dato), kontonummer=konto, tekst=tekst,
                           beloeb=Decimal(beloeb), modpart=modpart, valuta=valuta,
-                          entry_type="financeVoucher")
+                          entry_type=entry_type)
         db_session.add(post)
         db_session.flush()
         return post
@@ -312,6 +313,65 @@ def test_et_bilag_med_linjer_paa_to_datoer_er_et_fund(db_session, kunde, poster)
     assert len(fund) == 1 and len(fund[0].entry_ids) == 4
 
 
+def _konto(session, kunde, nr, kontotype):
+    session.add(Account(tenant_id=kunde.id, system="economic", kontonummer=nr, navn=f"Konto {nr}",
+                        kontotype=kontotype, raa_data={}))
+    session.flush()
+
+
+def _bankudgift(poster, nr, bilag, dato, tekst, beloeb, konto):
+    """Udgift betalt fra banken: udgiftslinje + banklinje i samme bilag."""
+    poster(nr, dato, konto, beloeb, tekst=tekst, bilag=bilag)
+    poster(nr + 1, dato, 5820, str(-Decimal(beloeb)), tekst=tekst, bilag=bilag)
+
+
+def test_aub_samme_reference_to_gange_er_et_fund(db_session, kunde, poster):
+    """Den første BEKRÆFTEDE dobbeltbogføring (bogholderens kontrol 04.10.2026)."""
+    _konto(db_session, kunde, 2212, "profitAndLoss")
+    _konto(db_session, kunde, 5820, "status")
+    _bankudgift(poster, 1, 20859, "2023-01-24", "AUB-BEFOR 1603801527", "-320.00", 2212)
+    _bankudgift(poster, 3, 20860, "2023-01-24", "AUB-BEFOR 1603801527", "-320.00", 2212)
+    _koer(db_session, kunde)
+    fund = _fund(db_session, kunde)
+    assert len(fund) == 1 and fund[0].severity == "high" and fund[0].detail["bilag"] == ["20859", "20860"]
+
+
+def test_rettet_senere_er_ikke_dublet(db_session, kunde, poster):
+    """F: EasyPark bogført to gange og rettet 3 uger senere på driftskontoen."""
+    _konto(db_session, kunde, 2770, "profitAndLoss")
+    _konto(db_session, kunde, 5820, "status")
+    _bankudgift(poster, 1, 20942, "2023-05-30", "Forretning: EasyPark A/S", "169.00", 2770)
+    _bankudgift(poster, 3, 20943, "2023-05-30", "Forretning: EasyPark A/S", "169.00", 2770)
+    poster(9, "2023-06-20", 2770, "-169.00", tekst="Rettelse EasyPark", bilag=21000)
+    assert _koer(db_session, kunde).fundet == 0
+
+
+def test_modsat_beloeb_paa_statuskonto_er_ikke_en_rettelse(db_session, kunde, poster):
+    """F gælder kun driftskonti: på debitorkontoen er et modsat beløb bare betalingen."""
+    _konto(db_session, kunde, 5600, "status")
+    poster(1, "2026-05-01", 5600, "1250.00", tekst="Faktura 77 Kunde A", bilag=1, modpart="debitor:1")
+    poster(2, "2026-05-02", 5600, "1250.00", tekst="Faktura 77 Kunde A", bilag=2, modpart="debitor:1")
+    poster(3, "2026-05-20", 5600, "-1250.00", tekst="Indbetaling", bilag=3, modpart="debitor:1")
+    assert _koer(db_session, kunde).fundet == 1
+
+
+def test_ukendt_kontotype_taeller_ikke_som_rettelse(db_session, kunde, poster):
+    """Er kontoplanen ikke hentet, ved vi ikke om det er en driftskonto – fundet bliver stående."""
+    _bankudgift(poster, 1, 1, "2023-05-30", "EasyPark", "169.00", 2770)
+    _bankudgift(poster, 3, 2, "2023-05-30", "EasyPark", "169.00", 2770)
+    poster(9, "2023-06-20", 2770, "-169.00", tekst="Rettelse", bilag=3)
+    assert _koer(db_session, kunde).fundet == 1
+
+
+def test_faktura_og_betaling_er_ikke_dublet(db_session, kunde, poster):
+    """G: samme kunder og beløb på debitorkontoen, men den ene er en betaling."""
+    poster(1, "2021-09-09", 5600, "-9058.75", tekst="Pladeværkstedet Amagerstrand ApS", bilag=80158,
+           entry_type="manualDebtorInvoice")
+    poster(2, "2021-09-10", 5600, "-9058.75", tekst="Pladeværkstedet Amagerstrand ApS", bilag=80159,
+           entry_type="customerPayment")
+    assert _koer(db_session, kunde).fundet == 0
+
+
 def test_dobbeltbogfoert_og_tilbagefoert_er_ikke_dublet(db_session, kunde, poster):
     """B: betalingen er bogført to gange, og den ene er tilbageført igen – sagen er udlignet.
     (Det rigtige regnskab med 48 sådanne betalinger ville ellers have givet 48+ falske fund.)"""
@@ -341,7 +401,7 @@ def test_hver_koersel_noteres_i_rule_runs(db_session, kunde, poster):
     _koer(db_session, kunde)
     _koer(db_session, kunde)
     koersler = db_session.scalars(select(RuleRun).where(RuleRun.client_id == kunde.id)).all()
-    assert [(k.rule_code, k.rule_version, k.fund) for k in koersler] == [(REGEL, 6, 1), (REGEL, 6, 1)]
+    assert [(k.rule_code, k.rule_version, k.fund) for k in koersler] == [(REGEL, 7, 1), (REGEL, 7, 1)]
 
 
 # --- Status og log ---------------------------------------------------------------
@@ -406,7 +466,7 @@ def test_ingen_aendring_ingen_log(db_session, kunde, poster):
 def test_regel_er_registreret():
     regler = {r.code: r for r in alle_regler()}
     assert regler[REGEL].name_da == "Muligt dobbeltbogført beløb"
-    assert regler[REGEL].version == 6
+    assert regler[REGEL].version == 7
 
 
 def test_jobtypen_run_rules(db_session, kunde, poster):
