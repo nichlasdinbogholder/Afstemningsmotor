@@ -23,7 +23,7 @@ from app.rules import duplicate_entries
 from app.rules.base import alle_regler, fingerprint
 from app.rules.jobs import planlaeg_regler
 from app.rules.koersel import koer_regler
-from app.rules.models import Finding, FindingEvent
+from app.rules.models import Finding, FindingEvent, RuleRun
 from app.rules.status import UgyldigStatus, saet_status
 
 ROD = Path(__file__).resolve().parent.parent
@@ -152,14 +152,14 @@ def test_fast_maanedlig_betaling_er_ikke_dublet(db_session, kunde, poster):
     assert _koer(db_session, kunde).fundet == 0
 
 
-def test_vinduet_er_7_dage(db_session, kunde, poster):
-    assert duplicate_entries.VINDUE_DAGE == 7
+def test_vinduet_er_3_dage(db_session, kunde, poster):
+    assert duplicate_entries.VINDUE_DAGE == 3
     poster(1, "2026-04-01", 1310, "250.00")
-    poster(2, "2026-04-08", 1310, "250.00")  # 7 dage: med
-    poster(3, "2026-04-16", 1310, "250.00")  # 8 dage efter nr. 2: ikke med
+    poster(2, "2026-04-04", 1310, "250.00")  # 3 dage: med
+    poster(3, "2026-04-08", 1310, "250.00")  # 4 dage efter nr. 2: ikke med
     _koer(db_session, kunde)
     fund = _fund(db_session, kunde)
-    assert [f.detail["dage_imellem"] for f in fund] == [7]
+    assert [f.detail["dage_imellem"] for f in fund] == [3]
 
 
 def test_eksakt_dublet_er_high(db_session, kunde, poster):
@@ -180,13 +180,14 @@ def test_samme_konto_inden_for_vinduet_er_medium(db_session, kunde, poster):
     assert fund[0].title == "Muligt dobbeltbogført beløb: 17.516,70 kr. på konto 1310 den 28.04 og 30.04"
 
 
-def test_forskellige_konti_er_low(db_session, kunde, poster):
+def test_forskellige_konti_er_ikke_dublet(db_session, kunde, poster):
+    """Version 2: en dobbeltbogføring gentager sig på SAMME konto. Ens runde beløb på
+    forskellige konti (56 af 59 fund på demo-aftalen) er ikke et fund."""
     poster(1, "2026-04-28", 1310, "800.00")
     poster(2, "2026-04-29", 2750, "800.00")
-    _koer(db_session, kunde)
-    fund = _fund(db_session, kunde)
-    assert [f.severity for f in fund] == ["low"]
-    assert "konto 1310 og 2750" in fund[0].title
+    poster(3, "2026-04-28", 1020, "-1000.00")
+    poster(4, "2026-04-28", 2210, "-1000.00")
+    assert _koer(db_session, kunde).fundet == 0
 
 
 def test_detail_har_begge_posteringer(db_session, kunde, poster):
@@ -228,6 +229,15 @@ def test_andre_kunders_poster_blandes_ikke_ind(db_session, kunde, poster):
                               kontonummer=1310, tekst="Faktura", beloeb=Decimal("100.00"), valuta="DKK"))
     db_session.flush()
     assert _koer(db_session, kunde).fundet == 0
+
+
+def test_hver_koersel_noteres_i_rule_runs(db_session, kunde, poster):
+    poster(1, "2026-04-28", 1310, "100.00")
+    poster(2, "2026-04-28", 1310, "100.00")
+    _koer(db_session, kunde)
+    _koer(db_session, kunde)
+    koersler = db_session.scalars(select(RuleRun).where(RuleRun.client_id == kunde.id)).all()
+    assert [(k.rule_code, k.rule_version, k.fund) for k in koersler] == [(REGEL, 2, 1), (REGEL, 2, 1)]
 
 
 # --- Status og log ---------------------------------------------------------------
@@ -292,7 +302,7 @@ def test_ingen_aendring_ingen_log(db_session, kunde, poster):
 def test_regel_er_registreret():
     regler = {r.code: r for r in alle_regler()}
     assert regler[REGEL].name_da == "Muligt dobbeltbogført beløb"
-    assert regler[REGEL].version == 1
+    assert regler[REGEL].version == 2
 
 
 def test_jobtypen_run_rules(db_session, kunde, poster):
@@ -343,6 +353,39 @@ def test_cli_run_rules_findings_og_set_status(db_session, kunde, poster, monkeyp
 
     assert app.cli.vis_findings(kunde.id, status="open") == 0
     assert "Ingen fund." in capsys.readouterr().out
+
+
+def test_cli_findings_skjuler_fund_der_ikke_laengere_optraeder(db_session, kunde, poster, monkeypatch, capsys):
+    """Fundet slettes ikke, men vises kun med --alle, når seneste kørsel ikke fandt det."""
+    from contextlib import contextmanager
+
+    @contextmanager
+    def samme_session():
+        yield db_session
+
+    monkeypatch.setattr(app.cli, "ny_session", samme_session)
+    poster(1, "2026-04-28", 1310, "100.00")
+    p2 = poster(2, "2026-04-28", 1310, "100.00")
+    _koer(db_session, kunde)
+    # Næste kørsel sker "senere" (now() er fast i en transaktion, så vi flytter tiden tilbage).
+    db_session.execute(text("UPDATE findings SET last_seen_at = last_seen_at - interval '1 day', "
+                            "first_seen_at = first_seen_at - interval '1 day' WHERE client_id = :k"),
+                       {"k": kunde.id})
+    db_session.execute(text("UPDATE rule_runs SET koert_at = koert_at - interval '1 day' WHERE client_id = :k"),
+                       {"k": kunde.id})
+    db_session.delete(p2)
+    db_session.flush()
+    _koer(db_session, kunde)
+    capsys.readouterr()
+
+    app.cli.vis_findings(kunde.id)
+    ud = capsys.readouterr().out
+    assert "Ingen fund." in ud and "1 ældre fund optræder ikke længere" in ud
+
+    app.cli.vis_findings(kunde.id, alle=True)
+    ud = capsys.readouterr().out
+    assert "aktuel" in ud and " nej " in ud and "1 fund" in ud
+    assert len(_fund(db_session, kunde)) == 1  # stadig i databasen
 
 
 # --- Regler må aldrig tale med et regnskabssystem --------------------------------

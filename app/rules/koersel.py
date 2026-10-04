@@ -4,6 +4,9 @@ Fund skrives med upsert på (client_id, rule_code, fingerprint): findes fundet i
 forvejen, opdateres kun last_seen_at, detail, severity og updated_at. Status
 røres ALDRIG af en kørsel – kun et menneske ændrer status (app.rules.status).
 Fund slettes aldrig: forsvinder problemet, bliver last_seen_at bare stående.
+
+Hver kørsel af en regel noteres i rule_runs (samme tidspunkt som last_seen_at, da det
+sker i samme transaktion). Et fund er AKTUELT, når last_seen_at >= seneste kørsel.
 """
 
 import logging
@@ -15,7 +18,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.rules.base import FindingDraft, Rule, alle_regler
-from app.rules.models import Finding
+from app.rules.models import Finding, RuleRun
 
 log = logging.getLogger(__name__)
 
@@ -70,6 +73,9 @@ def koer_regler(session: Session, client_id: int, since: date | None = None) -> 
         if not getattr(regel, "aktiv", True):
             continue
         r = gem_fund(session, client_id, regel, regel.run(session, client_id, since))
+        session.add(RuleRun(client_id=client_id, rule_code=regel.code, rule_version=regel.version,
+                            fund=r.fundet))
+        session.flush()
         log.info("Kunde %s, regel %s: %s fund (%s nye, %s set før)",
                  client_id, regel.code, r.fundet, r.nye, r.set_igen)
         resultat.regler.append(r)

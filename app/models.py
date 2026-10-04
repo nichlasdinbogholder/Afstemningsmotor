@@ -6,7 +6,7 @@ from app.crm.models import Document, Handover, Note, Task, TimeEntry
 from app.jobs.models import Job
 from app.kunder.models import Client, Contact, Credential
 from app.personale.models import Staff
-from app.rules.models import Finding, FindingEvent
+from app.rules.models import Finding, FindingEvent, RuleRun
 from app.regnskab.models import Account, CustomerCache, EntryCache, OpenEntryCache, SupplierCache
 from app.synk.models import SyncState
 
@@ -22,6 +22,7 @@ __all__ = [
     "EntryCache",
     "Finding",
     "FindingEvent",
+    "RuleRun",
     "Handover",
     "Job",
     "Note",

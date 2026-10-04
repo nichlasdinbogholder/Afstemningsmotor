@@ -18,7 +18,7 @@ TABELLER = {
     "staff", "clients", "credentials", "contacts", "tasks", "time_entries",
     "notes", "documents", "handovers", "audit_log", "accounts", "jobs", "sync_state",
     "customers", "suppliers", "entries", "open_entries", "aabne_post_fund", "findings",
-    "finding_events",
+    "finding_events", "rule_runs",
 }
 
 
@@ -101,6 +101,7 @@ def test_alle_staff_kolonner_peger_paa_staff(inspektor):
         ("aabne_post_fund", "regel"),
         ("aabne_post_fund", "status"),
         ("findings", "rule_code"),
+        ("rule_runs", "rule_code"),
         ("findings", "status"),
         ("findings", "severity"),
         ("finding_events", "from_status"),

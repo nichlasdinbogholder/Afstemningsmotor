@@ -2,6 +2,7 @@
 
 Et par af posteringer er et muligt dobbeltbogført beløb, når:
 - de hører til samme kunde,
+- de står på SAMME KONTO (en dobbeltbogføring gentager sig på den samme konto),
 - beløbet er ens MED SAMME FORTEGN (+5.000 og −5.000 er en tilbageførsel, ikke en dublet),
 - samme valuta,
 - datoerne ligger højst VINDUE_DAGE fra hinanden (faste månedlige betalinger falder udenfor),
@@ -10,9 +11,12 @@ Et par af posteringer er et muligt dobbeltbogført beløb, når:
 - modparten (kunde/leverandør) er den samme, når begge har en.
 
 Alvorlighed:
-  high   – samme konto, samme dato og samme tekst
-  medium – samme konto, inden for vinduet
-  low    – forskellige konti, inden for vinduet
+  high   – samme dato og samme tekst
+  medium – inden for vinduet
+
+Version 2 (04.10.2026), strammet efter kontrol på demo-aftalen: 59 fund på 138
+posteringer, heraf 56 'low' (ens runde beløb på forskellige konti). Vinduet er
+sænket fra 7 til 3 dage, og samme konto er nu et krav ('low' findes ikke længere).
 
 Hele sammenligningen er ÉN SQL-forespørgsel (tabellen entries sammenlignet med sig
 selv) – ingen Python-løkke over alle posteringer. Reglen læser kun vores egen database.
@@ -27,8 +31,9 @@ from sqlalchemy.orm import Session
 from app.rules.base import FindingDraft, fingerprint, registrer_regel
 
 # Hvor mange dage der højst må være mellem to posteringer, før de ikke længere regnes
-# som en mulig dublet. 7 – ikke 35 – så husleje, leasing og abonnementer ikke rammes.
-VINDUE_DAGE = 7
+# som en mulig dublet. Kort vindue, så husleje, leasing og abonnementer ikke rammes.
+# Version 1 brugte 7 dage; sænket til 3 efter kontrollen på demo-aftalen.
+VINDUE_DAGE = 3
 
 PAR_SQL = text("""
 SELECT a.id            AS a_id,           b.id            AS b_id,
@@ -40,15 +45,13 @@ SELECT a.id            AS a_id,           b.id            AS b_id,
        a.modpart       AS a_modpart,      b.modpart       AS b_modpart,
        a.beloeb        AS beloeb,         a.valuta        AS valuta,
        CASE
-           WHEN a.kontonummer IS NOT DISTINCT FROM b.kontonummer
-                AND a.dato = b.dato
-                AND a.tekst IS NOT DISTINCT FROM b.tekst THEN 'high'
-           WHEN a.kontonummer IS NOT DISTINCT FROM b.kontonummer THEN 'medium'
-           ELSE 'low'
+           WHEN a.dato = b.dato AND a.tekst IS NOT DISTINCT FROM b.tekst THEN 'high'
+           ELSE 'medium'
        END AS severity
 FROM entries a
 JOIN entries b
   ON  b.client_id   = a.client_id
+  AND b.kontonummer = a.kontonummer                 -- samme konto
   AND b.beloeb      = a.beloeb                      -- samme beløb OG samme fortegn
   AND b.valuta      IS NOT DISTINCT FROM a.valuta
   AND b.bogfoert_id > a.bogfoert_id                 -- forskellige poster, hvert par kun én gang
@@ -92,25 +95,23 @@ def _post(r, side: str) -> dict:
 @registrer_regel
 class DuplicateEntries:
     code = "duplicate_entries"
-    version = 1
+    version = 2
     name_da = "Muligt dobbeltbogført beløb"
 
     def run(self, session: Session, client_id: int, since: date | None) -> list[FindingDraft]:
         par = session.execute(PAR_SQL, {"client_id": client_id, "vindue": VINDUE_DAGE, "since": since})
         fund = []
         for r in par:
-            konto = (f"konto {r.a_konto}" if r.a_konto == r.b_konto
-                     else f"konto {r.a_konto} og {r.b_konto}")
             fund.append(FindingDraft(
                 fingerprint=fingerprint([str(r.a_nr), str(r.b_nr)]),
                 severity=r.severity,
-                title=f"Muligt dobbeltbogført beløb: {_kr(r.beloeb, r.valuta)} på {konto} "
+                title=f"Muligt dobbeltbogført beløb: {_kr(r.beloeb, r.valuta)} på konto {r.a_konto} "
                       f"{_datoer(r.a_dato, r.b_dato)}",
                 detail={
                     "beloeb": str(r.beloeb),
                     "valuta": r.valuta,
                     "vindue_dage": VINDUE_DAGE,
-                    "samme_konto": r.a_konto == r.b_konto,
+                    "regel_version": self.version,
                     "dage_imellem": abs((r.b_dato - r.a_dato).days),
                     "posteringer": [_post(r, "a"), _post(r, "b")],
                 },

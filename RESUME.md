@@ -99,33 +99,45 @@ bogmærket forkert.
 - En kørsel opdaterer kun `last_seen_at`, `detail`, `severity` og `updated_at`. Status røres aldrig.
 - Forsvinder problemet, bliver fundet stående med sin gamle `last_seen_at`.
 
-## Dubletreglen (duplicate_entries, version 1)
-- **Vindue: 7 dage** (`VINDUE_DAGE` øverst i `app/rules/duplicate_entries.py`). 7 og ikke 35,
-  så husleje, leasing og abonnementer (samme beløb hver måned) ikke rammes.
-- Et par kræver: samme kunde, samme beløb MED samme fortegn, samme valuta, højst 7 dage
-  imellem, forskellige posteringer, ikke samme bilag, og samme modpart hvis begge har en.
+## Dubletreglen (duplicate_entries, version 2)
+- **Vindue: 3 dage** (`VINDUE_DAGE` øverst i `app/rules/duplicate_entries.py`). Version 1
+  brugte 7 dage. Kort vindue, så husleje, leasing og abonnementer (samme beløb hver måned)
+  ikke rammes.
+- Et par kræver: samme kunde, **samme konto**, samme beløb MED samme fortegn, samme valuta,
+  højst 3 dage imellem, forskellige posteringer, ikke samme bilag, og samme modpart hvis
+  begge har en.
 - Modsat fortegn (+5.000 / −5.000) er en tilbageførsel og aldrig et fund.
 - Vi har ikke et leverandørfelt på almindelige udgiftsposter (`modpart` er kun udfyldt på
   poster bogført direkte på en kunde/leverandør). Derfor matches der på konto og beløb.
-- Alvor: `high` = samme konto, dato og tekst. `medium` = samme konto. `low` = forskellige konti.
+- Alvor: `high` = samme dato og tekst. `medium` = inden for vinduet. (`low` = forskellige
+  konti fandtes i version 1, men er fjernet; se kontrollen nedenfor.)
 - Kendt begrænsning: bogføres samme bilag to gange MED SAMME bilagsnummer, ses det ikke,
   fordi linjer fra samme bilag aldrig parres (ellers ville et bilags egne linjer give falske fund).
 - Kendt begrænsning: en dobbeltbogføring giver typisk TO fund (udgiftssiden og banksiden).
 - Ydelse: 300.000 posteringer for én kunde på 0,4 sek. (én SQL-forespørgsel med indekset
   på kunde + beløb).
+- Hver kørsel noteres i `rule_runs`. `findings` viser som standard kun fund, som seneste
+  kørsel stadig fandt; ældre fund (fx fra version 1) slettes ikke, men vises med `--alle`.
 
 ## Kontrol af falske fund
-**Endnu ikke lavet på rigtige data.** Reglen er indtil videre kun kørt på en kunstig
-testkunde i udviklingsmiljøet (10 kendte posteringer): 3 fund, præcis de forventede. En
-tilbageførsel og en månedlig husleje gav korrekt intet fund.
+**Version 1 kørt 04.10.2026 på e-conomic demo-aftalen (kunde 6, 138 posteringer fra juni 2022): 59 fund**
+(high/medium/low: 0/3/56).
+- 56 af 59 var `low`: ens, runde beløb (1.000, −1.000, 5.000, −2.000 …) på FORSKELLIGE konti,
+  fx −1.000 kr. på konto 1020 og 2210. En dobbeltbogføring gentager sig på den samme konto,
+  så disse er tilfældige sammenfald – ikke dubletter. Ikke slået op enkeltvis i e-conomic,
+  men med 56 af 59 i den gruppe ville fem tilfældige fund næsten med sikkerhed være falske.
+- Falsk-positiv-rate klart over 20 % (mindst ca. 95 %) → reglen er strammet:
+  1. Vindue fra 7 til 3 dage – gjorde ingen forskel for de 56 (de ligger 0–4 dage fra hinanden).
+  2. Samme konto kræves – fjerner alle 56.
+  3. Udelad faste konti – ikke nødvendigt endnu.
+- Tilbage efter version 2 (forventet): 3 fund på samme konto inden for 3 dage
+  (100,00 kr. på 1026 den 01.06; 80,00 kr. og 60,00 kr. på 6903 den 01.06/04.06).
+  **Mangler: kør version 2 på kunde 6 og slå de 3 op i e-conomic.**
+- Demo-aftalen er e-conomics eksempeldata, ikke et rigtigt regnskab. Kontrollen skal
+  gentages på en rigtig kunde, før regel nr. 2 bygges.
 
-Skabelon til den rigtige kontrol:
+Skabelon:
 
-    Dubletregel kørt <dato> på <kunde>. <N> fund (high/medium/low: x/y/z).
+    Dubletregel v<N> kørt <dato> på <kunde>. <N> fund (high/medium: x/y).
     Kontrolleret 5 stk: <a> rigtige, <b> falske (<hvorfor>).
     Falsk-positiv-rate ca. <b/5> %.
-
-Er mere end hvert femte fund falsk, strammes reglen før regel nr. 2, i denne rækkefølge:
-1. Vinduet fra 7 til 3 dage.
-2. Kræv samme konto (drop `low`).
-3. Udelad konti, hvor gentagne ens beløb er normalt (husleje, leasing, løn).

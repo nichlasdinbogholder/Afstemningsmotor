@@ -74,3 +74,21 @@ class FindingEvent(Base):
     actor: Mapped[str] = mapped_column(Text)  # brugerens navn/mail, eller 'system'
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RuleRun(Base):
+    """Én række pr. kørsel af én regel for én kunde. Bruges til at se, hvilke fund der
+    stadig optræder: et fund er aktuelt, hvis last_seen_at >= seneste kørsels koert_at."""
+
+    __tablename__ = "rule_runs"
+    __table_args__ = (
+        Index("ix_rule_runs_kunde_regel_tid", "client_id", "rule_code", "koert_at"),
+        CheckConstraint("rule_code ~ '^[a-z0-9_]+$'", name="rule_code_gyldig"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="RESTRICT"))
+    rule_code: Mapped[str] = mapped_column(Text)
+    rule_version: Mapped[int] = mapped_column(SmallInteger)
+    koert_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    fund: Mapped[int] = mapped_column(BigInteger)

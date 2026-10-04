@@ -2,7 +2,7 @@
 
     python -m app.cli sync-entries <client_id>
     python -m app.cli run-rules <client_id>
-    python -m app.cli findings <client_id> [--status open] [--severity high]
+    python -m app.cli findings <client_id> [--status open] [--severity high] [--alle]
     python -m app.cli set-status <finding_id> <accepted|resolved|ignored|open> --note "..."
 
 run-rules kører alle aktive regler for kunden og gemmer fundene (findings).
@@ -21,7 +21,7 @@ import os
 import sys
 from datetime import datetime
 
-from sqlalchemy import select, text
+from sqlalchemy import func, or_, select, text
 
 import app.models  # noqa: F401
 from app.db import ny_session
@@ -29,7 +29,7 @@ from app.jobs.koe import laeg_i_koe
 from app.jobs.worker import Worker
 from app.kunder.models import Client
 from app.rules.koersel import koer_regler
-from app.rules.models import ALVORLIGHED, STATUSSER, Finding
+from app.rules.models import ALVORLIGHED, STATUSSER, Finding, RuleRun
 from app.rules.status import UgyldigStatus, saet_status
 
 
@@ -83,25 +83,40 @@ def _klip(tekst: str, bredde: int) -> str:
     return tekst if len(tekst) <= bredde else tekst[:bredde - 1] + "…"
 
 
-def vis_findings(client_id: int, status: str | None = None, severity: str | None = None) -> int:
+def vis_findings(client_id: int, status: str | None = None, severity: str | None = None,
+                 alle: bool = False) -> int:
+    """Som standard kun AKTUELLE fund: dem, seneste kørsel af reglen stadig fandt.
+    Fund, der ikke længere optræder, slettes aldrig – de vises med --alle."""
     orden = {"high": 0, "medium": 1, "low": 2}
+    seneste = (select(RuleRun.rule_code, func.max(RuleRun.koert_at).label("koert_at"))
+               .where(RuleRun.client_id == client_id).group_by(RuleRun.rule_code).subquery())
+    aktuel = or_(seneste.c.koert_at.is_(None), Finding.last_seen_at >= seneste.c.koert_at)
     with ny_session() as session:
-        stmt = select(Finding).where(Finding.client_id == client_id)
+        stmt = (select(Finding, aktuel.label("aktuel"))
+                .outerjoin(seneste, seneste.c.rule_code == Finding.rule_code)
+                .where(Finding.client_id == client_id))
         if status:
             stmt = stmt.where(Finding.status == status)
         if severity:
             stmt = stmt.where(Finding.severity == severity)
-        fund = sorted(session.scalars(stmt),
-                      key=lambda f: (orden[f.severity], f.period_start or f.first_seen_at.date(), f.id))
+        raekker = session.execute(stmt).all()
+    skjult = sum(1 for _, er_aktuel in raekker if not er_aktuel)
+    fund = sorted(((f, er_aktuel) for f, er_aktuel in raekker if alle or er_aktuel),
+                  key=lambda x: (orden[x[0].severity], x[0].period_start or x[0].first_seen_at.date(), x[0].id))
     if not fund:
         print("Ingen fund.")
-        return 0
-    print(f"{'id':>6}  {'dato':<10}  {'alvor':<6}  {'status':<8}  {'poster':>6}  titel")
-    print("-" * 135)
-    for f in fund:
-        dato = (f.period_start or f.first_seen_at.date()).isoformat()
-        print(f"{f.id:>6}  {dato:<10}  {f.severity:<6}  {f.status:<8}  {len(f.entry_ids):>6}  {_klip(f.title, 95)}")
-    print(f"\n{len(fund)} fund")
+    else:
+        aktuel_kol = f"  {'aktuel':<6}" if alle else ""
+        print(f"{'id':>6}  {'dato':<10}  {'alvor':<6}  {'status':<8}{aktuel_kol}  {'poster':>6}  titel")
+        print("-" * (135 + len(aktuel_kol)))
+        for f, er_aktuel in fund:
+            dato = (f.period_start or f.first_seen_at.date()).isoformat()
+            kol = f"  {'ja' if er_aktuel else 'nej':<6}" if alle else ""
+            print(f"{f.id:>6}  {dato:<10}  {f.severity:<6}  {f.status:<8}{kol}  {len(f.entry_ids):>6}  "
+                  f"{_klip(f.title, 95)}")
+        print(f"\n{len(fund)} fund")
+    if skjult and not alle:
+        print(f"({skjult} ældre fund optræder ikke længere i seneste kørsel – vis dem med --alle)")
     return 0
 
 
@@ -132,6 +147,7 @@ def main(argv: list[str] | None = None) -> int:
     fi.add_argument("client_id", type=int, help="kundens id i clients")
     fi.add_argument("--status", choices=STATUSSER)
     fi.add_argument("--severity", choices=ALVORLIGHED)
+    fi.add_argument("--alle", action="store_true", help="vis også fund, der ikke længere optræder")
     ss = under.add_parser("set-status", help="skift status på ét fund (logges)")
     ss.add_argument("finding_id", type=int)
     ss.add_argument("status", choices=[s for s in STATUSSER if s != "open"] + ["open"])
@@ -144,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.kommando == "run-rules":
         return run_rules(args.client_id)
     if args.kommando == "findings":
-        return vis_findings(args.client_id, args.status, args.severity)
+        return vis_findings(args.client_id, args.status, args.severity, args.alle)
     if args.kommando == "set-status":
         return set_status(args.finding_id, args.status, args.note)
     return 2
