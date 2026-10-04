@@ -8,6 +8,8 @@ de fire funktioner på en adapter:
         adapter.hent_suppliers()          -> list[Leverandoer]
         adapter.hent_entries(efter)       -> PosteringsSvar (kun nye siden `efter`)
         adapter.hent_open_entries()       -> list[AabenPost] (altid alle)
+        adapter.hent_kassekladder()       -> list[Kassekladde]
+        adapter.hent_kassekladde_poster(nummer) -> list[KladdePost] (endnu ikke bogført)
 
 Adapteren oversætter systemets felter til formatet herunder og gætter aldrig:
 et felt, systemet ikke har leveret, bliver None.
@@ -111,6 +113,28 @@ class AabenPost:
 
 
 @dataclass(frozen=True)
+class Kassekladde:
+    nummer: int
+    navn: str | None
+
+
+@dataclass(frozen=True)
+class KladdePost:
+    """En linje i en kassekladde – endnu IKKE bogført."""
+
+    kladde_nummer: int
+    linje_id: int | None
+    bilagsnummer: int | None
+    dato: date | None
+    konto: int | None
+    modkonto: int | None
+    tekst: str | None
+    beloeb: Decimal | None
+    valuta: str | None
+    entry_type: str | None
+
+
+@dataclass(frozen=True)
 class PosteringsSvar:
     poster: list[Postering]
     ny_cursor: str | None
@@ -124,6 +148,8 @@ class RegnskabsAdapter(Protocol):
     def hent_suppliers(self) -> list[Leverandoer]: ...
     def hent_entries(self, efter: str | None) -> PosteringsSvar: ...
     def hent_open_entries(self) -> list[AabenPost]: ...
+    def hent_kassekladder(self) -> list[Kassekladde]: ...
+    def hent_kassekladde_poster(self, nummer: int) -> list[KladdePost]: ...
     def __enter__(self) -> "RegnskabsAdapter": ...
     def __exit__(self, *args) -> None: ...
 

@@ -102,6 +102,13 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/synk/bekraeft.py` – bekræft mod det rigtige system: synkroniserer, henter igen
   og sammenligner, tjekker dubletter og bogmærke. Slutter med BEKRÆFTET/IKKE BEKRÆFTET:
   `python -m app.synk.bekraeft --kundenummer <nr>`.
+- `app/afstemning/` – afstemningslogik (adskilt fra kundedata/CRM).
+  - `fejlkonto.py`: tjek kassekladde for posteringer på fejlkonto (standard 9900),
+    som konto ELLER modkonto. Kladde: `--kladde`, ellers `clients.kassekladde_navn`,
+    ellers alle. Læser kun. Kode 0 = ingen, 1 = fund, 2 = fejl:
+    `python -m app.afstemning.fejlkonto --kundenummer <nr> [--konto 9900]`.
+  - Adapter-laget har dertil `hent_kassekladder()` og `hent_kassekladde_poster(nr)`
+    (e-conomic: /journals og /journals/{nr}/entries).
 - `app/regnskab/models.py` – regnskabsdata fra kundernes systemer (`accounts`
   med `tenant_id` = kunden; cache-tabellerne `customers`, `suppliers`, `entries`,
   `open_entries` med unik (client_id, systemets id)). Holdt adskilt fra CRM.

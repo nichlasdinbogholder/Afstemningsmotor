@@ -6,6 +6,10 @@ Endpoints og felter (fra e-conomics JSON-skemaer, restapi.e-conomic.com):
 - /suppliers     : supplierNumber, name, corporateIdentificationNumber,
                    paymentTerms.paymentTermsNumber  (e-conomic leverer ingen saldo
                    på leverandører – saldo er derfor altid None)
+- /journals      : journalNumber, name                       (kassekladder)
+- /journals/{nr}/entries : journalEntryNumber, voucher.voucherNumber, date,
+                   account.accountNumber, contraAccount.accountNumber, text, amount,
+                   currency.code, entryType                (kladdelinjer, ikke bogført)
 - /accounting-years                 : year ("2026" eller "2025/2026")
 - /accounting-years/{år}/entries    : entryNumber, voucherNumber, date, dueDate,
                    account.accountNumber, text, amount, currency, entryType,
@@ -31,6 +35,8 @@ from app.adaptere.economic.klient import EconomicFejl, EconomicKlient, app_secre
 from app.adaptere.regnskab.base import (
     ENTRY_TYPER,
     AabenPost,
+    Kassekladde,
+    KladdePost,
     Kunde,
     Leverandoer,
     Postering,
@@ -157,6 +163,25 @@ def oversaet_aaben_post(d: dict) -> AabenPost:
     )
 
 
+def oversaet_kassekladde(d: dict) -> Kassekladde:
+    return Kassekladde(nummer=_kraev(d, "journalNumber", "en kassekladde"), navn=d.get("name"))
+
+
+def oversaet_kladdepost(kladde_nummer: int, d: dict) -> KladdePost:
+    return KladdePost(
+        kladde_nummer=kladde_nummer,
+        linje_id=d.get("journalEntryNumber"),
+        bilagsnummer=_nummer(d.get("voucher"), "voucherNumber"),
+        dato=_dato(d.get("date")),
+        konto=_nummer(d.get("account"), "accountNumber"),
+        modkonto=_nummer(d.get("contraAccount"), "accountNumber"),
+        tekst=d.get("text"),
+        beloeb=_decimal(d.get("amount")),
+        valuta=_nummer(d.get("currency"), "code"),
+        entry_type=d.get("entryType"),
+    )
+
+
 # --- Adapteren --------------------------------------------------------------
 
 
@@ -202,6 +227,14 @@ class EconomicAdapter:
             for d in self._klient.hent_alle(f"/accounting-years/{aar}/entries", filter="remainder$ne:0")
             if er_aaben(d)
         ]
+
+
+    def hent_kassekladder(self) -> list[Kassekladde]:
+        return [oversaet_kassekladde(d) for d in self._klient.hent_alle("/journals")]
+
+    def hent_kassekladde_poster(self, nummer: int) -> list[KladdePost]:
+        return [oversaet_kladdepost(nummer, d)
+                for d in self._klient.hent_alle(f"/journals/{int(nummer)}/entries")]
 
 
 @registrer_adapter(SYSTEM)
