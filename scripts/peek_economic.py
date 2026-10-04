@@ -3,9 +3,9 @@
     ECONOMIC_APP_SECRET_TOKEN=demo ECONOMIC_AGREEMENT_GRANT_TOKEN=demo \\
         .venv/bin/python scripts/peek_economic.py [--aar 2026] [--antal 3]
 
-Henter listen over regnskabsår og ÉN side posteringer for ét regnskabsår
-(standard: det nyeste), og printer de første posteringer og hele
-pagination-objektet som pænt formateret JSON.
+Henter listen over regnskabsår og ÉN side posteringer for ét regnskabsår og
+printer de første posteringer og hele pagination-objektet som pænt formateret
+JSON. Uden --aar prøves årene fra det nyeste, til et har posteringer.
 
 Kun til udvikling: tokens læses fra miljøvariabler her – aldrig i produktionskoden.
 Scriptet laver kun GET-kald og skriver aldrig tokens ud.
@@ -37,7 +37,7 @@ def vis(titel: str, data) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Vis rå posteringer fra e-conomic.")
-    parser.add_argument("--aar", help='regnskabsår, fx "2026" eller "2025/2026" (standard: nyeste)')
+    parser.add_argument("--aar", help='regnskabsår, fx "2026" eller "2025/2026" (standard: nyeste med posteringer)')
     parser.add_argument("--antal", type=int, default=3, help="antal posteringer der vises (standard 3)")
     args = parser.parse_args()
 
@@ -55,15 +55,28 @@ def main() -> int:
             svar.raise_for_status()
             aar_liste = [a["year"] for a in svar.json().get("collection", [])]
             print("Regnskabsår:", ", ".join(aar_liste) or "(ingen)")
-            aar = args.aar or (sorted(aar_liste)[-1] if aar_liste else None)
-            if aar is None:
+            if not aar_liste:
                 print("Aftalen har ingen regnskabsår.", file=sys.stderr)
                 return 1
 
-            sti = f"/accounting-years/{kod_id(aar)}/entries"
-            svar = klient.get(sti, params={"skipPages": 0, "pageSize": 20})
-            svar.raise_for_status()
-            data = svar.json()
+            # Det valgte år – ellers alle år fra det nyeste, til et har posteringer.
+            kandidater = [args.aar] if args.aar else sorted(aar_liste, reverse=True)
+            print("\nAntal posteringer pr. regnskabsår:")
+            aar, sti, data = None, None, None
+            for kandidat in kandidater:
+                kandidat_sti = f"/accounting-years/{kod_id(kandidat)}/entries"
+                svar = klient.get(kandidat_sti, params={"skipPages": 0, "pageSize": 20})
+                svar.raise_for_status()
+                kandidat_data = svar.json()
+                antal = (kandidat_data.get("pagination") or {}).get("results")
+                print(f"  {kandidat}: {antal}")
+                if kandidat_data.get("collection") and data is None:
+                    aar, sti, data = kandidat, kandidat_sti, kandidat_data
+                    break
+            if data is None:
+                print("\nIngen posteringer i nogen af regnskabsårene på denne aftale.")
+                vis("pagination for det sidst prøvede år", kandidat_data.get("pagination"))
+                return 0
     except httpx.HTTPStatusError as fejl:
         # Kun status og sti – aldrig headere (de indeholder tokens).
         print(f"e-conomic svarede {fejl.response.status_code} på {fejl.request.url.path}", file=sys.stderr)
