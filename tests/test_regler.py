@@ -131,7 +131,8 @@ def test_reglerne_er_idempotente(db_session):
     antal_efter = db_session.scalar(select(func.count()).select_from(Finding).where(Finding.client_id == k.id))
 
     assert sum(foerste.values()) == antal_foerst > 0
-    assert anden == {"smaa_restbeloeb": 0, "betaling_uden_faktura": 0, "forfalden_over_6_mdr": 0}
+    assert anden == {"lukket": 0, "smaa_restbeloeb": 0, "betaling_uden_faktura": 0,
+                     "forfalden_over_6_mdr": 0}
     assert antal_efter == antal_foerst
 
 
@@ -161,3 +162,96 @@ def test_en_kunde_ad_gangen_roerer_ikke_andre(db_session):
     _post(db_session, b, rest="10.00")
     koer_regler(db_session, a.id, DATO)
     assert _fund(db_session, a, "smaa_restbeloeb") and not _fund(db_session, b, "smaa_restbeloeb")
+
+
+# --- Automatisk lukning og genåbning ----------------------------------------
+
+
+def _finding(session, kunde, regel, kilde_id):
+    session.expire_all()
+    return session.scalars(select(Finding).where(
+        Finding.client_id == kunde.id, Finding.regel == regel, Finding.kilde_id == kilde_id)).one()
+
+
+def test_betalt_post_lukker_fundet_med_aarsag(db_session):
+    k = _kunde(db_session, "L1")
+    post = _post(db_session, k, forfald=date(2025, 1, 1))
+    _koer(db_session, k)
+    assert _finding(db_session, k, "forfalden_over_6_mdr", post).status == "aaben"
+
+    # Posten betales: den forsvinder fra open_entries ved næste synkronisering.
+    db_session.execute(text("DELETE FROM open_entries WHERE client_id = :k AND bogfoert_id = :b"),
+                       {"k": k.id, "b": post})
+    resultat = _koer(db_session, k)
+
+    f = _finding(db_session, k, "forfalden_over_6_mdr", post)
+    assert resultat["lukket"] == 1
+    assert f.status == "loest" and f.loest_tidspunkt is not None
+    assert f.loest_aarsag == "Posten er ikke længere åben (udlignet eller betalt)"
+    assert _koer(db_session, k)["lukket"] == 0  # idempotent: intet at lukke anden gang
+
+
+def test_aendret_restbeloeb_lukker_fundet_og_kan_genaabne_det(db_session):
+    k = _kunde(db_session, "L2")
+    post = _post(db_session, k, beloeb="1000.00", rest="10.00")
+    _koer(db_session, k)
+    assert _finding(db_session, k, "smaa_restbeloeb", post).status == "aaben"
+
+    # Udligningen tilbageføres delvist: restbeløbet stiger til 150 kr. -> uden for reglen.
+    db_session.execute(text("UPDATE open_entries SET restbeloeb = 150 WHERE client_id = :k AND bogfoert_id = :b"),
+                       {"k": k.id, "b": post})
+    _koer(db_session, k)
+    f = _finding(db_session, k, "smaa_restbeloeb", post)
+    assert f.status == "loest" and f.loest_aarsag == "Reglens betingelse er ikke længere opfyldt"
+
+    # Restbeløbet falder igen til 20 kr. -> samme fund genåbnes (ingen dublet).
+    db_session.execute(text("UPDATE open_entries SET restbeloeb = 20 WHERE client_id = :k AND bogfoert_id = :b"),
+                       {"k": k.id, "b": post})
+    resultat = _koer(db_session, k)
+    f = _finding(db_session, k, "smaa_restbeloeb", post)
+    assert resultat["smaa_restbeloeb"] == 1
+    assert (f.status, f.loest_tidspunkt, f.loest_aarsag, f.restbeloeb) == ("aaben", None, None, Decimal("20.00"))
+    assert db_session.scalar(select(func.count()).select_from(Finding).where(
+        Finding.client_id == k.id, Finding.kilde_id == post)) == 1
+
+
+def test_regel_2_lukkes_naar_en_faktura_dukker_op(db_session):
+    k = _kunde(db_session, "L3")
+    betaling = _post(db_session, k, part=1, beloeb="-500.00", rest="-500.00", entry_type="customerPayment")
+    _koer(db_session, k)
+    _post(db_session, k, part=1, beloeb="500.00", rest="500.00", entry_type="customerInvoice")
+    _koer(db_session, k)
+    f = _finding(db_session, k, "betaling_uden_faktura", betaling)
+    assert f.status == "loest" and f.loest_aarsag == "Reglens betingelse er ikke længere opfyldt"
+
+
+def test_afviste_fund_roeres_aldrig(db_session):
+    k = _kunde(db_session, "L4")
+    post = _post(db_session, k, forfald=date(2025, 1, 1))
+    _koer(db_session, k)
+    db_session.execute(text("UPDATE findings SET status = 'afvist' WHERE client_id = :k"), {"k": k.id})
+    db_session.execute(text("DELETE FROM open_entries WHERE client_id = :k"), {"k": k.id})
+    assert _koer(db_session, k)["lukket"] == 0
+    assert _finding(db_session, k, "forfalden_over_6_mdr", post).status == "afvist"
+
+
+def test_fund_hos_kunde_paa_pause_lukkes_ikke(db_session):
+    k = _kunde(db_session, "L5")
+    post = _post(db_session, k, forfald=date(2025, 1, 1))
+    _koer(db_session, k)
+    k.status = "pause"
+    db_session.flush()
+    db_session.execute(text("DELETE FROM open_entries WHERE client_id = :k"), {"k": k.id})
+    assert _koer(db_session, k)["lukket"] == 0
+    assert _finding(db_session, k, "forfalden_over_6_mdr", post).status == "aaben"
+
+
+def test_lukning_af_en_kunde_roerer_ikke_andre(db_session):
+    a, b = _kunde(db_session, "LA"), _kunde(db_session, "LB")
+    pa = _post(db_session, a, forfald=date(2025, 1, 1))
+    pb = _post(db_session, b, forfald=date(2025, 1, 1))
+    koer_regler(db_session, None, DATO)
+    db_session.execute(text("DELETE FROM open_entries WHERE client_id IN (:a, :b)"), {"a": a.id, "b": b.id})
+    koer_regler(db_session, a.id, DATO)
+    assert _finding(db_session, a, "forfalden_over_6_mdr", pa).status == "loest"
+    assert _finding(db_session, b, "forfalden_over_6_mdr", pb).status == "aaben"

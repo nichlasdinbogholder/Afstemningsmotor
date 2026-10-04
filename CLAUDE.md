@@ -115,7 +115,11 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     (`regel_1_smaa_restbeloeb`, `regel_2_betaling_uden_faktura`,
     `regel_3_forfalden_over_6_mdr`). Idempotente via unik (client_id, regel, kilde_id).
     Kun aktive kunder. `python -m app.afstemning.regler --kundenummer <nr> | --alle`.
-    Nye regler/ændringer: ny migrering med CREATE OR REPLACE FUNCTION.
+    Hver regel = `regel_N_kandidater(...)` (betingelsen) + `regel_N_...(...)` (skriver fund).
+    `luk_loeste_fund(...)` lukker åbne fund, der ikke længere er kandidater (status
+    `loest` + tidspunkt + årsag); løste fund genåbnes, hvis de igen opfylder reglen.
+    `afvist` røres aldrig automatisk. Kommandoen lukker først og kører så reglerne.
+    Nye regler/ændringer: ny migrering; husk både kandidat-funktionen og luk_loeste_fund.
   - Adapter-laget har dertil `fetch_journals()` og `fetch_journal_entries(nr)`
     (e-conomic: /journals og /journals/{nr}/entries).
 - `app/regnskab/models.py` – regnskabsdata fra kundernes systemer (`accounts`

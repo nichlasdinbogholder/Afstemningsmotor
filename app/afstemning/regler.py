@@ -4,9 +4,13 @@
     python -m app.afstemning.regler --alle
     python -m app.afstemning.regler --alle --dato 2026-10-04     # regel 3 beregnet fra en bestemt dato
 
-Selve reglerne er SQL-funktioner i databasen (se migreringen
-"findings og afstemningsregler"). De er idempotente: kører de igen, kommer der
-ingen dubletter i findings – kun nye fund tælles.
+Selve reglerne er SQL-funktioner i databasen (se migreringerne
+"findings og afstemningsregler" og "fund lukkes automatisk"). Hver kørsel:
+1. lukker åbne fund, hvis reglens betingelse ikke længere er opfyldt
+   (fx posten er betalt) – status 'loest' med tidspunkt og årsag,
+2. kører de tre regler: nye fund oprettes, og løste fund, der igen opfylder
+   reglen, genåbnes. Afviste fund ('afvist') røres aldrig.
+Idempotent: kører den igen på samme data, sker der ingenting.
 """
 
 import argparse
@@ -29,9 +33,11 @@ REGLER = {
 
 
 def koer_regler(session: Session, client_id: int | None = None, dato: date | None = None) -> dict:
-    """Kør alle tre regler. Returnerer antal NYE fund pr. regel. Gemmes ved session.commit()."""
+    """Luk løste fund og kør alle tre regler. Returnerer antal lukkede og NYE/genåbnede fund
+    pr. regel. Gemmes ved session.commit()."""
     p = {"k": client_id, "d": dato or session.scalar(text("SELECT current_date"))}
     return {
+        "lukket": session.scalar(text("SELECT luk_loeste_fund(:k, :d)"), p),
         "smaa_restbeloeb": session.scalar(text("SELECT regel_1_smaa_restbeloeb(:k)"), p),
         "betaling_uden_faktura": session.scalar(text("SELECT regel_2_betaling_uden_faktura(:k)"), p),
         "forfalden_over_6_mdr": session.scalar(text("SELECT regel_3_forfalden_over_6_mdr(:k, :d)"), p),
@@ -60,7 +66,8 @@ def main(argv: list[str] | None = None) -> int:
         nye = koer_regler(session, client_id, args.dato)
         session.commit()
 
-        print("Nye fund i denne kørsel:")
+        print(f"Lukket (betingelsen er ikke længere opfyldt): {nye['lukket']}")
+        print("Nye eller genåbnede fund i denne kørsel:")
         for regel, tekst in REGLER.items():
             print(f"  {tekst:<52} {nye[regel]:>5}")
         stmt = (select(Finding, Client.kundenummer).join(Client, Client.id == Finding.client_id)
