@@ -40,7 +40,11 @@ def main(argv: list[str] | None = None) -> int:
             print("Fejl: Kunden findes ikke", file=sys.stderr)
             return 1
 
-        token = getpass.getpass(f"Indsæt token til {args.system} for {kunde.navn} (vises ikke): ")
+        try:
+            token = getpass.getpass(f"Indsæt token til {args.system} for {kunde.navn} (vises ikke): ")
+        except (KeyboardInterrupt, EOFError):
+            print("\nAfbrudt – intet er gemt.", file=sys.stderr)
+            return 1
         try:
             credential = gem_token(
                 session, kunde.id, args.system, token,
