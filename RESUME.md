@@ -76,3 +76,56 @@ efter entryNumber (`sort=entryNumber`). Stopper det midtvejs:
 
 Koden tjekker alligevel selv rækkefølgen, så et usorteret svar aldrig kan flytte
 bogmærket forkert.
+
+---
+
+# Resumé – fund og dubletreglen
+
+## Tabeller
+- `findings`: ét fund pr. (kunde, regel, fingerprint). Status: `open`, `accepted`,
+  `resolved`, `ignored`. Alvor: `low`, `medium`, `high`. Fund slettes aldrig (databasen nægter).
+- `finding_events`: en række, når et fund oprettes (`system`), og ved HVER statusændring
+  (hvem, fra, til, note, tidspunkt). Skrives af en trigger i databasen. En statusændring
+  uden actor afvises. Rækkerne kan ikke ændres eller slettes.
+- Den gamle `findings` (de tre regler for åbne poster) hedder nu `aabne_post_fund`. Data er bevaret.
+- `client_id` er et heltal (som resten af databasen), og intet slettes automatisk (RESTRICT, ikke CASCADE).
+
+## Fingerprint
+`sha256("|".join(sorted(posteringsnumre)))[:32]`, hvor posteringsnumre er e-conomics
+`entryNumber` (vores `entries.bogfoert_id`) for de to posteringer i parret.
+- Sorteret først, så rækkefølgen er ligegyldig.
+- Afhænger kun af HVILKE posteringer, ikke af beløb, tekst eller kørselstidspunkt. Det samme
+  par giver derfor altid samme fund, og en medarbejders status overlever hver nattekørsel.
+- En kørsel opdaterer kun `last_seen_at`, `detail`, `severity` og `updated_at`. Status røres aldrig.
+- Forsvinder problemet, bliver fundet stående med sin gamle `last_seen_at`.
+
+## Dubletreglen (duplicate_entries, version 1)
+- **Vindue: 7 dage** (`VINDUE_DAGE` øverst i `app/rules/duplicate_entries.py`). 7 og ikke 35,
+  så husleje, leasing og abonnementer (samme beløb hver måned) ikke rammes.
+- Et par kræver: samme kunde, samme beløb MED samme fortegn, samme valuta, højst 7 dage
+  imellem, forskellige posteringer, ikke samme bilag, og samme modpart hvis begge har en.
+- Modsat fortegn (+5.000 / −5.000) er en tilbageførsel og aldrig et fund.
+- Vi har ikke et leverandørfelt på almindelige udgiftsposter (`modpart` er kun udfyldt på
+  poster bogført direkte på en kunde/leverandør). Derfor matches der på konto og beløb.
+- Alvor: `high` = samme konto, dato og tekst. `medium` = samme konto. `low` = forskellige konti.
+- Kendt begrænsning: bogføres samme bilag to gange MED SAMME bilagsnummer, ses det ikke,
+  fordi linjer fra samme bilag aldrig parres (ellers ville et bilags egne linjer give falske fund).
+- Kendt begrænsning: en dobbeltbogføring giver typisk TO fund (udgiftssiden og banksiden).
+- Ydelse: 300.000 posteringer for én kunde på 0,4 sek. (én SQL-forespørgsel med indekset
+  på kunde + beløb).
+
+## Kontrol af falske fund
+**Endnu ikke lavet på rigtige data.** Reglen er indtil videre kun kørt på en kunstig
+testkunde i udviklingsmiljøet (10 kendte posteringer): 3 fund, præcis de forventede. En
+tilbageførsel og en månedlig husleje gav korrekt intet fund.
+
+Skabelon til den rigtige kontrol:
+
+    Dubletregel kørt <dato> på <kunde>. <N> fund (high/medium/low: x/y/z).
+    Kontrolleret 5 stk: <a> rigtige, <b> falske (<hvorfor>).
+    Falsk-positiv-rate ca. <b/5> %.
+
+Er mere end hvert femte fund falsk, strammes reglen før regel nr. 2, i denne rækkefølge:
+1. Vinduet fra 7 til 3 dage.
+2. Kræv samme konto (drop `low`).
+3. Udelad konti, hvor gentagne ens beløb er normalt (husleje, leasing, løn).

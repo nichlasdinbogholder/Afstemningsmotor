@@ -1,15 +1,17 @@
 """Samler alle tabeller, så Alembic og testene kender dem alle."""
 
-from app.afstemning.models import Finding
+from app.afstemning.models import AabenPostFund
 from app.audit.models import AuditLog
 from app.crm.models import Document, Handover, Note, Task, TimeEntry
 from app.jobs.models import Job
 from app.kunder.models import Client, Contact, Credential
 from app.personale.models import Staff
+from app.rules.models import Finding, FindingEvent
 from app.regnskab.models import Account, CustomerCache, EntryCache, OpenEntryCache, SupplierCache
 from app.synk.models import SyncState
 
 __all__ = [
+    "AabenPostFund",
     "Account",
     "AuditLog",
     "Client",
@@ -19,6 +21,7 @@ __all__ = [
     "Document",
     "EntryCache",
     "Finding",
+    "FindingEvent",
     "Handover",
     "Job",
     "Note",

@@ -5,7 +5,7 @@
     python -m app.afstemning.regler --alle --dato 2026-10-04     # regel 3 beregnet fra en bestemt dato
 
 Selve reglerne er SQL-funktioner i databasen (se migreringerne
-"findings og afstemningsregler" og "fund lukkes automatisk"). Hver kørsel:
+"findings og afstemningsregler" og "fund lukkes automatisk"; tabellen hedder nu aabne_post_fund). Hver kørsel:
 1. lukker åbne fund, hvis reglens betingelse ikke længere er opfyldt
    (fx posten er betalt) – status 'loest' med tidspunkt og årsag,
 2. kører de tre regler: nye fund oprettes, og løste fund, der igen opfylder
@@ -21,7 +21,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401
-from app.afstemning.models import Finding
+from app.afstemning.models import AabenPostFund
 from app.db import ny_session
 from app.kunder.models import Client
 
@@ -70,10 +70,10 @@ def main(argv: list[str] | None = None) -> int:
         print("Nye eller genåbnede fund i denne kørsel:")
         for regel, tekst in REGLER.items():
             print(f"  {tekst:<52} {nye[regel]:>5}")
-        stmt = (select(Finding, Client.kundenummer).join(Client, Client.id == Finding.client_id)
-                .where(Finding.status == "aaben").order_by(Client.kundenummer, Finding.regel, Finding.forfaldsdato))
+        stmt = (select(AabenPostFund, Client.kundenummer).join(Client, Client.id == AabenPostFund.client_id)
+                .where(AabenPostFund.status == "aaben").order_by(Client.kundenummer, AabenPostFund.regel, AabenPostFund.forfaldsdato))
         if client_id is not None:
-            stmt = stmt.where(Finding.client_id == client_id)
+            stmt = stmt.where(AabenPostFund.client_id == client_id)
         aabne = session.execute(stmt).all()
 
     print(f"\nÅbne fund i alt: {len(aabne)}")

@@ -251,14 +251,19 @@ class Worker:
         log.info("Worker %s stoppet", self.navn)
 
     def _koer_planlaegger(self) -> None:
-        """Planlæg dagens synkronisering (sikkert at gentage – samme job lægges kun i kø én gang)."""
+        """Planlæg dagens synkronisering og regelkørsel (sikkert at gentage – samme job
+        lægges kun i kø én gang)."""
+        from app.rules.jobs import planlaeg_regler
         from app.synk.planlaegger import planlaeg_dag
 
         with self._session_fabrik() as session:
             r = planlaeg_dag(session)
+            regler = planlaeg_regler(session)
             session.commit()
         if r.nye_job:
             log.info("Planlægger: %s nye synkroniseringsjob for %s kunder", r.nye_job, r.kunder)
+        if regler:
+            log.info("Planlægger: %s nye regelkørsler (run_rules)", regler)
 
     def _stop_blidt(self) -> None:
         log.info("Stopper, når det aktuelle job er færdigt …")

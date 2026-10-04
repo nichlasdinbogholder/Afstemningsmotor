@@ -6,7 +6,7 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import func, select, text
 
-from app.afstemning.models import Finding
+from app.afstemning.models import AabenPostFund
 from app.afstemning.regler import koer_regler
 from app.kunder.models import Client
 from app.regnskab.models import OpenEntryCache
@@ -38,8 +38,8 @@ def _post(session, kunde, *, type="debitor", part=1, beloeb="1000.00", rest="100
 
 
 def _fund(session, kunde, regel):
-    return set(session.scalars(select(Finding.kilde_id).where(
-        Finding.client_id == kunde.id, Finding.regel == regel)))
+    return set(session.scalars(select(AabenPostFund.kilde_id).where(
+        AabenPostFund.client_id == kunde.id, AabenPostFund.regel == regel)))
 
 
 def _koer(session, kunde):
@@ -126,9 +126,9 @@ def test_reglerne_er_idempotente(db_session):
     _post(db_session, k, forfald=date(2025, 1, 1))
 
     foerste = _koer(db_session, k)
-    antal_foerst = db_session.scalar(select(func.count()).select_from(Finding).where(Finding.client_id == k.id))
+    antal_foerst = db_session.scalar(select(func.count()).select_from(AabenPostFund).where(AabenPostFund.client_id == k.id))
     anden = _koer(db_session, k)
-    antal_efter = db_session.scalar(select(func.count()).select_from(Finding).where(Finding.client_id == k.id))
+    antal_efter = db_session.scalar(select(func.count()).select_from(AabenPostFund).where(AabenPostFund.client_id == k.id))
 
     assert sum(foerste.values()) == antal_foerst > 0
     assert anden == {"lukket": 0, "smaa_restbeloeb": 0, "betaling_uden_faktura": 0,
@@ -136,9 +136,9 @@ def test_reglerne_er_idempotente(db_session):
     assert antal_efter == antal_foerst
 
 
-def test_databasen_afviser_dublet_i_findings(db_session):
+def test_databasen_afviser_dublet_i_aabne_post_fund(db_session):
     k = _kunde(db_session, "DUB")
-    sql = text("INSERT INTO findings (client_id, regel, kilde_id, beskrivelse) "
+    sql = text("INSERT INTO aabne_post_fund (client_id, regel, kilde_id, beskrivelse) "
                "VALUES (:k, 'smaa_restbeloeb', 1, 'x')")
     db_session.execute(sql, {"k": k.id})
     from sqlalchemy.exc import IntegrityError
@@ -169,8 +169,8 @@ def test_en_kunde_ad_gangen_roerer_ikke_andre(db_session):
 
 def _finding(session, kunde, regel, kilde_id):
     session.expire_all()
-    return session.scalars(select(Finding).where(
-        Finding.client_id == kunde.id, Finding.regel == regel, Finding.kilde_id == kilde_id)).one()
+    return session.scalars(select(AabenPostFund).where(
+        AabenPostFund.client_id == kunde.id, AabenPostFund.regel == regel, AabenPostFund.kilde_id == kilde_id)).one()
 
 
 def test_betalt_post_lukker_fundet_med_aarsag(db_session):
@@ -211,8 +211,8 @@ def test_aendret_restbeloeb_lukker_fundet_og_kan_genaabne_det(db_session):
     f = _finding(db_session, k, "smaa_restbeloeb", post)
     assert resultat["smaa_restbeloeb"] == 1
     assert (f.status, f.loest_tidspunkt, f.loest_aarsag, f.restbeloeb) == ("aaben", None, None, Decimal("20.00"))
-    assert db_session.scalar(select(func.count()).select_from(Finding).where(
-        Finding.client_id == k.id, Finding.kilde_id == post)) == 1
+    assert db_session.scalar(select(func.count()).select_from(AabenPostFund).where(
+        AabenPostFund.client_id == k.id, AabenPostFund.kilde_id == post)) == 1
 
 
 def test_regel_2_lukkes_naar_en_faktura_dukker_op(db_session):
@@ -229,7 +229,7 @@ def test_afviste_fund_roeres_aldrig(db_session):
     k = _kunde(db_session, "L4")
     post = _post(db_session, k, forfald=date(2025, 1, 1))
     _koer(db_session, k)
-    db_session.execute(text("UPDATE findings SET status = 'afvist' WHERE client_id = :k"), {"k": k.id})
+    db_session.execute(text("UPDATE aabne_post_fund SET status = 'afvist' WHERE client_id = :k"), {"k": k.id})
     db_session.execute(text("DELETE FROM open_entries WHERE client_id = :k"), {"k": k.id})
     assert _koer(db_session, k)["lukket"] == 0
     assert _finding(db_session, k, "forfalden_over_6_mdr", post).status == "afvist"

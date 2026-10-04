@@ -118,7 +118,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     som konto ELLER modkonto. Kladde: `--kladde`, ellers `clients.kassekladde_navn`,
     ellers alle. Læser kun. Kode 0 = ingen, 1 = fund, 2 = fejl:
     `python -m app.afstemning.fejlkonto --kundenummer <nr> [--konto 9900]`.
-  - `regler.py` + tabellen `findings`: afstemningsregler som SQL-funktioner i databasen
+  - `regler.py` + tabellen `aabne_post_fund` (hed tidligere findings): afstemningsregler som SQL-funktioner i databasen
     (`regel_1_smaa_restbeloeb`, `regel_2_betaling_uden_faktura`,
     `regel_3_forfalden_over_6_mdr`). Idempotente via unik (client_id, regel, kilde_id).
     Kun aktive kunder. `python -m app.afstemning.regler --kundenummer <nr> | --alle`.
@@ -129,6 +129,19 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     Nye regler/ændringer: ny migrering; husk både kandidat-funktionen og luk_loeste_fund.
   - Adapter-laget har dertil `fetch_journals()` og `fetch_journal_entries(nr)`
     (e-conomic: /journals og /journals/{nr}/entries).
+- `app/rules/` – NYE afstemningsregler (dubletter m.m.). Læser KUN vores egen database –
+  må aldrig importere app.adaptere/app.synk eller tale med e-conomic/Dinero (tests håndhæver det).
+  - `base.py`: `FindingDraft`, `Rule`, `fingerprint()`, `@registrer_regel`, `REGEL_MODULER`.
+    Ny regel = én fil i app/rules/ + én linje i `REGEL_MODULER`.
+  - `koersel.py`: `koer_regler(session, client_id)` – upsert på (client_id, rule_code, fingerprint);
+    opdaterer kun last_seen_at/detail/severity/updated_at. Status røres ALDRIG af en kørsel.
+  - `status.py`: `saet_status(...)` – ENESTE sted, der ændrer status. Trigger skriver finding_events
+    og afviser statusændring uden actor. findings/finding_events kan ikke slettes.
+  - `duplicate_entries.py`: dubletregel (self join, `VINDUE_DAGE = 7`). `jobs.py`: jobtype `run_rules`,
+    planlægges kl. 23:30 for aktive kunder af `python -m app.jobs.worker --planlaeg`.
+  - CLI: `python -m app.cli run-rules <id>`, `findings <id> [--status] [--severity]`,
+    `set-status <fund-id> <accepted|resolved|ignored|open> --note "..."` (actor = $USER).
+  - Den gamle tabel for de tre regler på åbne poster hedder nu `aabne_post_fund` (app/afstemning/).
 - `app/regnskab/models.py` – regnskabsdata fra kundernes systemer (`accounts`
   med `tenant_id` = kunden; cache-tabellerne `customers`, `suppliers`, `entries`,
   `open_entries` med unik (client_id, systemets id)). Holdt adskilt fra CRM.

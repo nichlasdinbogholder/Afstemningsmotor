@@ -1,6 +1,13 @@
 """Kommandoer til at køre ting i hånden.
 
     python -m app.cli sync-entries <client_id>
+    python -m app.cli run-rules <client_id>
+    python -m app.cli findings <client_id> [--status open] [--severity high]
+    python -m app.cli set-status <finding_id> <accepted|resolved|ignored|open> --note "..."
+
+run-rules kører alle aktive regler for kunden og gemmer fundene (findings).
+findings viser fundene som en tabel. set-status ændrer status på ét fund og
+logger det i finding_events med dit brugernavn som actor.
 
 sync-entries opretter et `synk_entries`-job i jobkøen og kører netop det job
 med det samme (synkront), så outputtet ses i terminalen. Til sidst vises antal
@@ -8,7 +15,9 @@ hentede, nye og opdaterede posteringer og det nye bogmærke (cursor).
 """
 
 import argparse
+import getpass
 import logging
+import os
 import sys
 from datetime import datetime
 
@@ -19,6 +28,9 @@ from app.db import ny_session
 from app.jobs.koe import laeg_i_koe
 from app.jobs.worker import Worker
 from app.kunder.models import Client
+from app.rules.koersel import koer_regler
+from app.rules.models import ALVORLIGHED, STATUSSER, Finding
+from app.rules.status import UgyldigStatus, saet_status
 
 
 def sync_entries(client_id: int, worker: Worker | None = None) -> int:
@@ -53,16 +65,88 @@ def sync_entries(client_id: int, worker: Worker | None = None) -> int:
     return 0
 
 
+def run_rules(client_id: int) -> int:
+    with ny_session() as session:
+        kunde = session.get(Client, client_id)
+        if kunde is None:
+            print(f"Fejl: Kunde {client_id} findes ikke", file=sys.stderr)
+            return 2
+        resultat = koer_regler(session, client_id)
+        session.commit()
+    print(f"Kunde {client_id} ({kunde.navn}): regler kørt")
+    for r in resultat.regler:
+        print(f"  {r.rule_code:<22} fund: {r.fundet:>5}   nye: {r.nye:>5}   set før: {r.set_igen:>5}")
+    return 0
+
+
+def _klip(tekst: str, bredde: int) -> str:
+    return tekst if len(tekst) <= bredde else tekst[:bredde - 1] + "…"
+
+
+def vis_findings(client_id: int, status: str | None = None, severity: str | None = None) -> int:
+    orden = {"high": 0, "medium": 1, "low": 2}
+    with ny_session() as session:
+        stmt = select(Finding).where(Finding.client_id == client_id)
+        if status:
+            stmt = stmt.where(Finding.status == status)
+        if severity:
+            stmt = stmt.where(Finding.severity == severity)
+        fund = sorted(session.scalars(stmt),
+                      key=lambda f: (orden[f.severity], f.period_start or f.first_seen_at.date(), f.id))
+    if not fund:
+        print("Ingen fund.")
+        return 0
+    print(f"{'id':>6}  {'dato':<10}  {'alvor':<6}  {'status':<8}  {'poster':>6}  titel")
+    print("-" * 135)
+    for f in fund:
+        dato = (f.period_start or f.first_seen_at.date()).isoformat()
+        print(f"{f.id:>6}  {dato:<10}  {f.severity:<6}  {f.status:<8}  {len(f.entry_ids):>6}  {_klip(f.title, 95)}")
+    print(f"\n{len(fund)} fund")
+    return 0
+
+
+def set_status(finding_id: int, status: str, note: str | None) -> int:
+    actor = os.environ.get("USER") or getpass.getuser()
+    with ny_session() as session:
+        try:
+            skift = saet_status(session, finding_id, status, actor=actor, note=note)
+        except UgyldigStatus as fejl:
+            print(f"Fejl: {fejl}", file=sys.stderr)
+            return 2
+        session.commit()
+    if skift.fra == skift.til:
+        print(f"Fund {finding_id} har allerede status {skift.til} – intet ændret.")
+    else:
+        print(f"Fund {finding_id}: {skift.fra} -> {skift.til} (af {actor}). Logget i finding_events.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.cli", description="Kør ting i hånden.")
     under = parser.add_subparsers(dest="kommando", required=True)
     se = under.add_parser("sync-entries", help="hent posteringer for én kunde nu (via jobkøen)")
     se.add_argument("client_id", type=int, help="kundens id i clients")
+    rr = under.add_parser("run-rules", help="kør alle aktive regler for én kunde")
+    rr.add_argument("client_id", type=int, help="kundens id i clients")
+    fi = under.add_parser("findings", help="vis en kundes fund som en tabel")
+    fi.add_argument("client_id", type=int, help="kundens id i clients")
+    fi.add_argument("--status", choices=STATUSSER)
+    fi.add_argument("--severity", choices=ALVORLIGHED)
+    ss = under.add_parser("set-status", help="skift status på ét fund (logges)")
+    ss.add_argument("finding_id", type=int)
+    ss.add_argument("status", choices=[s for s in STATUSSER if s != "open"] + ["open"])
+    ss.add_argument("--note", help="hvorfor (gemmes i finding_events)")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
                         datefmt="%H:%M:%S")
     if args.kommando == "sync-entries":
         return sync_entries(args.client_id)
+    if args.kommando == "run-rules":
+        return run_rules(args.client_id)
+    if args.kommando == "findings":
+        return vis_findings(args.client_id, args.status, args.severity)
+    if args.kommando == "set-status":
+        return set_status(args.finding_id, args.status, args.note)
     return 2
 
 
