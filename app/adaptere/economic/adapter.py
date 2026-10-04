@@ -186,6 +186,7 @@ def oversaet_aaben_post(d: dict) -> AabenPost:
         beloeb=_decimal(d.get("amount")),
         restbeloeb=_decimal(_kraev(d, "remainder", "en åben post")),
         valuta=d.get("currency"),
+        entry_type=_entry_type(d.get("entryType")),
     )
 
 

@@ -1,5 +1,6 @@
 """Samler alle tabeller, så Alembic og testene kender dem alle."""
 
+from app.afstemning.models import Finding
 from app.audit.models import AuditLog
 from app.crm.models import Document, Handover, Note, Task, TimeEntry
 from app.jobs.models import Job
@@ -17,6 +18,7 @@ __all__ = [
     "CustomerCache",
     "Document",
     "EntryCache",
+    "Finding",
     "Handover",
     "Job",
     "Note",

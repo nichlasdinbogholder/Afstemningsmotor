@@ -111,6 +111,11 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     som konto ELLER modkonto. Kladde: `--kladde`, ellers `clients.kassekladde_navn`,
     ellers alle. Læser kun. Kode 0 = ingen, 1 = fund, 2 = fejl:
     `python -m app.afstemning.fejlkonto --kundenummer <nr> [--konto 9900]`.
+  - `regler.py` + tabellen `findings`: afstemningsregler som SQL-funktioner i databasen
+    (`regel_1_smaa_restbeloeb`, `regel_2_betaling_uden_faktura`,
+    `regel_3_forfalden_over_6_mdr`). Idempotente via unik (client_id, regel, kilde_id).
+    Kun aktive kunder. `python -m app.afstemning.regler --kundenummer <nr> | --alle`.
+    Nye regler/ændringer: ny migrering med CREATE OR REPLACE FUNCTION.
   - Adapter-laget har dertil `fetch_journals()` og `fetch_journal_entries(nr)`
     (e-conomic: /journals og /journals/{nr}/entries).
 - `app/regnskab/models.py` – regnskabsdata fra kundernes systemer (`accounts`

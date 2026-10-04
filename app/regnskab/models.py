@@ -136,6 +136,7 @@ class OpenEntryCache(Base):
     __table_args__ = (
         UniqueConstraint("client_id", "bogfoert_id", name="uq_open_entries_kunde_post"),
         kun_vaerdier("type", AABEN_POST_TYPER),
+        kun_vaerdier("entry_type", ENTRY_TYPER),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -151,4 +152,5 @@ class OpenEntryCache(Base):
     beloeb: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     restbeloeb: Mapped[Decimal] = mapped_column(Numeric(18, 2))
     valuta: Mapped[str | None] = mapped_column(String(3))
+    entry_type: Mapped[str | None] = mapped_column(String(30))  # tom indtil næste synkronisering
     sidst_set: Mapped[datetime] = _sidst_set()

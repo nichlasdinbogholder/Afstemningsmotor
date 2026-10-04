@@ -133,6 +133,7 @@ class AabenPost:
     beloeb: Decimal | None
     restbeloeb: Decimal
     valuta: str | None
+    entry_type: str | None = None  # fx customerInvoice / customerPayment (ENTRY_TYPER)
 
 
 @dataclass(frozen=True)
