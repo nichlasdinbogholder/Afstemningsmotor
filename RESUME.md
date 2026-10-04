@@ -99,7 +99,7 @@ bogmærket forkert.
 - En kørsel opdaterer kun `last_seen_at`, `detail`, `severity` og `updated_at`. Status røres aldrig.
 - Forsvinder problemet, bliver fundet stående med sin gamle `last_seen_at`.
 
-## Dubletreglen (duplicate_entries, version 3)
+## Dubletreglen (duplicate_entries, version 4)
 - **Vindue: 3 dage** (`VINDUE_DAGE` øverst i `app/rules/duplicate_entries.py`). Version 1
   brugte 7 dage. Kort vindue, så husleje, leasing og abonnementer (samme beløb hver måned)
   ikke rammes.
@@ -112,6 +112,8 @@ bogmærket forkert.
   Samme kunde faktureret to gange giver stadig et fund.
 - **B (v3):** findes der en postering med MODSAT beløb på samme konto inden for vinduet,
   regnes sagen som tilbageført/udlignet – intet fund.
+- **D (v4):** samme tekst kræves (uden forskel på store/små bogstaver og ekstra mellemrum).
+  Pris: bogføres samme bilag to gange med FORSKELLIG tekst, fanges det ikke.
 - **C (v3):** alle linjepar mellem de samme to bilag samles til ÉT fund (salgs-, moms- og
   debitorlinje giver ikke tre fund). Fingerprintet er hash af ALLE de involverede
   posteringsnumre, sorteret.
@@ -174,7 +176,18 @@ Flest fund på: 6902 Udgående moms (2.465), 1150 Fenerum fordelingskonto (2.189
 1065 E-Boks service (1.020). Skridt 3 i den aftalte rækkefølge ("udelad konti med faste
 beløb") er IKKE brugt: det ville gøre reglen blind for dobbeltfakturering af samme kunde.
 A, B og C rammer i stedet præcis de målte årsager → version 3. Forventet ca. 306 fund.
-**Mangler: kør version 3 og kontrollér 5 tilfældige fund i e-conomic.**
+
+**Version 3 kørt 04.10.2026 på Din Bogholder ApS. Kontrolleret 5 tilfældige fund: 0 rigtige,
+5 falske** (falsk-positiv-rate ca. 100 %):
+- 1126: −1.599,50 kr. moms, "Invoice 22060 (#205)" og "Invoice 22067 (#225)" – to fakturaer.
+- 2336: −299,00 kr. E-Boks, "Invoice 22194" og "Invoice 22196" – to fakturaer.
+- 6408: −5.200,00 kr. Stor abonnementspakke, "Opdeling (Stor månedspakke)" i to bilag.
+- 7164: −625,00 kr. moms, "Bostock Entreprise" og "Jublo ApS" – to kunder.
+- 7425: −2.500,00 kr. Bogholderibeskrivelse, "Grønne Leverum ApS" og "Skærbæk Stillads ApS".
+Årsag: fakturaerne kommer fra et eksternt faktureringssystem og bogføres via
+1150 Fenerum fordelingskonto, ikke på en debitor – kunden står KUN i teksten, så A virker
+ikke. → Version 4 kræver samme tekst (D).
+**Mangler: kør version 4 og kontrollér 5 tilfældige fund i e-conomic.**
 
 Skabelon:
 

@@ -173,11 +173,20 @@ def test_eksakt_dublet_er_high(db_session, kunde, poster):
 
 def test_samme_konto_inden_for_vinduet_er_medium(db_session, kunde, poster):
     poster(1, "2026-04-28", 1310, "17516.70", tekst="Faktura 4711")
-    poster(2, "2026-04-30", 1310, "17516.70", tekst="Faktura 4711 igen")
+    poster(2, "2026-04-30", 1310, "17516.70", tekst="  faktura   4711 ")  # store/små bogstaver og mellemrum
     _koer(db_session, kunde)
     fund = _fund(db_session, kunde)
     assert [f.severity for f in fund] == ["medium"]
     assert fund[0].title == "Muligt dobbeltbogført beløb: 17.516,70 kr. på konto 1310 den 28.04 og 30.04"
+
+
+def test_forskellig_tekst_er_ikke_dublet(db_session, kunde, poster):
+    """D: de 5 kontrollerede fund fra version 3 – kunden står kun i teksten."""
+    poster(1, "2021-12-01", 6902, "-1599.50", tekst="Invoice 22060 (#205)", bilag=909103)
+    poster(2, "2021-12-01", 6902, "-1599.50", tekst="Invoice 22067 (#225)", bilag=909110)
+    poster(3, "2024-11-04", 1110, "-2500.00", tekst="Grønne Leverum ApS", bilag=6595)
+    poster(4, "2024-11-06", 1110, "-2500.00", tekst="Skærbæk Stillads ApS", bilag=6607)
+    assert _koer(db_session, kunde).fundet == 0
 
 
 def test_forskellige_konti_er_ikke_dublet(db_session, kunde, poster):
@@ -227,12 +236,12 @@ def test_forskellig_modpart_er_ikke_dublet(db_session, kunde, poster):
     assert [f.detail["beloeb"] for f in _fund(db_session, kunde)] == ["200.00"]
 
 
-def _faktura(poster, nr, bilag, dato, kunde, beloeb="10200.00", konto=1010):
+def _faktura(poster, nr, bilag, dato, kunde, beloeb="10200.00", konto=1010, tekst="Månedligt honorar"):
     """En salgsfaktura som i e-conomic: debitorlinje (med kunde), salgslinje og momslinje."""
     b = Decimal(beloeb)
-    poster(nr, dato, 5600, str(b * Decimal("1.25")), tekst=f"Faktura {bilag}", bilag=bilag, modpart=kunde)
-    poster(nr + 1, dato, konto, str(-b), tekst=f"Faktura {bilag}", bilag=bilag)
-    poster(nr + 2, dato, 6902, str(-b / 4), tekst=f"Faktura {bilag}", bilag=bilag)
+    poster(nr, dato, 5600, str(b * Decimal("1.25")), tekst=tekst, bilag=bilag, modpart=kunde)
+    poster(nr + 1, dato, konto, str(-b), tekst=tekst, bilag=bilag)
+    poster(nr + 2, dato, 6902, str(-b / 4), tekst=tekst, bilag=bilag)
 
 
 def test_samme_pris_til_forskellige_kunder_er_ikke_dublet(db_session, kunde, poster):
@@ -296,7 +305,7 @@ def test_hver_koersel_noteres_i_rule_runs(db_session, kunde, poster):
     _koer(db_session, kunde)
     _koer(db_session, kunde)
     koersler = db_session.scalars(select(RuleRun).where(RuleRun.client_id == kunde.id)).all()
-    assert [(k.rule_code, k.rule_version, k.fund) for k in koersler] == [(REGEL, 3, 1), (REGEL, 3, 1)]
+    assert [(k.rule_code, k.rule_version, k.fund) for k in koersler] == [(REGEL, 4, 1), (REGEL, 4, 1)]
 
 
 # --- Status og log ---------------------------------------------------------------
@@ -361,7 +370,7 @@ def test_ingen_aendring_ingen_log(db_session, kunde, poster):
 def test_regel_er_registreret():
     regler = {r.code: r for r in alle_regler()}
     assert regler[REGEL].name_da == "Muligt dobbeltbogført beløb"
-    assert regler[REGEL].version == 3
+    assert regler[REGEL].version == 4
 
 
 def test_jobtypen_run_rules(db_session, kunde, poster):
