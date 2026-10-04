@@ -9,6 +9,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -115,19 +116,25 @@ class EntryCache(Base):
     __table_args__ = (
         UniqueConstraint("client_id", "bogfoert_id", name="uq_entries_kunde_post"),
         kun_vaerdier("entry_type", ENTRY_TYPER),
+        Index("ix_entries_kunde_dato", "client_id", "dato"),
+        Index("ix_entries_kunde_konto", "client_id", "kontonummer"),
+        Index("ix_entries_kunde_beloeb", "client_id", "beloeb"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     client_id: Mapped[int] = _kunde_id()
     bogfoert_id: Mapped[int] = mapped_column(BigInteger)  # e-conomic: entryNumber
     bilagsnummer: Mapped[int | None] = mapped_column(BigInteger)
-    dato: Mapped[date | None] = mapped_column(Date, index=True)
+    dato: Mapped[date | None] = mapped_column(Date)
     kontonummer: Mapped[int | None] = mapped_column(Integer)
     tekst: Mapped[str | None] = mapped_column(Text)
     beloeb: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
     modpart: Mapped[str | None] = mapped_column(String(30))  # "debitor:<nr>"/"kreditor:<nr>"
     valuta: Mapped[str | None] = mapped_column(String(3))
     entry_type: Mapped[str | None] = mapped_column(String(30))
+    beloeb_dkk: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))  # i grundvaluta
+    # Hele det rå svar fra systemet (tom for poster hentet før kolonnen fandtes).
+    raa_data: Mapped[dict | None] = mapped_column(JSONB)
     sidst_set: Mapped[datetime] = _sidst_set()
 
 

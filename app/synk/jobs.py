@@ -8,7 +8,10 @@ Idempotensnøgle: "<ressource>:<client_id>:<tidspunkt>" (se planlaegger.py).
   blev lagt i kø, springes det over (jobbet afsluttes uden at hente noget).
 """
 
+import json
 import logging
+
+from sqlalchemy import text
 
 from app.adaptere.regnskab.base import ForMangeKald
 from app.jobs.register import JobKontekst, UdskydJob, jobtype
@@ -34,6 +37,15 @@ def _koer(job: JobKontekst, ressource: str) -> None:
         return
     log.info("Job %s: kunde %s, %s – %s hentet%s", job.job_id, job.client_id, ressource,
              resultat.antal, f", {resultat.fjernet} fjernet" if resultat.fjernet else "")
+    # Resultatet gemmes på jobbet (kun tal og bogmærke – aldrig hemmeligheder),
+    # så fx `python -m app.cli sync-entries` kan vise det bagefter.
+    job.session.execute(
+        text("UPDATE jobs SET payload = payload || CAST(:r AS jsonb) WHERE id = :id"),
+        {"id": job.job_id, "r": json.dumps({"resultat": {
+            "hentet": resultat.antal, "nye": resultat.nye, "opdaterede": resultat.opdaterede,
+            "fjernet": resultat.fjernet, "cursor": resultat.cursor,
+        }})},
+    )
 
 
 def _lav_jobtype(navn: str, ressource: str) -> None:

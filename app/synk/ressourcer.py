@@ -9,18 +9,21 @@ alt i én transaktion via `synk_transaktion`, så bogmærket aldrig rykkes frem,
 uden at data er gemt. Systemet kaldes KUN gennem adapter-laget.
 """
 
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, literal_column, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401  (alle tabeller skal være kendt)
-from app.adaptere.regnskab.base import AccountingProvider, hent_adapter
+from app.adaptere.regnskab.base import AccountingProvider, DelvisHentet, PosteringsSvar, hent_adapter
 from app.regnskab.models import CustomerCache, EntryCache, OpenEntryCache, SupplierCache
-from app.synk.tilstand import synk_transaktion
+from app.synk.tilstand import registrer_fejl, synk_transaktion
+
+log = logging.getLogger(__name__)
 
 # Så mange rækker pr. INSERT (PostgreSQL tillader højst 65.535 værdier pr. sætning).
 BLOK = 1000
@@ -31,6 +34,9 @@ class SynkResultat:
     ressource: str
     antal: int
     fjernet: int = 0
+    nye: int = 0
+    opdaterede: int = 0
+    cursor: str | None = None
 
 
 @contextmanager
@@ -42,20 +48,29 @@ def _adapter(session: Session, client_id: int, adapter: AccountingProvider | Non
             yield a
 
 
-def _upsert(session: Session, model, raekker: list[dict], noegle: list[str]) -> None:
-    """Indsæt eller opdatér rækker. Findes (client_id, nøgle) allerede, opdateres den."""
+def _upsert(session: Session, model, raekker: list[dict], noegle: list[str]) -> tuple[int, int]:
+    """Indsæt eller opdatér rækker. Findes (client_id, nøgle) allerede, opdateres den.
+
+    Returnerer (antal nye, antal opdaterede).
+    """
     # Samme post to gange i ét svar (fx hvis sider forskydes undervejs): behold den sidste.
     raekker = list({tuple(r[k] for k in ("client_id", *noegle)): r for r in raekker}.values())
+    nye = opdaterede = 0
     for start in range(0, len(raekker), BLOK):
         blok = raekker[start:start + BLOK]
         stmt = insert(model).values(blok)
         opdater = {k: stmt.excluded[k] for k in blok[0] if k not in ("client_id", *noegle)}
-        session.execute(
+        # xmax = 0 betyder i PostgreSQL, at rækken lige er indsat (ikke opdateret).
+        ny_raekke = literal_column("xmax = 0")
+        for (er_ny,) in session.execute(
             stmt.on_conflict_do_update(
                 index_elements=["client_id", *noegle],
                 set_=opdater | {"sidst_set": func.now()},
-            )
-        )
+            ).returning(ny_raekke)
+        ):
+            nye += bool(er_ny)
+            opdaterede += not er_ny
+    return nye, opdaterede
 
 
 def synk_customers(session: Session, client_id: int, adapter: AccountingProvider | None = None) -> SynkResultat:
@@ -79,14 +94,32 @@ def synk_suppliers(session: Session, client_id: int, adapter: AccountingProvider
 
 
 def synk_entries(session: Session, client_id: int, adapter: AccountingProvider | None = None) -> SynkResultat:
-    """Inkrementelt: kun poster nyere end bogmærket."""
+    """Inkrementelt: kun poster nyere end bogmærket.
+
+    Stopper hentningen midtvejs (`DelvisHentet`), gemmes de poster, der nåede at
+    komme, sammen med adapterens SIKRE bogmærke – og den oprindelige fejl rejses
+    bagefter, så jobbet prøves igen og fortsætter derfra.
+    """
+    delvis: DelvisHentet | None = None
     with synk_transaktion(session, client_id, "entries") as synk:
         with _adapter(session, client_id, adapter) as a:
-            svar = a.fetch_entries(synk.cursor)
-        _upsert(session, EntryCache,
-                [{"client_id": client_id, **asdict(p)} for p in svar.poster], ["bogfoert_id"])
+            try:
+                svar = a.fetch_entries(synk.cursor)
+            except DelvisHentet as fejl:
+                delvis = fejl
+                svar = PosteringsSvar(fejl.poster, fejl.sikker_cursor, fejl.cursor_type)
+        nye, opdaterede = _upsert(session, EntryCache,
+                                  [{"client_id": client_id, **asdict(p)} for p in svar.poster],
+                                  ["bogfoert_id"])
         synk.gennemfoert(svar.ny_cursor, svar.cursor_type, antal_hentet=len(svar.poster))
-    return SynkResultat("entries", len(svar.poster))
+    if delvis is not None:
+        log.warning("Kunde %s: entries stoppede midtvejs – %s poster og bogmærke %s er gemt",
+                    client_id, len(svar.poster), svar.ny_cursor)
+        if not getattr(delvis.aarsag, "taeller_ikke_som_fejl", False):
+            registrer_fejl(session, client_id, "entries", delvis.aarsag)
+        raise delvis.aarsag
+    return SynkResultat("entries", len(svar.poster), nye=nye, opdaterede=opdaterede,
+                        cursor=svar.ny_cursor)
 
 
 def synk_open_entries(session: Session, client_id: int, adapter: AccountingProvider | None = None) -> SynkResultat:

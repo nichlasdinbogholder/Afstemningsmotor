@@ -14,7 +14,7 @@ Endpoints og felter (fra e-conomics JSON-skemaer, restapi.e-conomic.com):
                    currency.code, entryType                (kladdelinjer, ikke bogført)
 - /accounting-years                 : year ("2026" eller "2025/2026")
 - /accounting-years/{år}/entries    : entryNumber, voucherNumber, date, dueDate,
-                   account.accountNumber, text, amount, currency, entryType,
+                   account.accountNumber, text, amount, amountInBaseCurrency, currency, entryType,
                    customer.customerNumber, supplier.supplierNumber, invoiceNumber,
                    supplierInvoiceNumber, remainder
 Regnskabsår i adressen kodes med e-conomics skema, fx "2025/2026" -> "2025_6_2026".
@@ -33,12 +33,14 @@ from urllib.parse import quote
 from sqlalchemy.orm import Session
 
 from app.adaptere.adgang import hent_adgang
-from app.adaptere.economic.klient import EconomicFejl, EconomicKlient, app_secret_token
+from app.adaptere.economic.klient import EconomicFejl, EconomicKlient, UsikkerListe, app_secret_token
 from app.adaptere.regnskab.base import (
     ENTRY_TYPER,
     DEBET_KREDIT,
     KONTOTYPER,
     AabenPost,
+    DelvisHentet,
+    ForMangeKald,
     Konto,
     Kassekladde,
     KladdePost,
@@ -160,6 +162,8 @@ def oversaet_postering(d: dict) -> Postering:
         modpart=_modpart(d),
         valuta=d.get("currency"),
         entry_type=_entry_type(d.get("entryType")),
+        beloeb_dkk=_decimal(d.get("amountInBaseCurrency")),
+        raa_data=d,
     )
 
 
@@ -225,7 +229,9 @@ class EconomicAdapter:
         self._klient.__exit__(*args)
 
     def _regnskabsaar(self) -> list[str]:
-        return [kod_id(_kraev(a, "year", "et regnskabsår")) for a in self._klient.hent_alle("/accounting-years")]
+        """Regnskabsårene, ældste først (fx "2025/2026" før "2026"), kodet til adressen."""
+        aar = [_kraev(a, "year", "et regnskabsår") for a in self._klient.hent_alle("/accounting-years")]
+        return [kod_id(a) for a in sorted(aar)]
 
     def fetch_accounts(self) -> list[Konto]:
         return [oversaet_konto(d) for d in self._klient.hent_alle("/accounts")]
@@ -237,17 +243,39 @@ class EconomicAdapter:
         return [oversaet_leverandoer(d) for d in self._klient.hent_alle("/suppliers")]
 
     def fetch_entries(self, efter: str | None) -> PosteringsSvar:
+        """Poster med entryNumber > `efter`, år for år (ældste først), sorteret efter entryNumber.
+
+        Stopper hentningen midtvejs, rejses `DelvisHentet` med de poster, der nåede at
+        komme, og et SIKKERT bogmærke: kun hvis fejlen skete i det sidste regnskabsår,
+        og posterne dér kom i stigende rækkefølge, kan bogmærket flyttes til den sidst
+        hentede post – ellers kunne en lavere post i et senere år blive sprunget over.
+        """
         if efter is not None and not efter.isdigit():
             raise EconomicFejl(f"Ugyldigt bogmærke for entries: '{efter}'")
         filter = f"entryNumber$gt:{efter}" if efter is not None else None
-        poster = [
-            oversaet_postering(d)
-            for aar in self._regnskabsaar()
-            for d in self._klient.hent_alle(f"/accounting-years/{aar}/entries", filter=filter)
-            if efter is None or d.get("entryNumber", 0) > int(efter)
-        ]
+        aar_liste = self._regnskabsaar()
+        poster: list[Postering] = []
+        for i, aar in enumerate(aar_liste):
+            sidste_i_aaret, stigende = None, True
+            try:
+                for d in self._klient.hent_alle(f"/accounting-years/{aar}/entries",
+                                                filter=filter, sort="entryNumber"):
+                    if efter is not None and d.get("entryNumber", 0) <= int(efter):
+                        continue
+                    p = oversaet_postering(d)
+                    if sidste_i_aaret is not None and p.bogfoert_id <= sidste_i_aaret:
+                        stigende = False
+                    sidste_i_aaret = p.bogfoert_id
+                    poster.append(p)
+            except (EconomicFejl, ForMangeKald) as fejl:
+                if isinstance(fejl, UsikkerListe):
+                    raise
+                sikker = efter
+                if i == len(aar_liste) - 1 and stigende and sidste_i_aaret is not None:
+                    sikker = str(sidste_i_aaret)
+                raise DelvisHentet(fejl, poster, sikker, "id" if sikker is not None else None) from None
         hoejeste = max((p.bogfoert_id for p in poster), default=None)
-        ny_cursor = str(hoejeste) if hoejeste is not None else efter
+        ny_cursor = str(max(hoejeste, int(efter or 0))) if hoejeste is not None else efter
         return PosteringsSvar(poster, ny_cursor, "id" if ny_cursor is not None else None)
 
     def fetch_open_entries(self) -> list[AabenPost]:

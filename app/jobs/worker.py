@@ -45,6 +45,12 @@ HENT_NAESTE = text("""
     LIMIT 1
 """)
 
+HENT_BESTEMT = text("""
+    SELECT id FROM jobs
+    WHERE id = :id AND status = 'koe'
+    FOR UPDATE SKIP LOCKED
+""")
+
 MARKER_I_GANG = text("""
     UPDATE jobs
     SET status = 'i_gang', forsoeg = forsoeg + 1, paabegyndt = now(),
@@ -132,10 +138,13 @@ class Worker:
 
     # --- Enkelte skridt -----------------------------------------------------
 
-    def tag_naeste(self) -> _TagetJob | None:
-        """Hent næste job og sæt det 'i_gang' – i SAMME transaktion."""
+    def tag_naeste(self, bestemt_id: int | None = None) -> _TagetJob | None:
+        """Hent næste job (eller et bestemt job) og sæt det 'i_gang' – i SAMME transaktion."""
         with self._engine.begin() as forbindelse:
-            job_id = forbindelse.execute(HENT_NAESTE, {"typer": self._typer}).scalar()
+            if bestemt_id is None:
+                job_id = forbindelse.execute(HENT_NAESTE, {"typer": self._typer}).scalar()
+            else:
+                job_id = forbindelse.execute(HENT_BESTEMT, {"id": bestemt_id}).scalar()
             if job_id is None:
                 return None
             r = forbindelse.execute(MARKER_I_GANG, {"id": job_id, "worker": self.navn}).one()
@@ -168,9 +177,9 @@ class Worker:
                         job.id, job.type, job.forsoeg, job.max_forsoeg,
                         f"{r.planlagt_til:%H:%M:%S}", fejl)
 
-    def koer_et_job(self) -> bool:
-        """Tag og udfør ét job. Returnerer False, hvis køen var tom."""
-        job = self.tag_naeste()
+    def koer_et_job(self, bestemt_id: int | None = None) -> bool:
+        """Tag og udfør ét job (eller jobbet `bestemt_id`). False, hvis der intet var at tage."""
+        job = self.tag_naeste(bestemt_id)
         if job is None:
             return False
         try:

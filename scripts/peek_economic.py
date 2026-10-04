@@ -39,6 +39,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Vis rå posteringer fra e-conomic.")
     parser.add_argument("--aar", help='regnskabsår, fx "2026" eller "2025/2026" (standard: nyeste med posteringer)')
     parser.add_argument("--antal", type=int, default=3, help="antal posteringer der vises (standard 3)")
+    parser.add_argument("--filter", help='e-conomic-filter, fx "entryNumber$gt:130"')
+    parser.add_argument("--sort", help='sortering, fx "entryNumber" eller "-entryNumber"')
     args = parser.parse_args()
 
     app_secret = os.environ.get("ECONOMIC_APP_SECRET_TOKEN")
@@ -65,7 +67,12 @@ def main() -> int:
             aar, sti, data = None, None, None
             for kandidat in kandidater:
                 kandidat_sti = f"/accounting-years/{kod_id(kandidat)}/entries"
-                svar = klient.get(kandidat_sti, params={"skipPages": 0, "pageSize": 20})
+                params = {"skipPages": 0, "pageSize": 20}
+                if args.filter:
+                    params["filter"] = args.filter
+                if args.sort:
+                    params["sort"] = args.sort
+                svar = klient.get(kandidat_sti, params=params)
                 svar.raise_for_status()
                 kandidat_data = svar.json()
                 antal = (kandidat_data.get("pagination") or {}).get("results")
@@ -87,6 +94,9 @@ def main() -> int:
         return 1
 
     print(f"Regnskabsår vist: {aar}  (GET {sti})")
+    if args.filter or args.sort:
+        print(f"filter: {args.filter or '–'}   sort: {args.sort or '–'}")
+        print("entryNumber på siden:", [p.get("entryNumber") for p in data.get("collection", [])])
     vis(f"De første {args.antal} posteringer (rå JSON)", data.get("collection", [])[: args.antal])
     vis("pagination (hele objektet)", data.get("pagination"))
     return 0

@@ -95,6 +95,13 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   - Kun kunder med status `aktiv` synkroniseres (aldrig `opsagt` eller `pause`).
   - Efter 5 fejl i træk: status `fejlet`. Ventetid 5 min, 10 min, … højst 24 t.
   - `python -m app.synk.kommando oversigt|status|nulstil|deaktiver|aktiver`.
+- `app/cli.py` – `python -m app.cli sync-entries <client_id>`: lægger et `synk_entries`-job
+  i køen, kører det straks og viser hentet/nye/opdaterede og ny cursor.
+- `RESUME.md` – valg af bogmærke for entries (højeste entryNumber) og hvorfor.
+- entries: `beloeb`/`beloeb_dkk` NUMERIC, `raa_data` JSONB (e-conomics rå svar – aldrig
+  tokens). Stopper hentningen midtvejs, gemmes det hentede (`DelvisHentet`), og bogmærket
+  flyttes kun, hvis det er sikkert (sidste regnskabsår + stigende entryNumber).
+- Kun GET mod e-conomic: `tests/test_entries_economic.py` fejler ved post/put/patch/delete.
 - `app/synk/ressourcer.py` – `synk_customers/suppliers/entries/open_entries(session,
   client_id)`: cursor -> adapter -> upsert i cache-tabel -> ny cursor, i ÉN transaktion.
   Åbne poster altid fuldt (betalte fjernes); entries inkrementelt.

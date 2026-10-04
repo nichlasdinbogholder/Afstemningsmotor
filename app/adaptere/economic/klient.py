@@ -41,6 +41,11 @@ class EconomicFejl(AdapterFejl):
     """Fejl fra e-conomic. Beskeden indeholder aldrig nøgler."""
 
 
+class UsikkerListe(EconomicFejl):
+    """Listen fra e-conomic kan ikke stoles på (fx forkert antal rækker).
+    Intet af det hentede må bruges til at flytte et bogmærke."""
+
+
 def app_secret_token() -> HemmeligtToken:
     """Vores fælles app-nøgle (X-AppSecretToken) fra .env."""
     vaerdi = get_settings().economic_app_secret_token
@@ -147,12 +152,14 @@ class EconomicKlient:
                 f"Kunne ikke nå e-conomic efter {FORSOEG} forsøg ({type(fejl).__name__})"
             ) from None
 
-    def hent_alle(self, sti: str, filter: str | None = None) -> Iterator[dict]:
+    def hent_alle(self, sti: str, filter: str | None = None, sort: str | None = None) -> Iterator[dict]:
         """Hent alle rækker fra et liste-endpoint ved at følge `nextPage`."""
         url: str | None = sti
         params: dict | None = {"skipPages": 0, "pageSize": MAKS_SIDESTOERRELSE}
         if filter:
             params["filter"] = filter
+        if sort:
+            params["sort"] = sort
         forventet = None
         hentet = 0
         while url:
@@ -166,8 +173,8 @@ class EconomicKlient:
             url = paginering.get("nextPage")
             if url and urlsplit(url).netloc != self._vaert:
                 # Send aldrig nøglerne til en anden adresse end e-conomic.
-                raise EconomicFejl("nextPage peger uden for e-conomic – stopper")
+                raise UsikkerListe("nextPage peger uden for e-conomic – stopper")
         if forventet is not None and hentet != forventet:
-            raise EconomicFejl(
+            raise UsikkerListe(
                 f"Hentede {hentet} rækker, men e-conomic oplyste {forventet}"
             )

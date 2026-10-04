@@ -50,6 +50,23 @@ class ForMangeKald(AdapterFejl):
         self.vent_sekunder = vent_sekunder
 
 
+class DelvisHentet(AdapterFejl):
+    """Hentningen stoppede midtvejs, men en del af posterne er sikre at gemme.
+
+    `poster` er hentet før fejlen. `sikker_cursor` er det højeste bogmærke, hvor
+    ALLE poster op til og med det er hentet (ellers det gamle bogmærke). Den
+    oprindelige fejl ligger i `aarsag` og rejses igen, når det sikre er gemt.
+    """
+
+    def __init__(self, aarsag: Exception, poster: list, sikker_cursor: str | None,
+                 cursor_type: str | None) -> None:
+        super().__init__(f"Hentning stoppet midtvejs: {aarsag}")
+        self.aarsag = aarsag
+        self.poster = poster
+        self.sikker_cursor = sikker_cursor
+        self.cursor_type = cursor_type
+
+
 class UkendtSystem(AdapterFejl):
     pass
 
@@ -118,6 +135,9 @@ class Postering:
     modpart: str | None  # "debitor:<nr>" eller "kreditor:<nr>"
     valuta: str | None
     entry_type: str | None
+    beloeb_dkk: Decimal | None = None  # beløbet i aftalens grundvaluta
+    # Systemets eget, uændrede svar for posten – til senere brug, må ALDRIG bruges af regler.
+    raa_data: dict | None = None
 
 
 @dataclass(frozen=True)
