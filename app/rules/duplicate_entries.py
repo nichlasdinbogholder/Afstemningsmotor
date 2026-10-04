@@ -72,6 +72,7 @@ def _kr(beloeb: Decimal, valuta: str | None) -> str:
 
 
 def _datoer(a: date, b: date) -> str:
+    a, b = min(a, b), max(a, b)  # altid ældste dato først
     if a == b:
         return f"den {a:%d.%m.%Y}"
     if a.year == b.year:

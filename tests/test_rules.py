@@ -190,6 +190,13 @@ def test_forskellige_konti_er_ikke_dublet(db_session, kunde, poster):
     assert _koer(db_session, kunde).fundet == 0
 
 
+def test_titlen_viser_aeldste_dato_foerst(db_session, kunde, poster):
+    poster(1, "2026-06-04", 6903, "60.00")
+    poster(2, "2026-06-01", 6903, "60.00")
+    _koer(db_session, kunde)
+    assert _fund(db_session, kunde)[0].title.endswith("den 01.06 og 04.06")
+
+
 def test_detail_har_begge_posteringer(db_session, kunde, poster):
     a = poster(11, "2026-04-28", 1310, "17516.70", tekst="Faktura 4711", bilag=900)
     b = poster(12, "2026-04-30", 1310, "17516.70", tekst="Faktura 4711", bilag=901)
