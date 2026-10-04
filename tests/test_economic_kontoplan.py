@@ -104,7 +104,9 @@ def test_henter_alle_sider_og_gemmer_med_tenant_id(db_session, kunde, token, app
     assert foerste.headers["X-AgreementGrantToken"] == token
     assert foerste.headers["Content-Type"] == "application/json"
     assert falsk.kald[1].url.params["skipPages"] == "1"
-    assert db_session.scalars(select(AuditLog.handling)).all() == ["kontoplan_hentet"]
+    assert db_session.scalars(
+        select(AuditLog.handling).where(AuditLog.client_id == kunde.id)
+    ).all() == ["kontoplan_hentet"]
 
 
 def test_ny_hentning_opdaterer_og_fjerner_forsvundne_konti(db_session, kunde, app_secret):

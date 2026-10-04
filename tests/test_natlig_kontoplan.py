@@ -48,9 +48,13 @@ def test_henter_alle_og_fortsaetter_efter_fejl(db_session, token, app_secret, ca
 
     resultat = hent_for_alle(db_session, transport=httpx.MockTransport(falsk), vent=wait_none())
 
-    assert resultat == {"antal_kunder": 2, "ok": ["N-1"], "fejlede": ["N-2"]}
-    assert db_session.scalar(select(func.count()).select_from(Account)) == 1
-    assert db_session.scalar(select(Account.tenant_id)) == god.id
+    # Kun testkunderne vurderes – databasen kan indeholde rigtige kunder.
+    test_nr = {"N-1", "N-2", "N-3"}
+    assert [nr for nr in resultat["ok"] if nr in test_nr] == ["N-1"]
+    assert [nr for nr in resultat["fejlede"] if nr in test_nr] == ["N-2"]
+    assert db_session.scalars(select(Account.tenant_id).where(
+        Account.tenant_id.in_(select(Client.id).where(Client.kundenummer.in_(test_nr)))
+    )).all() == [god.id]
     assert "N-2" in caplog.text and "401" in caplog.text
     assert token not in caplog.text
 
