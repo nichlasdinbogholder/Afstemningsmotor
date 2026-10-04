@@ -14,7 +14,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 
-from sqlalchemy import delete, func, literal_column, select, update
+from sqlalchemy import delete, func, literal_column, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,11 @@ from app.regnskab.models import CustomerCache, EntryCache, OpenEntryCache, Suppl
 from app.synk.tilstand import registrer_fejl, synk_transaktion
 
 log = logging.getLogger(__name__)
+
+# Efter så mange nye poster i én kørsel beder vi databasen opdatere sin viden om
+# tabellen (ANALYZE). Ellers kan den vælge en meget langsom fremgangsmåde for de
+# regler, der køres lige bagefter (set: over 60 sek. i stedet for få sek.).
+ANALYZE_EFTER = 1000
 
 # Så mange rækker pr. INSERT (PostgreSQL tillader højst 65.535 værdier pr. sætning).
 BLOK = 1000
@@ -118,6 +123,9 @@ def synk_entries(session: Session, client_id: int, adapter: AccountingProvider |
         if not getattr(delvis.aarsag, "taeller_ikke_som_fejl", False):
             registrer_fejl(session, client_id, "entries", delvis.aarsag)
         raise delvis.aarsag
+    if nye >= ANALYZE_EFTER:
+        session.execute(text("ANALYZE entries"))
+        session.commit()
     return SynkResultat("entries", len(svar.poster), nye=nye, opdaterede=opdaterede,
                         cursor=svar.ny_cursor)
 

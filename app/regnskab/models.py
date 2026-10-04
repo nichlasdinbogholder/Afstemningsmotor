@@ -117,7 +117,9 @@ class EntryCache(Base):
         UniqueConstraint("client_id", "bogfoert_id", name="uq_entries_kunde_post"),
         kun_vaerdier("entry_type", ENTRY_TYPER),
         Index("ix_entries_kunde_dato", "client_id", "dato"),
-        Index("ix_entries_kunde_konto", "client_id", "kontonummer"),
+        # Dubletreglen slår op på kunde + konto + beløb + dato-interval. Dækker også opslag
+        # på kunde + konto alene.
+        Index("ix_entries_kunde_konto_beloeb_dato", "client_id", "kontonummer", "beloeb", "dato"),
         Index("ix_entries_kunde_beloeb", "client_id", "beloeb"),
     )
 
