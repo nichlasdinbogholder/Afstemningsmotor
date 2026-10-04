@@ -39,6 +39,10 @@ efter entryNumber (`sort=entryNumber`). Stopper det midtvejs:
 - ellers bliver bogmærket stående (en lavere post i et senere år kunne ellers
   blive sprunget over), og næste kørsel henter det samme igen – uden dubletter.
 
-Mangler at blive bekræftet i demo: at e-conomic faktisk sorterer på
-`entryNumber`. Koden tjekker selv rækkefølgen, så et usorteret svar kan aldrig
-flytte bogmærket forkert.
+**Bekræftet i demo-aftalen (2022, 138 posteringer):**
+- `sort=-entryNumber` gav 138, 137, 136 … – e-conomic sorterer på entryNumber.
+  `nextPage` beholder sorteringen, så alle sider kommer i samme rækkefølge.
+- `filter=entryNumber$gt:130` gav præcis 8 posteringer (131–138) ud af 138.
+
+Koden tjekker alligevel selv rækkefølgen, så et usorteret svar aldrig kan flytte
+bogmærket forkert.
