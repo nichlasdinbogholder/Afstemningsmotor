@@ -28,6 +28,9 @@ class Settings(BaseSettings):
 
     allow_booking: bool = False
 
+    # Fejlrapporter (Sentry). Tom = slået fra. Selve adressen (DSN) er en hemmelighed.
+    sentry_dsn: SecretStr | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:

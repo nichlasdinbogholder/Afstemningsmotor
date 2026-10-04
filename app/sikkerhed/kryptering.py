@@ -61,3 +61,14 @@ def dekrypter_token_til_adapter(krypteret: str) -> HemmeligtToken:
             "Token kunne ikke dekrypteres – forkert hovednøgle eller ødelagte data"
         ) from None
     return HemmeligtToken(klartekst)
+
+
+def kan_dekrypteres(krypteret: str) -> bool:
+    """Kan tokenet læses med den nuværende hovednøgle? Bruges til at kontrollere en
+    gendannet backup. Selve tokenet returneres ALDRIG – kun ja/nej. Bruger det ene
+    sted, der dekrypterer, og smider resultatet væk med det samme."""
+    try:
+        dekrypter_token_til_adapter(krypteret)
+    except KrypteringsFejl:
+        return False
+    return True

@@ -1,0 +1,28 @@
+# Caddy: HTTPS (certifikat fra Let's Encrypt hentes og fornyes automatisk).
+#
+# /health er åben, så overvågning kan se, at serveren kører (den viser ingen data).
+# ALT andet kræver brugernavn og adgangskode, indtil systemet får rigtigt login.
+# Adgangskoden står ALDRIG i klartekst – kun som hash i .env (BASIC_AUTH_HASH).
+
+{$DOMAIN} {
+	encode gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	handle /health {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		basic_auth {
+			{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+		}
+		reverse_proxy api:8000
+	}
+}

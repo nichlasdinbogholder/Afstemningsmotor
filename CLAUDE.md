@@ -149,6 +149,17 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/regnskab/models.py` – regnskabsdata fra kundernes systemer (`accounts`
   med `tenant_id` = kunden; cache-tabellerne `customers`, `suppliers`, `entries`,
   `open_entries` med unik (client_id, systemets id)). Holdt adskilt fra CRM.
+- `app/api/main.py` – webdelen (FastAPI). Indtil videre kun `GET /health` (database + version,
+  aldrig hemmeligheder). `uvicorn app.api.main:app`.
+- `app/fejlrapport.py` – Sentry (`init_fejlrapport("api"|"worker"|"scheduler")`). Slået fra uden
+  `SENTRY_DSN`. Ingen lokale variabler, ingen personoplysninger, alle tekster køres gennem `rediger()`.
+- `app/sikkerhed/tjek_tokens.py` – kan alle tokens læses med `CREDENTIALS_KEY`? (kun antal).
+  Bruger `kan_dekrypteres()` i kryptering.py, som genbruger det ENE dekrypteringssted.
+- Server: `Dockerfile`, `docker-compose.prod.yml` (db uden åben port, migrate, api, worker,
+  scheduler = `worker --kun-planlaeg`, caddy), `deploy/Caddyfile` (HTTPS; adgangskode foran alt
+  undtagen /health). Guide: `DEPLOY.md`.
+- `scripts/backup.sh` – krypteret (gpg AES256) pg_dump; `scripts/gendan_test.sh` – gendanner i en
+  separat database og tjekker tabeller, version og tokens → GENDANNELSE OK/FEJLET (gendannelser.log).
 - `tests/` – kør med `.venv/bin/pytest` (kræver kørende database).
 - `migrations/` – Alembic-migreringer (ændringer af databasens opbygning).
 

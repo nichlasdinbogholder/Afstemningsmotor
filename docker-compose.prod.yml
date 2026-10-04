@@ -1,0 +1,85 @@
+# Serveren (Hetzner). Start:  docker compose -f docker-compose.prod.yml up -d --build
+#
+#   db         PostgreSQL 16 – kan KUN nås inde fra serveren (ingen åben port)
+#   migrate    opdaterer databasens tabeller (alembic upgrade head) og stopper igen
+#   api        webdelen (FastAPI) – kun bag Caddy
+#   worker     kører job fra jobkøen (flere: --scale worker=2)
+#   scheduler  lægger dagens synkronisering og regelkørsel i kø hver time
+#   caddy      HTTPS med automatisk certifikat; adgangskode foran alt undtagen /health
+#
+# Alle værdier læses fra .env på serveren (skabelon: .env.example, afsnittet "Server").
+name: afstemning
+
+x-app: &app
+  build: .
+  image: afstemning-app:latest
+  env_file: .env
+  restart: unless-stopped
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build: .
+    image: afstemning-app:latest
+    env_file: .env
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "app.jobs.worker"]
+
+  scheduler:
+    <<: *app
+    command: ["python", "-m", "app.jobs.worker", "--kun-planlaeg"]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER}
+      BASIC_AUTH_HASH: ${BASIC_AUTH_HASH}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

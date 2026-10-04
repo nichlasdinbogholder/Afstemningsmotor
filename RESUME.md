@@ -1,3 +1,49 @@
+# Hvor er jeg
+
+**Sidst opdateret:** 04.10.2026
+
+## Kører i dag
+- [x] Posteringer hentes fra e-conomic for én kunde (Din Bogholder ApS, 43.463 posteringer)
+      med `python -m app.cli sync-entries <id>`; bogmærket gør, at kun nye hentes næste gang.
+- [x] Dubletreglen (version 9) kører med `python -m app.cli run-rules <id>`: 11 fund på
+      7 års bogføring, heraf 1 bekræftet fejl (AUB). Status sættes med `set-status` og logges.
+- [x] Klar til serveren (session 3): `/health`, Docker Compose (Postgres, API, worker,
+      scheduler, Caddy med HTTPS), krypteret backup + gendannelsestest, Sentry. Afprøvet
+      lokalt (backup → gendannelse → GENDANNELSE OK; forkert nøgle → FEJLET). Selve serveren
+      er IKKE sat op endnu – det gøres efter `DEPLOY.md`.
+
+## Næste opgave
+Følg `DEPLOY.md` trin 1–7: bestil serveren hos Hetzner, peg `afstemning.dinbogholder.dk` på
+den, start containerne, kør `scripts/backup.sh` og `scripts/gendan_test.sh` på serveren.
+Færdig når `https://afstemning.dinbogholder.dk/health` svarer og gendannelser.log siger
+GENDANNELSE OK.
+
+## Beslutninger jeg har truffet
+- 04.10.2026: Dubletreglen strammes ikke mere – usikre fund afgøres af medarbejderen
+  (godkend/ignorér); fingerprintet sørger for, at de ikke kommer igen.
+- 04.10.2026: En dobbeltbogføring kræver bank som modkonto; rettelser bruger samme
+  bilagsnummer; periodiseringer er ikke fejl.
+- 04.10.2026: Indtil der er login, beskytter Caddy alt undtagen /health med brugernavn og
+  adgangskode – /docs må ikke ligge åbent, når der kommer kundedata.
+- 04.10.2026: Backup'en krypteres (gpg) på serveren, før den gemmes eller kopieres væk;
+  nøglen og CREDENTIALS_KEY gemmes i en adgangskodemanager, aldrig sammen med backup'en.
+- 04.10.2026: Scheduleren er sin egen tjeneste (`worker --kun-planlaeg`), workers kan skaleres.
+
+## Ting jeg er i tvivl om
+- Bankkonti genkendes på "bank" i navnet. Har nogen kunder bankkonti med andre navne?
+- Kontoplanen hentes i dag kun af natkørslen på Mac'en (launchd). På serveren skal den
+  med i den natlige plan (session 4) – ellers kan dubletreglen ikke se nye bankkonti.
+
+## Sidste kommando jeg kørte
+```
+scripts/gendan_test.sh   (lokalt, mod udviklingsdatabasen)
+Databaseversion: gendannet 3867971909b7, nu 3867971909b7
+Tokens: 1 af 1 tokens kan læses med CREDENTIALS_KEY
+GENDANNELSE OK
+```
+
+---
+
 # Resumé – posteringer (entries) fra e-conomic
 
 ## Hvad er bygget

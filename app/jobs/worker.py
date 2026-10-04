@@ -250,6 +250,20 @@ class Worker:
                 self._stop.wait(self._pause)
         log.info("Worker %s stoppet", self.navn)
 
+    def koer_scheduler(self, interval: float = 3600) -> None:
+        """Scheduler: læg dagens job i kø – med det samme og derefter hver time. Kører ingen job."""
+        if threading.current_thread() is threading.main_thread():
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                signal.signal(sig, lambda *_: self._stop_blidt())
+        log.info("Scheduler %s startet", self.navn)
+        while not self._stop.is_set():
+            try:
+                self._koer_planlaegger()
+            except Exception:  # noqa: BLE001 – fx databasen er nede: prøv igen ved næste interval
+                log.exception("Fejl i scheduler %s – prøver igen om lidt", self.navn)
+            self._stop.wait(interval)
+        log.info("Scheduler %s stoppet", self.navn)
+
     def _koer_planlaegger(self) -> None:
         """Planlæg dagens synkronisering og regelkørsel (sikkert at gentage – samme job
         lægges kun i kø én gang)."""
@@ -276,6 +290,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pause", type=float, default=2.0, help="sekunder mellem tjek, når køen er tom")
     parser.add_argument("--planlaeg", action="store_true",
                         help="læg dagens synkronisering i kø automatisk (tjekkes hver time)")
+    parser.add_argument("--kun-planlaeg", action="store_true",
+                        help="scheduler: læg kun job i kø (hver time) – kør ingen job selv")
     parser.add_argument("--kun-typer", nargs="+", help="kør kun disse jobtyper (standard: alle)")
     parser.add_argument("--haengende-efter", type=float, default=15 * 60,
                         help="sekunder, før et job i gang regnes som hængende (standard 900)")
@@ -283,9 +299,15 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
+    from app.fejlrapport import init_fejlrapport
+
+    init_fejlrapport("scheduler" if args.kun_planlaeg else "worker")
     worker = Worker(pause=args.pause, haengende_efter=args.haengende_efter, kun_typer=args.kun_typer,
-                    planlaeg=args.planlaeg)
-    worker.koer(stop_naar_tom=args.stop_naar_tom)
+                    planlaeg=args.planlaeg or args.kun_planlaeg)
+    if args.kun_planlaeg:
+        worker.koer_scheduler()
+    else:
+        worker.koer(stop_naar_tom=args.stop_naar_tom)
     return 0
 
 
