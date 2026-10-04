@@ -132,7 +132,21 @@ bogmærket forkert.
   3. Udelad faste konti – ikke nødvendigt endnu.
 - Tilbage efter version 2 (forventet): 3 fund på samme konto inden for 3 dage
   (100,00 kr. på 1026 den 01.06; 80,00 kr. og 60,00 kr. på 6903 den 01.06/04.06).
-  **Mangler: kør version 2 på kunde 6 og slå de 3 op i e-conomic.**
+- **Version 2 kørt 04.10.2026 på kunde 6: 3 fund** (high/medium: 0/3), præcis de forventede.
+  Samme fund-id'er som i version 1 (3, 5, 45) – fingerprintet holdt.
+- Gennemgang af de 59 ud fra posteringsdata (tekst, bilag, konto) – IKKE slået op i e-conomic:
+  - De 56 fjernede bekræfter, at `low` var støj: fx er én bankpostering på −1.000 kr.
+    (post 10, konto 1020) blevet parret med fem forskellige −1.000-linjer på fem andre konti.
+  - Fund 3 (100 kr., konto 1026): post 133 "dec 1" i bilag 10006 og post 55 "7 part 1" i
+    bilag 10007 – to forskellige bilag (på 400 og 500 kr.), der hver har en linje på 100 kr.
+    Vurdering: tilfældigt sammenfald → **falsk**.
+  - Fund 5 (80 kr.) og 45 (60 kr.), konto 6903: linjerne er 25 % af 320 og 240 kr. – ligner
+    moms. Bilag 10010 ("ten") indeholder de samme beløb 240 + 60 og 320 + 80 som bilag 10006
+    og 10007, men på ANDRE udgiftskonti. Kan være samme køb bogført to gange med forskellig
+    konto (rigtig dublet) – eller e-conomics testdata. **Uafklaret** uden opslag i e-conomic.
+- Demo-aftalen er e-conomics syntetiske testdata ("testing", "dec 1", "ten 2"). Den er for
+  lille og for kunstig til at måle en falsk-positiv-rate. Reglen strammes ikke yderligere
+  på baggrund af den; næste kontrol skal ske på en rigtig kunde.
 - Demo-aftalen er e-conomics eksempeldata, ikke et rigtigt regnskab. Kontrollen skal
   gentages på en rigtig kunde, før regel nr. 2 bygges.
 
