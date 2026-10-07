@@ -3,7 +3,8 @@
 For hvert kontoudtog sammenlignes linjerne med posteringerne på udtogets modstykke
 (finanskonto og/eller kunde/leverandør) i udtogets periode:
 
-  Trin 1 – eksakt: udtogets reference = bilagsnummer OG samme beløb.
+  Trin 1 – eksakt: udtogets reference = bilagsnummer eller leverandørens fakturanummer
+           (feltet "Fakturanr." ved bogføringen) OG samme beløb. Foranstillede nuller tæller ikke.
   Trin 2 – samme beløb og dato inden for ±DATO_TOLERANCE dage.
   Trin 3 – resten er umatchet og bliver til fund:
            `mangler_i_bogfoering`   – linje på udtoget uden postering i bogføringen
@@ -39,6 +40,16 @@ class UdtogResultat:
     matchet: int = 0
 
 
+def _norm_ref(tekst) -> str | None:
+    t = str(tekst).strip().upper().lstrip("0") if tekst is not None else ""
+    return t or None
+
+
+def _samme_reference(reference: str | None, p) -> bool:
+    ref = _norm_ref(reference)
+    return ref is not None and ref in (_norm_ref(p.bilagsnummer), _norm_ref(p.fakturanummer))
+
+
 def _bogfoert_beloeb(udtog: Statement, linje: StatementLine) -> Decimal:
     return linje.beloeb if udtog.fortegn == "samme" else -linje.beloeb
 
@@ -64,7 +75,7 @@ def _par(linjer, poster, betingelse, udtog, max_dage=None) -> list[tuple]:
 # Posteringerne læses med SQL (ikke via tabelmodellen), så regel-laget ikke trækker
 # adapter-laget med ind – regler må aldrig kunne nå et regnskabssystem.
 POSTER_SQL = text("""
-    SELECT id, bogfoert_id, bilagsnummer, dato, kontonummer, tekst, beloeb
+    SELECT id, bogfoert_id, bilagsnummer, fakturanummer, dato, kontonummer, tekst, beloeb
     FROM entries
     WHERE client_id = :client_id
       AND dato BETWEEN :fra AND :til
@@ -86,8 +97,7 @@ def match_udtog(session: Session, udtog: Statement) -> UdtogResultat:
     match: dict[int, tuple] = {}  # linje-id -> (postering, trin)
     brugte: set[int] = set()
     trin = [
-        ("bilag_beloeb", lambda l, p: l.reference is not None and p.bilagsnummer is not None
-                                      and l.reference.strip() == str(p.bilagsnummer), None),
+        ("bilag_beloeb", lambda l, p: _samme_reference(l.reference, p), None),
         ("beloeb_dato", lambda l, p: True, DATO_TOLERANCE),
     ]
     for navn, betingelse, max_dage in trin:

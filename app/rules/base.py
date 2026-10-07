@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 REGEL_MODULER = (
     "app.rules.duplicate_entries",
     "app.rules.kontoudtog",
+    "app.rules.manglende_kontoudtog",
 )
 
 

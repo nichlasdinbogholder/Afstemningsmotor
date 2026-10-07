@@ -29,8 +29,9 @@ def kunde(db_session):
 @pytest.fixture
 def post(db_session, kunde):
     """Bogført postering på leverandør 45 (konto 6800 Kreditorer)."""
-    def lav(nr, dato, beloeb, bilag=None, modpart="kreditor:45", konto=6800):
+    def lav(nr, dato, beloeb, bilag=None, modpart="kreditor:45", konto=6800, faktura=None):
         e = EntryCache(client_id=kunde.id, bogfoert_id=nr, bilagsnummer=bilag if bilag is not None else nr,
+                       fakturanummer=faktura,
                        dato=date.fromisoformat(dato), kontonummer=konto, tekst=f"Post {nr}",
                        beloeb=Decimal(beloeb), modpart=modpart, valuta="DKK", entry_type="supplierInvoice")
         db_session.add(e)
@@ -73,6 +74,18 @@ def test_trin1_eksakt_paa_bilagsnummer_og_beloeb(db_session, kunde, post):
     linje = db_session.scalars(select(StatementLine).where(StatementLine.statement_id == u.id)).one()
     assert linje.match_trin == "bilag_beloeb"
     assert db_session.get(EntryCache, linje.match_entry_id).bilagsnummer == 7002
+
+
+def test_trin1_paa_leverandoerens_fakturanummer(db_session, kunde, post):
+    """Grossisten skriver sit fakturanummer (Fakt.nr.) – det står i feltet Fakturanr. ved bogføringen.
+    Foranstillede nuller tæller ikke (Bygma: 077135372)."""
+    post(1, "2026-09-10", "-646.30", bilag=21742, faktura="77135372")
+    post(2, "2026-09-03", "-646.30", bilag=21743)
+    u = _udtog(db_session, kunde, [("2026-09-03", "077135372", "646.30")])
+    _koer(db_session, kunde)
+    linje = db_session.scalars(select(StatementLine).where(StatementLine.statement_id == u.id)).one()
+    assert linje.match_trin == "bilag_beloeb"
+    assert db_session.get(EntryCache, linje.match_entry_id).bilagsnummer == 21742
 
 
 def test_trin2_beloeb_og_dato_inden_for_5_dage(db_session, kunde, post):
@@ -328,3 +341,71 @@ def test_indscannet_pdf_laeses_med_tekstgenkendelse(tmp_path):
     assert u.ocr and u.kontrol_ok
     assert [(l["dato"], l["beloeb"]) for l in u.linjer] == [
         (date(2026, 7, 1), Decimal("67.96")), (date(2026, 7, 31), Decimal("-3555.63"))]
+
+
+# --- Skattekonto fra Revibot -----------------------------------------------------------
+
+REVIBOT_HOVED = ("CVR nr.;Navn;Dato;Postering;Yderligere initiativer;Beløb;Saldo;"
+                 "Søgning fra dato;Søgning til dato\n")
+
+
+def test_revibot_csv_laeses_og_saldoen_kontrolleres(tmp_path):
+    fil = tmp_path / "Skattekonto - 01-07-2026 - 31-08-2026.csv"
+    fil.write_text(REVIBOT_HOVED
+                   + "12345678;Test ApS;23.07.2026;Rykkergebyr;Inddrivelse;-65,00;-1.065,00;01.07.2026;31.08.2026\n"
+                   + "12345678;Test ApS;31.07.2026;Indbetaling;;2.000,00;935,00;01.07.2026;31.08.2026\n"
+                   + "12345678;Test ApS;31.07.2026;A-skat;;-935,00;0,00;01.07.2026;31.08.2026\n",
+                   encoding="utf-8")
+    assert importer.er_revibot(fil)
+    u = importer.laes_revibot(fil)
+    assert u.kontrol_ok and u.cvr == "12345678"
+    assert (u.fra, u.til) == (date(2026, 7, 1), date(2026, 8, 31))
+    assert [(l["dato"], l["tekst"], l["beloeb"]) for l in u.linjer] == [
+        (date(2026, 7, 23), "Rykkergebyr – Inddrivelse", Decimal("-65.00")),
+        (date(2026, 7, 31), "Indbetaling", Decimal("2000.00")),
+        (date(2026, 7, 31), "A-skat", Decimal("-935.00"))]
+
+
+def test_revibot_med_forkert_saldo_afvises(tmp_path, capsys):
+    fil = tmp_path / "s.csv"
+    fil.write_text(REVIBOT_HOVED
+                   + "12345678;Test ApS;23.07.2026;Rykkergebyr;;-65,00;-65,00;01.07.2026;31.08.2026\n"
+                   + "12345678;Test ApS;31.07.2026;Indbetaling;;100,00;99,00;01.07.2026;31.08.2026\n",
+                   encoding="utf-8")
+    assert not importer.laes_revibot(fil).kontrol_ok
+    assert importer.main(["--konto", "6710", "--fil", str(fil)]) == 1
+    assert "saldo" in capsys.readouterr().err
+
+
+# --- Manglende kontoudtog fra grossist -----------------------------------------------------
+
+
+def test_mangler_kontoudtog_fra_grossist(db_session, kunde, post, monkeypatch):
+    from app.regnskab.models import SupplierCache
+    from app.rules import manglende_kontoudtog as mk
+
+    monkeypatch.setattr(mk, "i_dag", lambda: date(2026, 10, 7))
+    db_session.add_all([
+        SupplierCache(client_id=kunde.id, leverandoernummer=45, navn="Bygma", gruppe=20000),
+        SupplierCache(client_id=kunde.id, leverandoernummer=46, navn="Stark", gruppe=20000),
+        SupplierCache(client_id=kunde.id, leverandoernummer=99, navn="Elselskab", gruppe=10000),
+    ])
+    post(1, "2026-09-03", "-100.00", modpart="kreditor:45")   # Bygma: udtog for september findes
+    post(2, "2026-09-05", "-200.00", modpart="kreditor:46")   # Stark: intet udtog
+    post(3, "2026-08-05", "-300.00", modpart="kreditor:46")   # Stark i august: intet udtog
+    post(4, "2026-09-05", "-400.00", modpart="kreditor:99")   # ikke grossist
+    post(5, "2026-05-05", "-500.00", modpart="kreditor:46")   # for gammelt (> 3 måneder)
+    _udtog(db_session, kunde, [("2026-09-03", None, "100.00")])
+    _koer(db_session, kunde)
+    fund = _fund(db_session, kunde, "mangler_kontoudtog")
+    assert sorted(f.title.split(" – ")[0] for f in fund) == [
+        "Mangler kontoudtog: Stark (leverandør 46) for august 2026",
+        "Mangler kontoudtog: Stark (leverandør 46) for september 2026"]
+
+
+def test_afsluttede_maaneder_over_aarsskifte():
+    from app.rules.manglende_kontoudtog import afsluttede_maaneder
+
+    assert afsluttede_maaneder(date(2026, 2, 10), 3) == [
+        (date(2026, 1, 1), date(2026, 1, 31)), (date(2025, 12, 1), date(2025, 12, 31)),
+        (date(2025, 11, 1), date(2025, 11, 30))]

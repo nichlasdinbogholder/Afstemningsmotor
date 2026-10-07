@@ -6,7 +6,7 @@ Endpoints og felter (fra e-conomics JSON-skemaer, restapi.e-conomic.com):
 - /customers     : customerNumber, name, corporateIdentificationNumber,
                    paymentTerms.paymentTermsNumber, barred, balance
 - /suppliers     : supplierNumber, name, corporateIdentificationNumber,
-                   paymentTerms.paymentTermsNumber  (e-conomic leverer ingen saldo
+                   paymentTerms.paymentTermsNumber, supplierGroup.supplierGroupNumber  (e-conomic leverer ingen saldo
                    på leverandører – saldo er derfor altid None)
 - /journals      : journalNumber, name                       (kassekladder)
 - /journals/{nr}/entries : journalEntryNumber, voucher.voucherNumber, date,
@@ -91,6 +91,10 @@ def _nummer(handler: dict | None, felt: str) -> int | None:
     return None if not handler else handler.get(felt)
 
 
+def _tekst(vaerdi) -> str | None:
+    return str(vaerdi).strip() or None if vaerdi is not None else None
+
+
 def _i_liste(vaerdi, tilladte: tuple, felt: str):
     if vaerdi is not None and vaerdi not in tilladte:
         raise EconomicFejl(f"Ukendt {felt} '{vaerdi}' fra e-conomic")
@@ -130,6 +134,7 @@ def oversaet_leverandoer(d: dict) -> Leverandoer:
         cvr=d.get("corporateIdentificationNumber"),
         betalingsbetingelse=_nummer(d.get("paymentTerms"), "paymentTermsNumber"),
         saldo=None,  # e-conomic leverer ikke saldo på leverandører
+        gruppe=_nummer(d.get("supplierGroup"), "supplierGroupNumber"),
     )
 
 
@@ -163,6 +168,7 @@ def oversaet_postering(d: dict) -> Postering:
         valuta=d.get("currency"),
         entry_type=_entry_type(d.get("entryType")),
         beloeb_dkk=_decimal(d.get("amountInBaseCurrency")),
+        fakturanummer=_tekst(d.get("supplierInvoiceNumber") or d.get("invoiceNumber")),
         raa_data=d,
     )
 

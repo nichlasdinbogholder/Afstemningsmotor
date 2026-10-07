@@ -108,6 +108,7 @@ class SupplierCache(Base):
     cvr: Mapped[str | None] = mapped_column(String(40))
     betalingsbetingelse: Mapped[int | None] = mapped_column(Integer)
     saldo: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))  # e-conomic: altid tom
+    gruppe: Mapped[int | None] = mapped_column(Integer)  # leverandørgruppe (20000 = grossister)
     sidst_set: Mapped[datetime] = _sidst_set()
 
 
@@ -137,6 +138,7 @@ class EntryCache(Base):
     valuta: Mapped[str | None] = mapped_column(String(3))
     entry_type: Mapped[str | None] = mapped_column(String(30))
     beloeb_dkk: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))  # i grundvaluta
+    fakturanummer: Mapped[str | None] = mapped_column(String(100))  # leverandørens fakturanr. m.m.
     # Hele det rå svar fra systemet (tom for poster hentet før kolonnen fandtes).
     raa_data: Mapped[dict | None] = mapped_column(JSONB)
     sidst_set: Mapped[datetime] = _sidst_set()

@@ -472,3 +472,16 @@ def test_e_conomic_adapteren_implementerer_hele_interfacet():
         forventet = list(inspect.signature(getattr(AccountingProvider, navn)).parameters)
         faktisk = list(inspect.signature(getattr(EconomicAdapter, navn)).parameters)
         assert faktisk[:len(forventet)] == forventet, f"{navn}: {faktisk} != {forventet}"
+
+
+def test_leverandoerens_fakturanummer_og_leverandoergruppe_oversaettes():
+    p = oversaet_postering({"entryNumber": 1, "voucherNumber": 21742, "entryType": "supplierInvoice",
+                            "supplier": {"supplierNumber": 45}, "supplierInvoiceNumber": " 077135372 "})
+    assert (p.bilagsnummer, p.fakturanummer) == (21742, "077135372")
+    assert oversaet_postering({"entryNumber": 2, "invoiceNumber": 1001,
+                               "customer": {"customerNumber": 7}}).fakturanummer == "1001"
+    assert oversaet_postering({"entryNumber": 3}).fakturanummer is None
+    le = oversaet_leverandoer({"supplierNumber": 45, "name": "Bygma",
+                               "supplierGroup": {"supplierGroupNumber": 20000}})
+    assert le.gruppe == 20000
+    assert oversaet_leverandoer({"supplierNumber": 46, "name": "X"}).gruppe is None

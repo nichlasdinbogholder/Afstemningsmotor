@@ -122,6 +122,7 @@ class Leverandoer:
     cvr: str | None
     betalingsbetingelse: int | None
     saldo: Decimal | None
+    gruppe: int | None = None  # leverandørgruppe (fx 20000 = grossister)
 
 
 @dataclass(frozen=True)
@@ -136,6 +137,7 @@ class Postering:
     valuta: str | None
     entry_type: str | None
     beloeb_dkk: Decimal | None = None  # beløbet i aftalens grundvaluta
+    fakturanummer: str | None = None  # leverandørens/vores fakturanummer på posten
     # Systemets eget, uændrede svar for posten – til senere brug, må ALDRIG bruges af regler.
     raa_data: dict | None = None
 

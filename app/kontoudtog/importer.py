@@ -9,6 +9,12 @@
     python -m app.kontoudtog.importer --kundenummer 40850635 --kilde skattekonto \\
         --konto 6710 --fra 2026-09-01 --til 2026-09-30 --fortegn samme --fil skattekonto.csv
 
+Skattekonto fra Revibot (CSV med "Søgning fra dato"): kunden findes ud fra CVR, perioden
+tages fra filen, og hver linjes saldo kontrolleres. Kun --konto (skattekontoen i kundens
+kontoplan) skal angives:
+
+    python -m app.kontoudtog.importer --konto 6710 --fil "Skattekonto - 01-07-2026 - 31-08-2026.csv"
+
 PDF: aflæses af app.kontoudtog.pdf (alle layouts; indscannede via tekstgenkendelse). Perioden
 tages fra udtoget, medmindre --fra/--til er angivet. Indlæses KUN, hvis primo + linjer =
 ultimo på øret – ellers afvises filen, og en medarbejder må se på den.
@@ -28,6 +34,7 @@ Indlæsningen ændrer intet i regnskabssystemet. Matchningen sker, når reglerne
 import argparse
 import csv
 import sys
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -96,16 +103,62 @@ def indlaes(session, client_id: int, kilde: str, fra: date, til: date, fortegn: 
     return udtog
 
 
+@dataclass
+class RevibotUdtog:
+    """Skattekontoens bevægelser, som Revibot gemmer dem (CSV)."""
+
+    linjer: list[dict]
+    cvr: str | None
+    fra: date | None
+    til: date | None
+    fejl: list[str]
+
+    @property
+    def kontrol_ok(self) -> bool:
+        return bool(self.linjer) and not self.fejl
+
+
+def er_revibot(sti: Path) -> bool:
+    try:
+        foerste = sti.read_text(encoding="utf-8-sig").splitlines()[0].lower()
+    except (OSError, IndexError, UnicodeDecodeError):
+        return False
+    return "søgning fra dato" in foerste and "saldo" in foerste
+
+
+def laes_revibot(sti: Path) -> RevibotUdtog:
+    """Kolonner: CVR nr.;Navn;Dato;Postering;Yderligere initiativer;Beløb;Saldo;Søgning fra dato;
+    Søgning til dato. KONTROL: hver linjes saldo = forrige saldo + beløb (på øret)."""
+    raekker = list(csv.DictReader(sti.read_text(encoding="utf-8-sig").splitlines(), delimiter=";"))
+    linjer, fejl, forrige, cvr, fra, til = [], [], None, None, None, None
+    for nr, r in enumerate(raekker, 1):
+        r = {(k or "").strip().lower(): (v or "").strip() for k, v in r.items()}
+        if not r.get("dato") and not r.get("beløb"):
+            continue
+        beloeb, saldo = tolk_beloeb(r["beløb"]), tolk_beloeb(r["saldo"])
+        if forrige is not None and forrige + beloeb != saldo:
+            fejl.append(f"Linje {nr}: saldo {saldo} passer ikke med forrige saldo {forrige} + beløb {beloeb}")
+        forrige = saldo
+        cvr = cvr or r.get("cvr nr.") or None
+        fra = fra or (tolk_dato(r["søgning fra dato"]) if r.get("søgning fra dato") else None)
+        til = til or (tolk_dato(r["søgning til dato"]) if r.get("søgning til dato") else None)
+        tekst = " – ".join(t for t in (r.get("postering"), r.get("yderligere initiativer")) if t)
+        linjer.append({"linje_nr": nr, "dato": tolk_dato(r["dato"]), "beloeb": beloeb, "reference": None,
+                       "tekst": tekst or None, "raa_data": {"postering": r.get("postering"),
+                                                            "saldo": str(saldo)}})
+    return RevibotUdtog(linjer, cvr, fra, til, fejl)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Indlæs et kontoudtog fra en PDF- eller CSV-fil.")
-    parser.add_argument("--kundenummer", required=True)
-    parser.add_argument("--kilde", required=True, choices=KILDER)
+    parser.add_argument("--kundenummer", help="kan udelades for Revibot-filer (kunden findes ud fra CVR)")
+    parser.add_argument("--kilde", choices=KILDER, help="standard for Revibot-filer: skattekonto")
     parser.add_argument("--konto", type=int, help="finanskonto i bogføringen")
     parser.add_argument("--kreditor", type=int, help="leverandørnummer")
     parser.add_argument("--debitor", type=int, help="kundenummer (debitor)")
     parser.add_argument("--fra", type=date.fromisoformat, help="påkrævet for CSV; for PDF tages den fra udtoget")
     parser.add_argument("--til", type=date.fromisoformat, help="påkrævet for CSV; for PDF tages den fra udtoget")
-    parser.add_argument("--fortegn", required=True, choices=FORTEGN)
+    parser.add_argument("--fortegn", choices=FORTEGN, help="standard for Revibot-filer: samme")
     parser.add_argument("--fil", required=True, type=Path)
     args = parser.parse_args(argv)
     if args.kreditor and args.debitor:
@@ -114,9 +167,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.konto is None and modpart is None:
         parser.error("angiv --konto og/eller --kreditor/--debitor (hvad udtoget skal sammenlignes med)")
 
-    fra, til = args.fra, args.til
+    fra, til, cvr = args.fra, args.til, None
+    kilde, fortegn = args.kilde, args.fortegn
     try:
-        if args.fil.suffix.lower() == ".pdf":
+        if args.fil.suffix.lower() == ".csv" and er_revibot(args.fil):
+            rb = laes_revibot(args.fil)
+            for f in rb.fejl:
+                print(f"Fejl i saldo: {f}", file=sys.stderr)
+            if not rb.kontrol_ok:
+                print("Fejl: Filen er ikke læst sikkert – indlæses ikke.", file=sys.stderr)
+                return 1
+            print(f"Skattekonto (Revibot): {len(rb.linjer)} linjer, saldoen stemmer linje for linje.")
+            linjer, fra, til, cvr = rb.linjer, fra or rb.fra, til or rb.til, rb.cvr
+            kilde, fortegn = kilde or "skattekonto", fortegn or "samme"
+        elif args.fil.suffix.lower() == ".pdf":
             pdf = laes_pdf(args.fil)
             print(pdf.kontrol_tekst())
             for advarsel in pdf.advarsler:
@@ -133,15 +197,25 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if fra is None or til is None:
         parser.error("angiv --fra og --til")
+    if kilde is None or fortegn is None:
+        parser.error("angiv --kilde og --fortegn")
+    if args.kundenummer is None and cvr is None:
+        parser.error("angiv --kundenummer")
     with ny_session() as session:
-        kunde = session.scalars(select(Client).where(Client.kundenummer == args.kundenummer)).one_or_none()
+        if args.kundenummer:
+            kunde = session.scalars(select(Client).where(Client.kundenummer == args.kundenummer)).one_or_none()
+        else:
+            kunde = session.scalars(select(Client).where(Client.cvr == cvr)).one_or_none()
         if kunde is None:
-            print("Fejl: Kunden findes ikke", file=sys.stderr)
+            print("Fejl: Kunden findes ikke" + ("" if args.kundenummer else f" (CVR {cvr})"), file=sys.stderr)
             return 2
-        udtog = indlaes(session, kunde.id, args.kilde, fra, til, args.fortegn, linjer,
+        if args.kundenummer and cvr and kunde.cvr and kunde.cvr != cvr:
+            print(f"Fejl: Filen er for CVR {cvr}, men kunden har CVR {kunde.cvr}", file=sys.stderr)
+            return 2
+        udtog = indlaes(session, kunde.id, kilde, fra, til, fortegn, linjer,
                         args.konto, modpart, args.fil.name)
         session.commit()
-    print(f"Indlæst {len(linjer)} linjer som kontoudtog #{udtog.id} ({args.kilde}, {fra} – {til}).")
+    print(f"Indlæst {len(linjer)} linjer som kontoudtog #{udtog.id} ({kilde}, {fra} – {til}) for {kunde.navn}.")
     print(f"Match nu med: python -m app.cli run-rules {kunde.id}")
     return 0
 
