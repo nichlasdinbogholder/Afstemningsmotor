@@ -12,13 +12,15 @@
       `scripts/gendan_test.sh` → GENDANNELSE OK (07.10.2026, tom database). Natlig backup
       kl. 02:15 og månedlig gendannelsestest via /etc/cron.d/afstemning.
 - [x] **Sentry** modtager rapporter fra serveren (testrapport set 07.10.2026).
+- [x] **Backup uden for serveren:** Hetzner Storage Box BX11 (u685938, Falkenstein – andet
+      datacenter end serveren). `backup.sh` kopierer hver backup derover (afprøvet 07.10.2026).
 - [ ] HTTPS på `afstemning.dinbogholder.dk`: venter på DNS (A-post oprettet 07.10).
 
 ## Næste opgave
 Når DNS virker: genstart caddy, tjek `https://afstemning.dinbogholder.dk/health` og at
 `/docs` beder om adgangskode. Derefter (valgfrit, men anbefalet): flyt data fra Mac'en til
-serveren (DEPLOY.md trin 5) og kør `scripts/gendan_test.sh` igen med rigtige data, og
-bestil en Storage Box til backup uden for serveren (`BACKUP_FJERN`).
+serveren (DEPLOY.md trin 5) og kør `scripts/gendan_test.sh` igen med rigtige data. Slå
+automatiske snapshots til på Storage Boxen (beskytter mod, at en hacket server sletter kopierne).
 
 ## Beslutninger jeg har truffet
 - 04.10.2026: Dubletreglen strammes ikke mere – usikre fund afgøres af medarbejderen
@@ -33,6 +35,8 @@ bestil en Storage Box til backup uden for serveren (`BACKUP_FJERN`).
 - 07.10.2026: Server CPX32 (4 vCPU, 8 GB, 80 GB) i Helsinki – rigeligt til 200 kunder ifølge
   overslaget (10–20 GB data); disken blev ikke gjort større ved Rescale, så der kan skaleres ned.
 - 07.10.2026: Sentry kun med fejlrapporter (ingen logs/tracing), EU-dataregion.
+- 07.10.2026: Backup-kopien ligger i Falkenstein, serveren i Helsinki – så ét datacenter ikke
+  kan tage begge. Serveren har sin egen nøgle til Storage Boxen (/root/.ssh/storagebox).
 
 ## Ting jeg er i tvivl om
 - Bankkonti genkendes på "bank" i navnet. Har nogen kunder bankkonti med andre navne?
