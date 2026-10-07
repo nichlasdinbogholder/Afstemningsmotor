@@ -266,6 +266,7 @@ Derfor:
 | **Gik nattens kørsel godt?** | `docker compose -f docker-compose.prod.yml exec -T api python -m app.natkoersel.status` |
 | Kør natkørslen nu (fx efter en fejl) | `docker compose -f docker-compose.prod.yml exec -T scheduler python -m app.natkoersel.scheduler --koer-nu` |
 | Opdatér til nyeste kode | `git pull && docker compose -f docker-compose.prod.yml up -d --build` |
+| Webdelen | bygges automatisk ind i `caddy` ved `up -d --build` (første gang tager det et par minutter) |
 | Se status | `docker compose -f docker-compose.prod.yml ps` |
 | Se log (fx worker) | `docker compose -f docker-compose.prod.yml logs --tail 100 worker` |
 | Kør en kommando | `docker compose -f docker-compose.prod.yml exec api python -m app.cli findings <id>` |

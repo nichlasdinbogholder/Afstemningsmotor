@@ -10,3 +10,6 @@ logs
 tests
 *.dump
 *.gpg
+web/node_modules
+web/.next
+web/out

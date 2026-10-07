@@ -5,7 +5,7 @@
 #   api        webdelen (FastAPI) – kun bag Caddy
 #   worker     kører job fra jobkøen – 4 ad gangen (natkørsel for 500 kunder + "Opdater nu")
 #   scheduler  APScheduler: kl. 05:00 mandag–fredag lægges ét natjob pr. aktiv kunde i kø
-#   caddy      HTTPS med automatisk certifikat; adgangskode foran alt undtagen /health
+#   caddy      HTTPS med automatisk certifikat; webdelens sider (Next.js) + videre til api
 #
 # Alle værdier læses fra .env på serveren (skabelon: .env.example, afsnittet "Server").
 name: afstemning
@@ -71,7 +71,10 @@ services:
     command: ["python", "-m", "app.natkoersel.scheduler"]
 
   caddy:
-    image: caddy:2
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.caddy
+    image: afstemning-caddy:latest
     restart: unless-stopped
     ports:
       - "80:80"
@@ -82,7 +85,6 @@ services:
       BASIC_AUTH_USER: ${BASIC_AUTH_USER}
       BASIC_AUTH_HASH: ${BASIC_AUTH_HASH}
     volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

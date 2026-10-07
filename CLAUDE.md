@@ -192,6 +192,19 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   eller `Depends(kraev_admin)` på nye sider. Medarbejderen slås op ved HVER forespørgsel. Cookien
   (`afstemning_login`, underskrevet med SESSION_SECRET) indeholder kun medarbejder-id. Login/afvisning → audit_log.
   Slået fra uden MS_TENANT_ID/MS_CLIENT_ID/MS_CLIENT_SECRET/SESSION_SECRET. Opsætning: DEPLOY.md trin 8.
+- `app/api/data.py` – data til webdelen under `/api` (login krævet): `kunder` (åbne aktuelle fund + seneste
+  opdatering), `kunder/{id}`, `kunder/{id}/fund`, `fund/{id}`, `POST fund/{id}/status` (note krævet ved
+  accepted/ignored; actor = medarbejderens e-mail), `kunder/{id}/kontoudtog`, `kontoudtog/{id}`,
+  `POST kunder/{id}/opdater` (job `opdater_kunde`, prioritet 10) og `jobs/{id}`. POST kræver headeren
+  `X-Afstemning: 1`. Læser KUN vores database – aldrig e-conomic direkte.
+- `app/rules/visning.py` – aktuelle fund (`NOT EXISTS` nyere regelkørsel – bruger indekset), regelnavne.
+- `web/` – WEBDELEN (Next.js 16, TypeScript, Tailwind). Bygges til statiske filer (`output: "export"`), som
+  Caddy udleverer (`deploy/Dockerfile.caddy`); intet Node-program i drift. Henter kun fra `/api`
+  (`web/lib/api.ts`, `send()` sætter X-Afstemning). Sider: `/` kundeoversigt, `/kunde/?id=` (fund med
+  statusskift + historik, kontoudtog med linjer, "Opdater nu"). Lokalt: `npm run dev` + `DEV_LOGIN=true`
+  på FastAPI og `/dev-login?email=` (virker aldrig med APP_ENV=production). Læs `web/AGENTS.md` før
+  ændringer (Next.js 16 adskiller sig fra ældre versioner).
+- Kapacitet (målt, DEPLOY.md): 500 kunder / 20 samtidige medarbejdere; 4 workers, 3 API-processer.
 - `app/personale/bruger.py` – `python -m app.personale.bruger vis|opret|rolle|deaktiver|aktiver`.
 - `app/fejlrapport.py` – Sentry (`init_fejlrapport("api"|"worker"|"scheduler")`). Slået fra uden
   `SENTRY_DSN`. environment = production (APP_ENV=production) ellers development. API'et bruger
@@ -201,9 +214,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   job_type, og en jobfejl sendes med `capture_exception` (UdskydJob sendes ikke).
 - `app/sikkerhed/tjek_tokens.py` – kan alle tokens læses med `CREDENTIALS_KEY`? (kun antal).
   Bruger `kan_dekrypteres()` i kryptering.py, som genbruger det ENE dekrypteringssted.
-- Server: `Dockerfile`, `docker-compose.prod.yml` (db uden åben port, migrate, api, worker,
-  scheduler = `worker --kun-planlaeg`, caddy), `deploy/Caddyfile` (HTTPS; adgangskode foran alt
-  undtagen /health). Guide: `DEPLOY.md`.
+- Server: `Dockerfile`, `docker-compose.prod.yml` (db uden åben port og indstillet til 16 GB, migrate, api ×3
+  processer, worker ×4, scheduler = `app.natkoersel.scheduler`, caddy bygget af `deploy/Dockerfile.caddy`
+  med webdelen), `deploy/Caddyfile` (HTTPS; /api, /login, /logout, /auth → api, resten = statiske sider;
+  adgangskode foran alt undtagen /health, indtil Microsoft-login er slået til). Guide: `DEPLOY.md`.
 - `scripts/backup.sh` – krypteret (gpg AES256) pg_dump; `scripts/gendan_test.sh` – gendanner i en
   separat database og tjekker tabeller, version og tokens → GENDANNELSE OK/FEJLET (gendannelser.log).
 - `tests/` – kør med `.venv/bin/pytest` (kræver kørende database).

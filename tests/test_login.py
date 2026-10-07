@@ -164,3 +164,20 @@ def test_kommando_opret_rolle_og_deaktiver(db_session, monkeypatch):
     handlinger = db_session.scalars(select(AuditLog.handling).where(
         AuditLog.handling.like("medarbejder_%"))).all()
     assert {"medarbejder_opret", "medarbejder_rolle", "medarbejder_deaktiver"} <= set(handlinger)
+
+
+@pytest.mark.parametrize("app_env, dev_login, forventet", [
+    ("production", True, 404), ("development", False, 404), ("development", True, 303)])
+def test_dev_login_kun_lokalt(db_session, medarbejdere, monkeypatch, app_env, dev_login, forventet):
+    monkeypatch.setattr(login, "get_settings", lambda: SimpleNamespace(app_env=app_env, dev_login=dev_login))
+    app.dependency_overrides[login.db] = lambda: db_session
+    try:
+        k = TestClient(app)
+        svar = k.get("/dev-login", params={"email": "bo@dinbogholder.dk"}, follow_redirects=False)
+        assert svar.status_code == forventet
+        if forventet == 303:
+            assert k.get("/mig").json()["email"] == "bo@dinbogholder.dk"
+            assert k.get("/dev-login", params={"email": "carl@dinbogholder.dk"},
+                         follow_redirects=False).status_code == 403  # deaktiveret
+    finally:
+        app.dependency_overrides.clear()

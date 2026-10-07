@@ -1,7 +1,8 @@
 # Caddy: HTTPS (certifikat fra Let's Encrypt hentes og fornyes automatisk).
 #
 # /health er åben, så overvågning kan se, at serveren kører (den viser ingen data).
-# ALT andet kræver brugernavn og adgangskode, indtil systemet får rigtigt login.
+# ALT andet kræver brugernavn og adgangskode, indtil login med Microsoft er slået til (DEPLOY.md trin 8).
+# Siderne (Next.js) ligger som statiske filer i /srv – se deploy/Dockerfile.caddy.
 # Adgangskoden står ALDRIG i klartekst – kun som hash i .env (BASIC_AUTH_HASH).
 
 {$DOMAIN} {
@@ -19,10 +20,22 @@
 		reverse_proxy api:8000
 	}
 
-	handle {
+	# Python-delen: data (/api), login med Microsoft og API-dokumentationen.
+	@python path /api/* /login /logout /auth/* /dev-login /mig /admin/* /docs /openapi.json
+	handle @python {
 		basic_auth {
 			{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
 		}
 		reverse_proxy api:8000
+	}
+
+	# Webdelens sider (Next.js, bygget til statiske filer i /srv).
+	handle {
+		basic_auth {
+			{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+		}
+		root * /srv
+		try_files {path} {path}/index.html /index.html
+		file_server
 	}
 }

@@ -131,6 +131,22 @@ async def callback(request: Request, session: Session = Depends(db)):
     return RedirectResponse("/", status_code=303)
 
 
+@router.get("/dev-login")
+def dev_login(email: str, request: Request, session: Session = Depends(db)):
+    """Kun til udvikling lokalt (DEV_LOGIN=true og ikke production). Ellers findes siden ikke."""
+    s = get_settings()
+    if s.app_env == "production" or not s.dev_login:
+        raise HTTPException(status_code=404)
+    m = session.scalars(select(Staff).where(Staff.email == email.strip().lower(), Staff.aktiv)).one_or_none()
+    if m is None:
+        raise HTTPException(status_code=403, detail="Ingen aktiv medarbejder med den e-mail")
+    request.session.clear()
+    request.session[SESSION_NOEGLE] = m.id
+    session.add(AuditLog(staff_id=m.id, handling="login_udvikling", detaljer={"rolle": m.rolle}))
+    session.commit()
+    return RedirectResponse("/", status_code=303)
+
+
 @router.get("/logout")
 def logout(request: Request):
     request.session.clear()

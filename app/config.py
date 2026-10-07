@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     session_secret: SecretStr | None = None
     # Adressen, brugerne åbner (til Microsofts tilbagesendelse efter login).
     public_url: str = "http://localhost:8000"
+    # KUN til udvikling på egen maskine: /dev-login?email=... logger ind uden Microsoft.
+    # Virker aldrig, når APP_ENV=production – uanset denne værdi.
+    dev_login: bool = False
 
 
 @lru_cache
