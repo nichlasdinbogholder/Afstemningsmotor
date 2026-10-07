@@ -107,7 +107,7 @@ def _linjer_fra_ord(ord_: list[tuple[float, float, float, str]], tolerance: floa
     linjer: list[tuple[float, list[Ord]]] = []
     for top, x0, x1, t in sorted(ord_):
         if linjer and abs(linjer[-1][0] - top) <= tolerance:
-            linjer[-1][1].append(Ord(t, x0, x1))
+            linjer[-1] = (top, linjer[-1][1] + [Ord(t, x0, x1)])  # følg linjen, hvis den "hopper" lidt
         else:
             linjer.append((top, [Ord(t, x0, x1)]))
     return [sorted(l, key=lambda o: o.x0) for _, l in linjer]
@@ -119,10 +119,21 @@ def _sider_med_tekst(sti: Path) -> list[list[list[Ord]]]:
     sider = []
     with pdfplumber.open(sti) as pdf:
         for side in pdf.pages:
-            ord_ = [(w["top"], w["x0"], w["x1"], w["text"]) for w in side.extract_words(keep_blank_chars=False)
-                    if w.get("upright", True)]
-            sider.append(_linjer_fra_ord(ord_, tolerance=3))
+            ord_ = [(w["top"], w["x0"], w["x1"], w["text"]) for w in side.extract_words() if w.get("upright", True)]
+            sider.append([_saml_roerende(l) for l in _linjer_fra_ord(ord_, tolerance=3)])
     return sider
+
+
+def _saml_roerende(linje: list[Ord]) -> list[Ord]:
+    """Nogle PDF'er (fx Stark) skriver tegnene enkeltvis, så ordene bliver til '2 3 -0 9 -2 6'.
+    Ord, der rører hinanden (intet mellemrum), samles igen."""
+    samlet: list[Ord] = []
+    for o in linje:
+        if samlet and abs(o.x0 - samlet[-1].x1) < 0.5:
+            samlet[-1] = Ord(samlet[-1].tekst + o.tekst, samlet[-1].x0, o.x1)
+        else:
+            samlet.append(o)
+    return samlet
 
 
 def _sider_med_ocr(sti: Path) -> list[list[list[Ord]]]:
