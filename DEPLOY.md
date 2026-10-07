@@ -99,6 +99,22 @@ docker run --rm -it caddy:2 caddy hash-password
 Skriv adgangskoden to gange (den vises ikke). Kopiér svaret (starter med `$2a$`) ind i
 `.env` i **enkelte anførselstegn**: `BASIC_AUTH_HASH='$2a$14$...'`
 
+**Tjek `.env`, før du starter** (viser kun udfyldt/mangler – aldrig værdierne):
+```bash
+for v in APP_ENV POSTGRES_PASSWORD DATABASE_URL CREDENTIALS_KEY ECONOMIC_APP_SECRET_TOKEN DOMAIN BASIC_AUTH_USER BASIC_AUTH_HASH; do grep -qE "^$v=.+" .env && echo "$v: udfyldt" || echo "$v: MANGLER"; done
+pw1=$(grep -E '^POSTGRES_PASSWORD=' .env | cut -d= -f2- | tr -d "'\""); pw2=$(grep -E '^DATABASE_URL=' .env | sed -E 's#.*://[^:]+:([^@]*)@.*#\1#'); [ "$pw1" = "$pw2" ] && echo "adgangskoderne er ens" || echo "adgangskoderne er FORSKELLIGE"
+grep -q "^BASIC_AUTH_HASH='" .env && echo "hash i enkelte anførselstegn: ja" || echo "hash i enkelte anførselstegn: NEJ"
+```
+
+> **To faldgruber**
+> - Databasen husker den adgangskode, den fik **første gang** den startede. Står
+>   `POSTGRES_PASSWORD` og koden i `DATABASE_URL` ikke ens, fejler `migrate` med
+>   "password authentication failed". Er databasen stadig TOM, rettes det med
+>   `docker compose -f docker-compose.prod.yml down -v` og en ny start. Brug ALDRIG
+>   `down -v`, når der ligger rigtige data – den sletter databasen.
+> - `BASIC_AUTH_HASH` indeholder `$`. Står den ikke i enkelte anførselstegn, læser
+>   Docker dele af den som variabler ("variable is not set"), og adgangskoden virker ikke.
+
 ## Trin 5 · Start det hele
 
 ```bash
