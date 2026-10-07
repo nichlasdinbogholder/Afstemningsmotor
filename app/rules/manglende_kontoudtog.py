@@ -9,6 +9,9 @@ Grossisterne sender udtogene op til 10. hverdag i måneden efter. En måned tjek
 først fra FRIST_HVERDAG (10.) hverdag i den følgende måned (weekender og danske
 helligdage tæller ikke). Reglen køres hver nat, men giver først fund, når fristen er nået.
 
+Der meldes kun for måneder fra kundens `kontoudtog_fra` (tom = måneden, kunden blev oprettet
+i systemet) – så en ny kunde ikke får fund for måneder, der blev afstemt før systemet.
+
 Læser kun vores egen database (suppliers, entries, statements) – med SQL, så adapter-laget
 ikke trækkes med.
 """
@@ -33,8 +36,11 @@ MANGLER_SQL = text("""
     JOIN entries e ON e.client_id = s.client_id
                   AND e.modpart = 'kreditor:' || s.leverandoernummer
                   AND e.dato BETWEEN :fra AND :til
+    JOIN clients c ON c.id = s.client_id
     WHERE s.client_id = :client_id
       AND s.gruppe = :gruppe
+      -- kun fra den måned, kontoudtogene skal afstemmes fra (tom = måneden, kunden blev oprettet)
+      AND :fra >= date_trunc('month', coalesce(c.kontoudtog_fra, c.oprettet::date))::date
       AND NOT EXISTS (
           SELECT 1 FROM statements st
           WHERE st.client_id = s.client_id

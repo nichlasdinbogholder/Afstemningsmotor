@@ -85,3 +85,6 @@ def test_opret_kunde(db_session, monkeypatch, capsys):
     assert (k.cvr, k.status, k.regnskabssystem) == ("12345678", "aktiv", "economic")
     assert "gem_token --kundenummer T-1045" in capsys.readouterr().out
     assert opret.main(["--navn", "Igen", "--kundenummer", "T-1045", "--system", "economic"]) == 2
+
+    assert opret.main(["--kundenummer", "T-1045", "--kontoudtog-fra", "2026-09-01"]) == 0
+    assert str(k.kontoudtog_fra) == "2026-09-01"

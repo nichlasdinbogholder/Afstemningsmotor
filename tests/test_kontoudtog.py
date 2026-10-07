@@ -385,6 +385,7 @@ def test_mangler_kontoudtog_fra_grossist(db_session, kunde, post, monkeypatch):
     from app.rules import manglende_kontoudtog as mk
 
     monkeypatch.setattr(mk, "i_dag", lambda: date(2026, 10, 14))  # 10. hverdag i oktober
+    kunde.kontoudtog_fra = date(2026, 5, 1)
     db_session.add_all([
         SupplierCache(client_id=kunde.id, leverandoernummer=45, navn="Bygma", gruppe=20000),
         SupplierCache(client_id=kunde.id, leverandoernummer=46, navn="Stark", gruppe=20000),
@@ -453,3 +454,16 @@ def test_pdf_indlaeses_og_grossisten_findes_ud_fra_cvr(tmp_path, db_session, kun
     u = db_session.scalars(select(Statement).where(Statement.client_id == kunde.id)).one()
     assert (u.kilde, u.modpart, u.fortegn, u.periode_fra, u.periode_til) == (
         "grossist", "kreditor:310", "modsat", date(2026, 9, 1), date(2026, 9, 30))
+
+
+def test_mangler_kontoudtog_kun_fra_kundens_startdato(db_session, kunde, post, monkeypatch):
+    from app.regnskab.models import SupplierCache
+    from app.rules import manglende_kontoudtog as mk
+
+    monkeypatch.setattr(mk, "i_dag", lambda: date(2026, 10, 14))
+    db_session.add(SupplierCache(client_id=kunde.id, leverandoernummer=46, navn="Stark", gruppe=20000))
+    for nr, dag in enumerate(("2026-07-05", "2026-08-05", "2026-09-05"), 1):
+        post(nr, dag, "-100.00", modpart="kreditor:46")
+    kunde.kontoudtog_fra = date(2026, 9, 15)   # midt i måneden tæller som hele september
+    _koer(db_session, kunde)
+    assert [f.detail["maaned"] for f in _fund(db_session, kunde, "mangler_kontoudtog")] == ["2026-09"]

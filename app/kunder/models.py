@@ -81,6 +81,8 @@ class Client(Base):
     regnskabssystem: Mapped[str | None] = mapped_column(String(20))
     aftalenummer: Mapped[str | None] = mapped_column(String(50))
     kassekladde_navn: Mapped[str | None] = mapped_column(String(255))
+    # Manglende kontoudtog fra grossister meldes fra denne måned (tom = måneden, kunden blev oprettet).
+    kontoudtog_fra: Mapped[date | None] = mapped_column(Date)
     momsperiode: Mapped[str | None] = mapped_column(String(20))
     loensystem: Mapped[str | None] = mapped_column(String(100))
     loenkoersel_dag: Mapped[int | None] = mapped_column(SmallInteger)

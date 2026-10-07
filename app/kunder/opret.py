@@ -2,6 +2,10 @@
 
     python -m app.kunder.opret --navn "Connect El ApS" --kundenummer 1045 --cvr 12345678 --system economic
     python -m app.kunder.opret --vis
+    python -m app.kunder.opret --kundenummer 1045 --kontoudtog-fra 2026-09-01   (ret en eksisterende kunde)
+
+--kontoudtog-fra: manglende kontoudtog fra grossister meldes fra denne måned
+(tom = måneden, kunden blev oprettet i systemet).
 
 Tokenet lægges ind bagefter med app.kunder.gem_token (skjult indtastning – aldrig som argument).
 Kunder slettes aldrig; brug status 'opsagt'. Oprettelsen logges i audit_log.
@@ -10,6 +14,7 @@ Kunder slettes aldrig; brug status 'opsagt'. Oprettelsen logges i audit_log.
 import argparse
 import getpass
 import sys
+from datetime import date
 
 from sqlalchemy import or_, select
 
@@ -26,13 +31,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--kundenummer", help="jeres kundenummer for kunden")
     parser.add_argument("--cvr", help="8 cifre")
     parser.add_argument("--system", choices=SYSTEMER, help="kundens regnskabssystem")
+    parser.add_argument("--kontoudtog-fra", type=date.fromisoformat,
+                        help="afstem kontoudtog fra denne dato (ÅÅÅÅ-MM-DD)")
     args = parser.parse_args(argv)
 
     with ny_session() as session:
         if args.vis:
             for k in session.scalars(select(Client).order_by(Client.navn)):
                 print(f"id {k.id:<6} kundenr. {k.kundenummer:<12} CVR {k.cvr or '-':<9} {k.status:<8} "
-                      f"{k.regnskabssystem or '-':<9} {k.navn}")
+                      f"{k.regnskabssystem or '-':<9} kontoudtog fra "
+                      f"{k.kontoudtog_fra.strftime('%d.%m.%Y') if k.kontoudtog_fra else 'oprettelsen':<11} {k.navn}")
+            return 0
+        if args.kundenummer and not args.navn and args.kontoudtog_fra:
+            kunde = session.scalars(select(Client).where(Client.kundenummer == args.kundenummer)).one_or_none()
+            if kunde is None:
+                print("Fejl: Kunden findes ikke", file=sys.stderr)
+                return 2
+            kunde.kontoudtog_fra = args.kontoudtog_fra
+            session.add(AuditLog(client_id=kunde.id, handling="kunde_rettet",
+                                 detaljer={"udfoert_af": getpass.getuser(),
+                                           "kontoudtog_fra": args.kontoudtog_fra.isoformat()}))
+            session.commit()
+            print(f"{kunde.navn}: kontoudtog afstemmes fra {args.kontoudtog_fra:%d.%m.%Y}.")
             return 0
         if not (args.navn and args.kundenummer and args.system):
             parser.error("angiv --navn, --kundenummer og --system")
@@ -45,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Fejl: Kunden findes allerede (id {findes.id}, {findes.navn})", file=sys.stderr)
             return 2
         kunde = Client(navn=args.navn, kundenummer=args.kundenummer, cvr=cvr, regnskabssystem=args.system,
-                       status="aktiv")
+                       status="aktiv", kontoudtog_fra=args.kontoudtog_fra)
         session.add(kunde)
         session.flush()
         session.add(AuditLog(client_id=kunde.id, handling="kunde_oprettet",
