@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401  (alle tabeller skal være kendt)
 from app.adaptere.regnskab.base import AccountingProvider, DelvisHentet, PosteringsSvar, hent_adapter
-from app.regnskab.models import CustomerCache, EntryCache, OpenEntryCache, SupplierCache
+from app.regnskab.models import AccountingYearCache, CustomerCache, EntryCache, JournalEntryCache, OpenEntryCache, SupplierCache
 from app.synk.tilstand import registrer_fejl, synk_transaktion
 
 log = logging.getLogger(__name__)
@@ -167,10 +167,41 @@ def _udfyld_partnavne(session: Session, client_id: int) -> None:
         )
 
 
+def synk_journals(session: Session, client_id: int, adapter: AccountingProvider | None = None) -> SynkResultat:
+    """Kassekladdernes linjer (ikke bogført). Altid fuldt: alt for kunden erstattes."""
+    with synk_transaktion(session, client_id, "journals") as synk:
+        with _adapter(session, client_id, adapter) as a:
+            linjer = []
+            for kladde in a.fetch_journals():
+                linjer += [{"client_id": client_id, "kladde_navn": kladde.navn, **asdict(p)}
+                           for p in a.fetch_journal_entries(kladde.nummer)]
+        fjernet = session.execute(delete(JournalEntryCache).where(JournalEntryCache.client_id == client_id)).rowcount
+        if linjer:
+            session.execute(insert(JournalEntryCache), linjer)
+        synk.gennemfoert(None, antal_hentet=len(linjer))
+    return SynkResultat("journals", len(linjer), fjernet)
+
+
+def synk_accounting_years(session: Session, client_id: int,
+                          adapter: AccountingProvider | None = None) -> SynkResultat:
+    """Regnskabsår og om de er afsluttet. Altid fuldt."""
+    with synk_transaktion(session, client_id, "accounting_years") as synk:
+        with _adapter(session, client_id, adapter) as a:
+            aar = a.fetch_accounting_years()
+        _upsert(session, AccountingYearCache, [{"client_id": client_id, **asdict(x)} for x in aar], ["navn"])
+        fjernet = session.execute(delete(AccountingYearCache).where(
+            AccountingYearCache.client_id == client_id,
+            AccountingYearCache.navn.not_in([x.navn for x in aar]))).rowcount
+        synk.gennemfoert(None, antal_hentet=len(aar))
+    return SynkResultat("accounting_years", len(aar), fjernet)
+
+
 # Rækkefølge ved fuld kørsel: kunder/leverandører før åbne poster (partnavne).
 SYNK_FUNKTIONER = {
+    "accounting_years": synk_accounting_years,
     "customers": synk_customers,
     "suppliers": synk_suppliers,
     "entries": synk_entries,
     "open_entries": synk_open_entries,
+    "journals": synk_journals,
 }

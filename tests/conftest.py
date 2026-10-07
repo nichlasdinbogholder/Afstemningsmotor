@@ -17,6 +17,12 @@ import app.models  # noqa: E402,F401  (registrerer alle tabeller)
 
 get_settings.cache_clear()
 
+# Indlæs adapterne én gang med det samme. Ellers kan første rigtige indlæsning ske midt i en
+# test og overskrive en falsk adapter, som testen har sat ind (monkeypatch af _FABRIKKER).
+from app.adaptere.regnskab import base as _adapter_base  # noqa: E402
+
+_adapter_base._indlaes()
+
 
 @pytest.fixture
 def token() -> str:

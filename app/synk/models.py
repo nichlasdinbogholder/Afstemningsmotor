@@ -18,6 +18,7 @@ from app.db import Base, kun_vaerdier
 
 RESSOURCER = (
     "accounts", "customers", "suppliers", "entries", "open_entries", "invoices", "journals",
+    "accounting_years",
 )
 CURSOR_TYPER = ("dato", "id", "token")
 SYNK_STATUSSER = ("ok", "forsinket", "fejlet", "deaktiveret")

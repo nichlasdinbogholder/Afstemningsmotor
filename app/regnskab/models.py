@@ -144,6 +144,48 @@ class EntryCache(Base):
     sidst_set: Mapped[datetime] = _sidst_set()
 
 
+class AccountingYearCache(Base):
+    """Kundens regnskabsår – og om de er afsluttet. Afsluttede år kan ikke rettes, så
+    reglerne kigger ikke i dem. Hentes fuldt hver gang."""
+
+    __tablename__ = "accounting_years"
+    __table_args__ = (UniqueConstraint("client_id", "navn", name="uq_accounting_years_kunde_aar"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    client_id: Mapped[int] = _kunde_id()
+    navn: Mapped[str] = mapped_column(String(20))
+    fra: Mapped[date | None] = mapped_column(Date)
+    til: Mapped[date | None] = mapped_column(Date)
+    lukket: Mapped[bool | None] = mapped_column(Boolean)
+    sidst_set: Mapped[datetime] = _sidst_set()
+
+
+class JournalEntryCache(Base):
+    """Linjer i kundens kassekladder – endnu IKKE bogført. Hentes fuldt hver gang (erstatter
+    alt for kunden), så bogførte/slettede linjer forsvinder. Bruges til at vise, at en manglende
+    faktura ligger klar i en kassekladde."""
+
+    __tablename__ = "journal_entries"
+    __table_args__ = (Index("ix_journal_entries_kunde", "client_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    client_id: Mapped[int] = _kunde_id()
+    kladde_nummer: Mapped[int] = mapped_column(Integer)
+    kladde_navn: Mapped[str | None] = mapped_column(String(255))
+    linje_id: Mapped[int | None] = mapped_column(BigInteger)
+    bilagsnummer: Mapped[int | None] = mapped_column(BigInteger)
+    dato: Mapped[date | None] = mapped_column(Date)
+    konto: Mapped[int | None] = mapped_column(Integer)
+    modkonto: Mapped[int | None] = mapped_column(Integer)
+    modpart: Mapped[str | None] = mapped_column(String(30))
+    fakturanummer: Mapped[str | None] = mapped_column(String(100))
+    tekst: Mapped[str | None] = mapped_column(Text)
+    beloeb: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    valuta: Mapped[str | None] = mapped_column(String(3))
+    entry_type: Mapped[str | None] = mapped_column(String(30))
+    sidst_set: Mapped[datetime] = _sidst_set()
+
+
 class OpenEntryCache(Base):
     __tablename__ = "open_entries"
     __table_args__ = (

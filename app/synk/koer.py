@@ -1,6 +1,6 @@
 """Kør synkronisering for én kunde manuelt – med det samme, uden om jobkøen.
 
-    python -m app.synk.koer --kundenummer 40850635                  # alle fire ressourcer
+    python -m app.synk.koer --kundenummer 40850635                  # alle ressourcer
     python -m app.synk.koer --kundenummer 40850635 --ressource entries
     python -m app.synk.koer --kundenummer 40850635 --i-koe          # læg i jobkøen i stedet
 

@@ -455,7 +455,7 @@ def test_hver_koersel_noteres_i_rule_runs(db_session, kunde, poster):
     _koer(db_session, kunde)
     koersler = db_session.scalars(select(RuleRun).where(RuleRun.client_id == kunde.id,
                                                        RuleRun.rule_code == REGEL)).all()
-    assert [(k.rule_code, k.rule_version, k.fund) for k in koersler] == [(REGEL, 10, 1), (REGEL, 10, 1)]
+    assert [(k.rule_code, k.rule_version, k.fund) for k in koersler] == [(REGEL, 11, 1), (REGEL, 11, 1)]
 
 
 # --- Status og log ---------------------------------------------------------------
@@ -520,7 +520,7 @@ def test_ingen_aendring_ingen_log(db_session, kunde, poster):
 def test_regel_er_registreret():
     regler = {r.code: r for r in alle_regler()}
     assert regler[REGEL].name_da == "Muligt dobbeltbogført beløb"
-    assert regler[REGEL].version == 10
+    assert regler[REGEL].version == 11
 
 
 def test_jobtypen_run_rules(db_session, kunde, poster):
@@ -637,13 +637,32 @@ def test_regler_trækker_heller_ikke_provider_ind_ad_omveje():
     assert r.returncode == 0, r.stderr[-800:]
 
 
-def test_kun_de_seneste_12_maaneder(db_session, kunde, poster):
-    """Ældre år er typisk afsluttet – en dublet dér kan ikke rettes og meldes ikke (J).
-    De 12 måneder regnes fra kundens nyeste postering, ikke fra i dag."""
-    poster(1, "2025-03-02", 6903, "60.00")   # dublet, men 13 måneder før nyeste postering
+def test_afsluttede_regnskabsaar_springes_over(db_session, kunde, poster):
+    """J: et afsluttet år kan ikke rettes – dubletter dér meldes ikke."""
+    from app.regnskab.models import AccountingYearCache
+
+    db_session.add_all([
+        AccountingYearCache(client_id=kunde.id, navn="2025", fra=date(2025, 1, 1), til=date(2025, 12, 31),
+                            lukket=True),
+        AccountingYearCache(client_id=kunde.id, navn="2026", fra=date(2026, 1, 1), til=date(2026, 12, 31),
+                            lukket=False),
+    ])
+    poster(1, "2025-03-02", 6903, "60.00")
     poster(2, "2025-03-02", 6903, "60.00")
-    poster(3, "2026-04-02", 6904, "75.00")   # dublet inden for 12 måneder
+    poster(3, "2026-04-02", 6904, "75.00")
     poster(4, "2026-04-02", 6904, "75.00")
     _koer(db_session, kunde)
     fund = _fund(db_session, kunde)
     assert len(fund) == 1 and "75,00" in fund[0].title
+
+
+def test_mellemregning_er_ikke_dublet(db_session, kunde, poster):
+    """K: to ens overførsler samme dag på en mellemregning er normalt."""
+    from app.regnskab.models import Account
+
+    db_session.add(Account(tenant_id=kunde.id, system="economic", kontonummer=6860,
+                           navn="Mellemregning med anpartshaver", kontotype="status", raa_data={}))
+    poster(1, "2026-07-05", 6860, "10000.00", tekst="Overførsel")
+    poster(2, "2026-07-05", 6860, "10000.00", tekst="Overførsel")
+    _koer(db_session, kunde)
+    assert _fund(db_session, kunde) == []

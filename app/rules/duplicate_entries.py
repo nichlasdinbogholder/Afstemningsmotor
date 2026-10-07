@@ -21,8 +21,10 @@ Et par af posteringslinjer er et muligt dobbeltbogført beløb, når:
   konto (H) – rettelser bogføres med samme bilagsnummer,
 - ingen af dem er tilbageført: der findes ingen postering med MODSAT beløb på samme
   konto inden for vinduet (B).
-Kun de seneste MAANEDER_TILBAGE (12) måneder regnet fra kundens nyeste postering (J) – ældre år
-er typisk afsluttet med årsrapport, så en dublet dér kan ikke rettes og er kun støj.
+- ingen af posteringerne ligger i et AFSLUTTET regnskabsår (J) – dér kan intet rettes
+  (tabellen accounting_years; kendes årene ikke endnu, tjekkes alle år),
+- kontoen er ikke en MELLEMREGNING (K) – kontonavnet indeholder "mellemregning"; ens
+  overførsler samme dag er normale dér.
 Linjepar mellem de samme to bilag samles til ÉT fund (C) – så salgslinje, momslinje
 og banklinje fra samme dobbeltbogføring ikke giver tre fund.
 
@@ -74,7 +76,7 @@ from app.rules.base import FindingDraft, fingerprint, registrer_regel
 # som en mulig dublet. Kort vindue, så husleje, leasing og abonnementer ikke rammes.
 # Version 1 brugte 7 dage; sænket til 3 efter kontrollen på demo-aftalen.
 VINDUE_DAGE = 3
-MAANEDER_TILBAGE = 12
+MELLEMREGNING_NAVN = "%mellemregning%"
 
 # Periodisering: samme bilagsnummer på mindst PERIODISERING_DATOER forskellige datoer
 # inden for ±PERIODISERING_DAGE. Mindst 3 datoer, så et bilagsnummer, der blot går igen
@@ -148,6 +150,15 @@ WHERE a.client_id = :client_id
   AND (ba.modpart IS NULL OR bb.modpart IS NULL OR ba.modpart = bb.modpart)
   AND tilbagefoert.fundet IS NULL                   -- B (se LATERAL ovenfor)
   AND (CAST(:since AS date) IS NULL OR greatest(a.dato, b.dato) >= :since)
+  -- J: intet i afsluttede regnskabsår – dér kan intet rettes.
+  AND NOT EXISTS (
+      SELECT 1 FROM accounting_years y
+      WHERE y.client_id = :client_id AND y.lukket
+        AND (a.dato BETWEEN y.fra AND y.til OR b.dato BETWEEN y.fra AND y.til))
+  -- K: ikke på en mellemregningskonto.
+  AND a.kontonummer NOT IN (
+      SELECT kontonummer FROM accounts
+      WHERE tenant_id = :client_id AND navn ILIKE :mellemregning AND kontonummer IS NOT NULL)
 )
 SELECT k.*,
        -- F: rettet senere: modsat beløb på samme DRIFTSKONTO inden for :korrektion_dage.
@@ -241,28 +252,18 @@ def _bilag_noegle(r, side: str) -> tuple:
     return ("bilag", bilag)
 
 
-def _maaneder_foer(dag: date, maaneder: int) -> date:
-    aar, md = divmod(dag.year * 12 + dag.month - 1 - maaneder, 12)
-    return date(aar, md + 1, min(dag.day, 28))
-
-
 @registrer_regel
 class DuplicateEntries:
     code = "duplicate_entries"
-    version = 10
+    version = 11
     name_da = "Muligt dobbeltbogført beløb"
 
     def run(self, session: Session, client_id: int, since: date | None) -> list[FindingDraft]:
-        # J: kun de seneste 12 måneder (fra kundens nyeste postering, ikke fra i dag, så en kunde,
-        # der er bagud med bogføringen, stadig bliver tjekket).
-        nyeste = session.scalar(text("SELECT max(dato) FROM entries WHERE client_id = :c"), {"c": client_id})
-        if nyeste is not None:
-            graense = _maaneder_foer(nyeste, MAANEDER_TILBAGE)
-            since = max(since, graense) if since else graense
         par = session.execute(PAR_SQL, {
             "client_id": client_id, "vindue": VINDUE_DAGE, "since": since,
             "periode_datoer": PERIODISERING_DATOER, "periode_dage": PERIODISERING_DAGE,
             "korrektion_dage": KORREKTION_DAGE, "bank_navn": BANK_NAVN,
+            "mellemregning": MELLEMREGNING_NAVN,
         })
 
         # C: saml linjepar mellem de samme to bilag til ét fund.

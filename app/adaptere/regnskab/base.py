@@ -178,6 +178,16 @@ class KladdePost:
     beloeb: Decimal | None
     valuta: str | None
     entry_type: str | None
+    modpart: str | None = None        # "debitor:<nr>"/"kreditor:<nr>"
+    fakturanummer: str | None = None  # leverandørens fakturanummer på linjen
+
+
+@dataclass(frozen=True)
+class Regnskabsaar:
+    navn: str              # fx "2026" eller "2025/2026"
+    fra: date | None
+    til: date | None
+    lukket: bool | None    # afsluttet i regnskabssystemet (kan ikke ændres mere)
 
 
 @dataclass(frozen=True)
@@ -200,6 +210,7 @@ class AccountingProvider(Protocol):
     def fetch_open_entries(self) -> list[AabenPost]: ...
     def fetch_journals(self) -> list[Kassekladde]: ...
     def fetch_journal_entries(self, nummer: int) -> list[KladdePost]: ...
+    def fetch_accounting_years(self) -> list[Regnskabsaar]: ...
     def __enter__(self) -> "AccountingProvider": ...
     def __exit__(self, *args) -> None: ...
 

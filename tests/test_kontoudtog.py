@@ -467,3 +467,23 @@ def test_mangler_kontoudtog_kun_fra_kundens_startdato(db_session, kunde, post, m
     kunde.kontoudtog_fra = date(2026, 9, 15)   # midt i måneden tæller som hele september
     _koer(db_session, kunde)
     assert [f.detail["maaned"] for f in _fund(db_session, kunde, "mangler_kontoudtog")] == ["2026-09"]
+
+
+def test_mangler_i_bogfoering_viser_at_fakturaen_ligger_i_kassekladde(db_session, kunde):
+    from app.regnskab.models import JournalEntryCache
+
+    db_session.add_all([
+        JournalEntryCache(client_id=kunde.id, kladde_nummer=3, kladde_navn="Indkøb", bilagsnummer=21800,
+                          dato=date(2026, 9, 9), konto=5800, beloeb=Decimal("953.53"),
+                          modpart="kreditor:45", fakturanummer="23582765"),
+        JournalEntryCache(client_id=kunde.id, kladde_nummer=3, kladde_navn="Indkøb", bilagsnummer=21801,
+                          dato=date(2026, 9, 12), konto=5800, beloeb=Decimal("-148.50"), modpart="kreditor:45"),
+    ])
+    _udtog(db_session, kunde, [("2026-09-09", "023582765", "953.53"),   # på fakturanummer
+                               ("2026-09-11", "999", "148.50"),         # på beløb og dato
+                               ("2026-09-20", "888", "77.00")])         # mangler helt
+    _koer(db_session, kunde)
+    titler = {f.detail["reference"]: f.title for f in _fund(db_session, kunde, I_BOGF)}
+    assert titler["023582765"].endswith("ligger i kassekladde Indkøb (bilag 21800), ikke bogført")
+    assert titler["999"].endswith("ligger i kassekladde Indkøb (bilag 21801), ikke bogført")
+    assert "kassekladde" not in titler["888"]

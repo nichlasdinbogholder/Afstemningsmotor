@@ -73,6 +73,9 @@ class FalskSystem:
     def fetch_journal_entries(self, nummer):
         return self.kladdelinjer
 
+    def fetch_accounting_years(self):
+        return []
+
 
 def _kladdelinje(linje, konto=9900, beloeb="2500.00"):
     return KladdePost(1, linje, 500 + linje, date(2026, 10, 1), konto, 5820, "Ukendt indbetaling",
@@ -181,9 +184,9 @@ def test_alle_trin_koerer_og_logges(db_session, system):
 
     r = koer_natkoersel(db_session, k.id)
 
-    assert r["status"] == "ok"
-    assert set(r["trin"]) == {"synk_kontoplan", "synk_customers", "synk_suppliers", "synk_entries",
-                              "synk_open_entries", "regler", "kassekladde"}
+    assert r["status"] == "ok", r["trin"]
+    assert set(r["trin"]) == {"synk_kontoplan", "synk_accounting_years", "synk_customers", "synk_suppliers",
+                              "synk_entries", "synk_open_entries", "synk_journals", "regler", "kassekladde"}
     assert all(s == "ok" for s in r["trin"].values()), r["trin"]
     assert r["kassekladde_fund"] == 1
     assert _seneste_audit(db_session, k.id).detaljer == r

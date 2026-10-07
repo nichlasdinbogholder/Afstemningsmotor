@@ -7,7 +7,8 @@ For hvert kontoudtog sammenlignes linjerne med posteringerne på udtogets modsty
            (feltet "Fakturanr." ved bogføringen) OG samme beløb. Foranstillede nuller tæller ikke.
   Trin 2 – samme beløb og dato inden for ±DATO_TOLERANCE dage.
   Trin 3 – resten er umatchet og bliver til fund:
-           `mangler_i_bogfoering`   – linje på udtoget uden postering i bogføringen
+           `mangler_i_bogfoering`   – linje på udtoget uden postering i bogføringen (ligger den
+                                      i en ubogført kassekladde, står det i fundet)
            `mangler_paa_kontoudtog` – postering i perioden uden linje på udtoget
 
 Hver linje og hver postering kan kun bruges i ét match. Inden for et trin vælges
@@ -157,6 +158,31 @@ def _udtog_detail(u: Statement) -> dict:
             "fortegn": u.fortegn, "kildefil": u.kildefil}
 
 
+KLADDE_SQL = text("""
+    SELECT kladde_nummer, kladde_navn, bilagsnummer, dato, konto, modkonto, modpart, fakturanummer, beloeb
+    FROM journal_entries WHERE client_id = :client_id
+""")
+
+
+def _i_kassekladde(kladde: list, u: Statement, l: StatementLine):
+    """Ligger linjen klar i en kassekladde (ikke bogført)? Først på fakturanummer, ellers samme
+    beløb inden for DATO_TOLERANCE på udtogets leverandør/konto. Fortegnet i en kladde følger
+    kladdens egen logik, så der sammenlignes uden fortegn."""
+    ref = _norm_ref(l.reference)
+    if ref:
+        for k in kladde:
+            if _norm_ref(k.fakturanummer) == ref:
+                return k
+    beloeb = abs(l.beloeb)
+    for k in kladde:
+        if (k.beloeb is not None and abs(k.beloeb) == beloeb and k.dato is not None
+                and abs((k.dato - l.dato).days) <= DATO_TOLERANCE
+                and ((u.modpart and k.modpart == u.modpart)
+                     or (u.kontonummer is not None and u.kontonummer in (k.konto, k.modkonto)))):
+            return k
+    return None
+
+
 @registrer_regel
 class ManglerIBogfoering:
     code = "mangler_i_bogfoering"
@@ -165,6 +191,7 @@ class ManglerIBogfoering:
 
     def run(self, session: Session, client_id: int, since: date | None) -> list[FindingDraft]:
         udkast = []
+        kladde = list(session.execute(KLADDE_SQL, {"client_id": client_id}))
         for r in match_kunde(session, client_id):
             u = r.udtog
             set_foer: Counter = Counter()
@@ -173,15 +200,22 @@ class ManglerIBogfoering:
                 noegle = (client_id, u.kilde, u.kontonummer, u.modpart, l.dato, (l.reference or "").strip(),
                           l.beloeb)
                 set_foer[noegle] += 1
+                k = _i_kassekladde(kladde, u, l)
+                i_kladde = (f" – ligger i kassekladde {k.kladde_navn or k.kladde_nummer}"
+                            f"{f' (bilag {k.bilagsnummer})' if k.bilagsnummer else ''}, ikke bogført") if k else ""
                 udkast.append(FindingDraft(
                     fingerprint=_hash("linje", *noegle, set_foer[noegle]),
                     severity="medium",
                     title=(f"Mangler i bogføring: {_kr(l.beloeb)} den {l.dato:%d.%m.%Y}"
                            f"{f' (ref. {l.reference})' if l.reference else ''} – kontoudtog fra "
-                           f"{u.kilde}, {_modstykke(u)}"),
+                           f"{u.kilde}, {_modstykke(u)}{i_kladde}"),
                     detail={**_udtog_detail(u), "linje_nr": l.linje_nr, "dato": l.dato.isoformat(),
                             "reference": l.reference, "tekst": l.tekst, "beloeb_paa_udtog": str(l.beloeb),
-                            "beloeb_i_bogfoering": str(_bogfoert_beloeb(u, l))},
+                            "beloeb_i_bogfoering": str(_bogfoert_beloeb(u, l)),
+                            "kassekladde": ({"nummer": k.kladde_nummer, "navn": k.kladde_navn,
+                                             "bilagsnummer": k.bilagsnummer,
+                                             "dato": k.dato.isoformat() if k.dato else None,
+                                             "beloeb": str(k.beloeb)} if k else None)},
                     entry_ids=[], period_start=l.dato, period_end=l.dato,
                 ))
         return udkast

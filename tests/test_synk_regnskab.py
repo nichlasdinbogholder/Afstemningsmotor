@@ -41,7 +41,7 @@ from app.kunder.models import Client, Credential
 from app.regnskab.models import CustomerCache, EntryCache, OpenEntryCache, SupplierCache
 from app.sikkerhed.hemmeligheder import HemmeligtToken
 from app.synk.planlaegger import planlaeg_dag
-from app.synk.ressourcer import synk_customers, synk_entries, synk_open_entries, synk_suppliers
+from app.synk.ressourcer import SYNK_FUNKTIONER, synk_customers, synk_entries, synk_open_entries, synk_suppliers
 from app.synk.tilstand import KundeIkkeAktiv, hent_cursor, hent_tilstand
 
 APP = Path(__file__).resolve().parent.parent / "app"
@@ -66,7 +66,8 @@ class SimuleretAdapter:
     system = "economic"
 
     def __init__(self, kunder=(), leverandoerer=(), poster=(), aabne=(), fejl=None,
-                 ignorer_cursor=False):
+                 ignorer_cursor=False, kladder=None):
+        self.kladder = kladder or {}  # {Kassekladde: [KladdePost, ...]}
         self.kunder, self.leverandoerer = list(kunder), list(leverandoerer)
         self.poster, self.aabne = list(poster), list(aabne)
         self.fejl = fejl or {}
@@ -103,6 +104,16 @@ class SimuleretAdapter:
     def fetch_open_entries(self):
         self._maaske_fejl("fetch_open_entries")
         return self.aabne
+
+    def fetch_journals(self):
+        self._maaske_fejl("fetch_journals")
+        return list(self.kladder)
+
+    def fetch_journal_entries(self, nummer):
+        return next(v for k, v in self.kladder.items() if k.nummer == nummer)
+
+    def fetch_accounting_years(self):
+        return []
 
 
 def _kunde(session, nr, status="aktiv", med_adgang=True, token="t"):
@@ -336,15 +347,15 @@ def test_planlaegger_fordeler_jaevnt_og_er_idempotent(db_session):
 
     foerste = planlaeg_dag(db_session)
     job = _planlagte(db_session, kunder)
-    assert len(job) == 3 * 4
+    assert len(job) == 3 * len(SYNK_FUNKTIONER)
     afstande = {(b.planlagt_til - a.planlagt_til) for a, b in zip(job, job[1:])}
     assert len(afstande) == 1 and min(afstande) >= timedelta(seconds=10)  # helt jævnt
-    assert job[0].type == "synk_customers" and job[3].type == "synk_open_entries"
-    assert re.fullmatch(rf"customers:{kunder[0].id}:\d{{4}}-\d{{2}}-\d{{2}}", job[0].idempotens_noegle)
+    assert [j.type for j in job[:len(SYNK_FUNKTIONER)]] == [f"synk_{r}" for r in SYNK_FUNKTIONER]
+    assert re.fullmatch(rf"accounting_years:{kunder[0].id}:\d{{4}}-\d{{2}}-\d{{2}}", job[0].idempotens_noegle)
 
     anden = planlaeg_dag(db_session)
     assert anden.nye_job == 0 and anden.fandtes == foerste.nye_job + foerste.fandtes
-    assert len(_planlagte(db_session, kunder)) == 12
+    assert len(_planlagte(db_session, kunder)) == 3 * len(SYNK_FUNKTIONER)
 
 
 def test_planlaegger_springer_slaaet_fra_ressourcer_over(db_session):
@@ -354,7 +365,7 @@ def test_planlaegger_springer_slaaet_fra_ressourcer_over(db_session):
     saet_deaktiveret(db_session, k.id, "entries", True)
     planlaeg_dag(db_session)
     assert {j.type for j in _planlagte(db_session, [k])} == {
-        "synk_customers", "synk_suppliers", "synk_open_entries"}
+        f"synk_{r}" for r in SYNK_FUNKTIONER if r != "entries"}
 
 
 def test_planlaegger_for_i_morgen_bruger_hele_doegnet(db_session):
@@ -362,7 +373,7 @@ def test_planlaegger_for_i_morgen_bruger_hele_doegnet(db_session):
     i_morgen = db_session.scalar(select(func.current_date())) + timedelta(days=1)
     planlaeg_dag(db_session, i_morgen)
     job = _planlagte(db_session, [k])
-    assert len(job) == 4
+    assert len(job) == len(SYNK_FUNKTIONER)
 
 
 # --- e-conomic-oversættelsen (gætter aldrig) --------------------------------
@@ -485,3 +496,45 @@ def test_leverandoerens_fakturanummer_og_leverandoergruppe_oversaettes():
                                "supplierGroup": {"supplierGroupNumber": 20000}})
     assert le.gruppe == 20000
     assert oversaet_leverandoer({"supplierNumber": 46, "name": "X"}).gruppe is None
+
+
+def test_kassekladder_hentes_fuldt_og_bogfoerte_linjer_forsvinder(db_session):
+    from app.adaptere.regnskab.base import Kassekladde, KladdePost
+    from app.regnskab.models import JournalEntryCache
+    from app.synk.ressourcer import synk_journals
+
+    kunde = _kunde(db_session, "KL-1")
+    k = Kassekladde(3, "Indkøb")
+    linje = lambda nr, faktura: KladdePost(3, nr, 21800 + nr, date(2026, 9, 9), 5800, None, "AO",  # noqa: E731
+                                           Decimal("-953.53"), "DKK", "supplierInvoice",
+                                           modpart="kreditor:58210617", fakturanummer=faktura)
+    synk_journals(db_session, kunde.id, SimuleretAdapter(kladder={k: [linje(1, "23582765"), linje(2, "1")]}))
+    raekker = db_session.scalars(select(JournalEntryCache).where(JournalEntryCache.client_id == kunde.id)).all()
+    assert sorted((r.kladde_navn, r.fakturanummer, r.modpart) for r in raekker) == [
+        ("Indkøb", "1", "kreditor:58210617"), ("Indkøb", "23582765", "kreditor:58210617")]
+    # Linje 2 er bogført i mellemtiden – den forsvinder fra kladden og fra vores kopi.
+    synk_journals(db_session, kunde.id, SimuleretAdapter(kladder={k: [linje(1, "23582765")]}))
+    assert db_session.scalar(select(func.count()).select_from(JournalEntryCache).where(
+        JournalEntryCache.client_id == kunde.id)) == 1
+
+
+def test_kladdepost_faar_leverandoer_og_fakturanummer():
+    from app.adaptere.economic.adapter import oversaet_kladdepost
+
+    p = oversaet_kladdepost(3, {"journalEntryNumber": 7, "entryType": "supplierInvoice", "amount": 953.53,
+                                "supplier": {"supplierNumber": 58210617}, "supplierInvoiceNumber": "23582765"})
+    assert (p.modpart, p.fakturanummer) == ("kreditor:58210617", "23582765")
+
+
+def test_regnskabsaar_med_afsluttet_markering():
+    from app.adaptere.economic.adapter import EconomicAdapter
+
+    class Klient:
+        def hent_alle(self, sti):
+            assert sti == "/accounting-years"
+            return [{"year": "2025", "fromDate": "2025-01-01", "toDate": "2025-12-31", "closed": True},
+                    {"year": "2026", "fromDate": "2026-01-01", "toDate": "2026-12-31", "closed": False}]
+
+    aar = EconomicAdapter(Klient()).fetch_accounting_years()
+    assert [(a.navn, a.fra, a.lukket) for a in aar] == [("2025", date(2025, 1, 1), True),
+                                                        ("2026", date(2026, 1, 1), False)]

@@ -12,7 +12,7 @@ Endpoints og felter (fra e-conomics JSON-skemaer, restapi.e-conomic.com):
 - /journals/{nr}/entries : journalEntryNumber, voucher.voucherNumber, date,
                    account.accountNumber, contraAccount.accountNumber, text, amount,
                    currency.code, entryType                (kladdelinjer, ikke bogført)
-- /accounting-years                 : year ("2026" eller "2025/2026")
+- /accounting-years                 : year ("2026" eller "2025/2026"), fromDate, toDate, closed
 - /accounting-years/{år}/entries    : entryNumber, voucherNumber, date, dueDate,
                    account.accountNumber, text, amount, amountInBaseCurrency, currency, entryType,
                    customer.customerNumber, supplier.supplierNumber, invoiceNumber,
@@ -48,6 +48,7 @@ from app.adaptere.regnskab.base import (
     Leverandoer,
     Postering,
     PosteringsSvar,
+    Regnskabsaar,
     registrer_adapter,
 )
 from app.config import get_settings
@@ -216,6 +217,8 @@ def oversaet_kladdepost(kladde_nummer: int, d: dict) -> KladdePost:
         beloeb=_decimal(d.get("amount")),
         valuta=_nummer(d.get("currency"), "code"),
         entry_type=d.get("entryType"),
+        modpart=_modpart(d),
+        fakturanummer=_tekst(d.get("supplierInvoiceNumber") or d.get("invoiceNumber")),
     )
 
 
@@ -238,6 +241,11 @@ class EconomicAdapter:
         """Regnskabsårene, ældste først (fx "2025/2026" før "2026"), kodet til adressen."""
         aar = [_kraev(a, "year", "et regnskabsår") for a in self._klient.hent_alle("/accounting-years")]
         return [kod_id(a) for a in sorted(aar)]
+
+    def fetch_accounting_years(self) -> list[Regnskabsaar]:
+        return [Regnskabsaar(navn=str(_kraev(a, "year", "et regnskabsår")), fra=_dato(a.get("fromDate")),
+                             til=_dato(a.get("toDate")), lukket=a.get("closed"))
+                for a in self._klient.hent_alle("/accounting-years")]
 
     def fetch_accounts(self) -> list[Konto]:
         return [oversaet_konto(d) for d in self._klient.hent_alle("/accounts")]

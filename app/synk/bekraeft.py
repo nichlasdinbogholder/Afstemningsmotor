@@ -4,7 +4,7 @@
 
 Kommandoen:
 1. tjekker forudsætninger (database opdateret, kunde aktiv, adgang og app-nøgle),
-2. kører en synkronisering af alle fire ressourcer,
+2. kører en synkronisering af alle ressourcer,
 3. henter data fra systemet IGEN (direkte via adapteren) og sammenligner med
    det, der ligger i databasen,
 4. kører posteringer én gang til og tjekker, at intet bliver dobbelt, og at
@@ -80,7 +80,7 @@ def bekraeft(session: Session, kundenummer: str, adapter_fabrik=hent_adapter,
     if tjek.fejl:
         return _slut(tjek)
 
-    print("2. Synkronisering af alle fire ressourcer")
+    print("2. Synkronisering af alle ressourcer")
     for ressource, funktion in SYNK_FUNKTIONER.items():
         try:
             with adapter_fabrik(session, kunde.id) as adapter:
@@ -140,8 +140,8 @@ def bekraeft(session: Session, kundenummer: str, adapter_fabrik=hent_adapter,
 
     tilstande = session.scalars(select(SyncState).where(
         SyncState.client_id == kunde.id, SyncState.ressource.in_(list(SYNK_FUNKTIONER)))).all()
-    tjek(len(tilstande) == 4 and all(t.status == "ok" and t.antal_fejl_i_traek == 0 for t in tilstande),
-         "sync_state: alle fire ressourcer står som 'ok' uden fejl",
+    tjek(len(tilstande) == len(SYNK_FUNKTIONER) and all(t.status == "ok" and t.antal_fejl_i_traek == 0 for t in tilstande),
+         "sync_state: alle ressourcer står som 'ok' uden fejl",
          ", ".join(f"{t.ressource}={t.status}" for t in tilstande))
     return _slut(tjek)
 

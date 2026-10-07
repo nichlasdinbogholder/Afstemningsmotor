@@ -103,8 +103,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   tokens). Stopper hentningen midtvejs, gemmes det hentede (`DelvisHentet`), og bogmærket
   flyttes kun, hvis det er sikkert (sidste regnskabsår + stigende entryNumber).
 - Kun GET mod e-conomic: `tests/test_entries_economic.py` fejler ved post/put/patch/delete.
-- `app/synk/ressourcer.py` – `synk_customers/suppliers/entries/open_entries(session,
-  client_id)`: cursor -> adapter -> upsert i cache-tabel -> ny cursor, i ÉN transaktion.
+- `app/synk/ressourcer.py` – `synk_accounting_years/customers/suppliers/entries/open_entries/journals(session,
+  client_id)` (regnskabsår med `lukket`, kassekladdelinjer i `journal_entries` – begge altid fuldt): cursor -> adapter -> upsert i cache-tabel -> ny cursor, i ÉN transaktion.
   Åbne poster altid fuldt (betalte fjernes); entries inkrementelt.
 - `app/synk/jobs.py` – jobtyperne `synk_<ressource>`; rate limit -> `UdskydJob`.
 - `app/synk/planlaegger.py` – lægger dagens job i kø for aktive kunder, jævnt
@@ -138,9 +138,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     opdaterer kun last_seen_at/detail/severity/updated_at. Status røres ALDRIG af en kørsel.
   - `status.py`: `saet_status(...)` – ENESTE sted, der ændrer status. Trigger skriver finding_events
     og afviser statusændring uden actor. findings/finding_events kan ikke slettes.
-  - `duplicate_entries.py`: dubletregel v9 (self join, samme konto, tekst og posteringstype; modkonto skal være bank;
+  - `duplicate_entries.py`: dubletregel v11 (self join, samme konto, tekst og posteringstype; modkonto skal være bank;
     rettet senere og rettelsesbilag udelukkes, `VINDUE_DAGE = 3`, forskellig
-    kunde/leverandør på bilaget og tilbageførte beløb udelukkes, ét fund pr. bilagspar).
+    kunde/leverandør på bilaget og tilbageførte beløb udelukkes, ét fund pr. bilagspar; AFSLUTTEDE
+    regnskabsår (`accounting_years.lukket`) og konti med "mellemregning" i navnet springes over).
     `scripts/maal_dubletfund.sql` måler, hvorfor fundene opstår (kun læsning).
     `rule_runs` logger hver kørsel; `findings` viser kun aktuelle fund (`--alle` viser også gamle). `jobs.py`: jobtype `run_rules`,
     planlægges kl. 23:30 for aktive kunder af `python -m app.jobs.worker --planlaeg`.
@@ -165,11 +166,14 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/rules/kontoudtog.py` – MATCHMOTOREN (to regler): trin 1 reference = bilagsnummer ELLER
   entries.fakturanummer (leverandørens fakturanr.; foranstillede nuller ignoreres) + beløb,
   trin 2 beløb + dato ±5 dage (`DATO_TOLERANCE`), resten → findings `mangler_i_bogfoering` /
-  `mangler_paa_kontoudtog`. Én-til-én; match gemmes i `statement_lines.match_entry_id/match_trin`.
+  `mangler_paa_kontoudtog`. Ligger en manglende linje i en ubogført kassekladde (`journal_entries`, på
+  fakturanummer eller beløb ±5 dage), står det i fundets titel og `detail.kassekladde`. Én-til-én; match gemmes i `statement_lines.match_entry_id/match_trin`.
   Uafhængig af kilden. Læser posteringer med SQL (ikke EntryCache), så adapter-laget ikke trækkes med.
   `scripts/matchprocent.sql`: matchprocent pr. kunde.
 - `app/rules/manglende_kontoudtog.py` – fund `mangler_kontoudtog`: leverandør i gruppe 20000 (grossister,
   `suppliers.gruppe`) med posteringer i en af de 3 seneste hele måneder, men intet kontoudtog for måneden.
+  Først fra 10. hverdag i måneden efter (helligdage tæller ikke) og kun fra `clients.kontoudtog_fra`
+  (tom = måneden, kunden blev oprettet). Sæt: `python -m app.kunder.opret --kundenummer <nr> --kontoudtog-fra ÅÅÅÅ-MM-DD`.
 - `app/natkoersel/` – NATKØRSLEN (erstatter på serveren den gamle planlægger `worker --kun-planlaeg`):
   - `scheduler.py`: APScheduler i egen proces (`python -m app.natkoersel.scheduler`, compose-tjenesten
     `scheduler`). Kl. 05:00 dansk tid mandag–fredag: ét `natkoersel_kunde`-job pr. aktiv kunde med
