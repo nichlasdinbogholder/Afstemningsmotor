@@ -316,16 +316,30 @@ def fang_sentry():
     sentry_sdk.init(dsn=None)
 
 
-def test_debug_boom_lander_i_sentry_uden_authorization_header(fang_sentry):
+def test_fejl_i_webdelen_lander_i_sentry_uden_authorization_header(fang_sentry):
+    """En fejlside, der kun findes under testen (den rigtige /debug/boom er fjernet igen)."""
+    from fastapi import FastAPI
+
+    test_app = FastAPI()
+
+    @test_app.get("/test-boom")
+    def test_boom():
+        raise RuntimeError("Test af Sentry fra webdelen")
+
     sendt = fang_sentry("api")
-    klient = TestClient(api.app, raise_server_exceptions=False)
-    svar = klient.get("/debug/boom", headers={"Authorization": "Basic hemmelig-base64"})
+    hemmelig = secrets.token_urlsafe(16)  # tilfældig, så den ikke står i kildekoden
+    svar = TestClient(test_app, raise_server_exceptions=False).get(
+        "/test-boom", headers={"Authorization": f"Basic {hemmelig}"})
     sentry_sdk.flush()
     assert svar.status_code == 500
     assert len(sendt) == 1
     haendelse = sendt[0]
-    assert haendelse["exception"]["values"][-1]["value"] == "Test af Sentry: /debug/boom"
-    assert "hemmelig-base64" not in json.dumps(haendelse)
+    assert haendelse["exception"]["values"][-1]["value"] == "Test af Sentry fra webdelen"
+    assert hemmelig not in json.dumps(haendelse)
+
+
+def test_debug_boom_er_fjernet_igen():
+    assert TestClient(api.app).get("/debug/boom").status_code == 404
 
 
 def test_fejl_i_et_job_lander_i_sentry_med_job_tags(fang_sentry, db_session, token):
