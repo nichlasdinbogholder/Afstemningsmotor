@@ -1,10 +1,17 @@
-"""Indlæs et kontoudtog fra en CSV-fil (indtil indlæsning fra mail/SharePoint er bygget).
+"""Indlæs et kontoudtog fra en PDF- eller CSV-fil (indtil indlæsning fra mail/SharePoint er bygget).
+
+    python -m app.kontoudtog.importer --kundenummer 40850635 --kilde grossist \\
+        --kreditor 45 --fortegn modsat --fil bygma.pdf
 
     python -m app.kontoudtog.importer --kundenummer 40850635 --kilde grossist \\
         --kreditor 45 --fra 2026-09-01 --til 2026-09-30 --fortegn modsat --fil udtog.csv
 
     python -m app.kontoudtog.importer --kundenummer 40850635 --kilde skattekonto \\
         --konto 6710 --fra 2026-09-01 --til 2026-09-30 --fortegn samme --fil skattekonto.csv
+
+PDF: aflæses af app.kontoudtog.pdf (alle layouts; indscannede via tekstgenkendelse). Perioden
+tages fra udtoget, medmindre --fra/--til er angivet. Indlæses KUN, hvis primo + linjer =
+ultimo på øret – ellers afvises filen, og en medarbejder må se på den.
 
 CSV-filen skal have kolonnerne dato, reference, tekst og beløb (overskrift i første linje;
 semikolon eller komma). Datoer som 2026-09-03, 03-09-2026 eller 03.09.2026. Beløb som
@@ -30,6 +37,7 @@ from sqlalchemy import select
 import app.models  # noqa: F401
 from app.db import ny_session
 from app.kontoudtog.models import FORTEGN, KILDER, Statement, StatementLine
+from app.kontoudtog.pdf import PdfFejl, laes_pdf
 from app.kunder.models import Client
 
 
@@ -89,14 +97,14 @@ def indlaes(session, client_id: int, kilde: str, fra: date, til: date, fortegn: 
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Indlæs et kontoudtog fra en CSV-fil.")
+    parser = argparse.ArgumentParser(description="Indlæs et kontoudtog fra en PDF- eller CSV-fil.")
     parser.add_argument("--kundenummer", required=True)
     parser.add_argument("--kilde", required=True, choices=KILDER)
     parser.add_argument("--konto", type=int, help="finanskonto i bogføringen")
     parser.add_argument("--kreditor", type=int, help="leverandørnummer")
     parser.add_argument("--debitor", type=int, help="kundenummer (debitor)")
-    parser.add_argument("--fra", required=True, type=date.fromisoformat)
-    parser.add_argument("--til", required=True, type=date.fromisoformat)
+    parser.add_argument("--fra", type=date.fromisoformat, help="påkrævet for CSV; for PDF tages den fra udtoget")
+    parser.add_argument("--til", type=date.fromisoformat, help="påkrævet for CSV; for PDF tages den fra udtoget")
     parser.add_argument("--fortegn", required=True, choices=FORTEGN)
     parser.add_argument("--fil", required=True, type=Path)
     args = parser.parse_args(argv)
@@ -106,20 +114,34 @@ def main(argv: list[str] | None = None) -> int:
     if args.konto is None and modpart is None:
         parser.error("angiv --konto og/eller --kreditor/--debitor (hvad udtoget skal sammenlignes med)")
 
+    fra, til = args.fra, args.til
     try:
-        linjer = laes_csv(args.fil)
-    except (IndlaesningsFejl, OSError, csv.Error) as fejl:
+        if args.fil.suffix.lower() == ".pdf":
+            pdf = laes_pdf(args.fil)
+            print(pdf.kontrol_tekst())
+            for advarsel in pdf.advarsler:
+                print(f"Advarsel: {advarsel}")
+            if not pdf.kontrol_ok:
+                print("Fejl: Udtoget er ikke læst sikkert (primo + linjer giver ikke ultimo) – indlæses ikke. "
+                      "Se det igennem med: python -m app.kontoudtog.pdf " + args.fil.name, file=sys.stderr)
+                return 1
+            linjer, fra, til = pdf.linjer, fra or pdf.periode_fra, til or pdf.periode_til
+        else:
+            linjer = laes_csv(args.fil)
+    except (IndlaesningsFejl, PdfFejl, OSError, csv.Error) as fejl:
         print(f"Fejl: {fejl}", file=sys.stderr)
         return 2
+    if fra is None or til is None:
+        parser.error("angiv --fra og --til")
     with ny_session() as session:
         kunde = session.scalars(select(Client).where(Client.kundenummer == args.kundenummer)).one_or_none()
         if kunde is None:
             print("Fejl: Kunden findes ikke", file=sys.stderr)
             return 2
-        udtog = indlaes(session, kunde.id, args.kilde, args.fra, args.til, args.fortegn, linjer,
+        udtog = indlaes(session, kunde.id, args.kilde, fra, til, args.fortegn, linjer,
                         args.konto, modpart, args.fil.name)
         session.commit()
-    print(f"Indlæst {len(linjer)} linjer som kontoudtog #{udtog.id} ({args.kilde}, {args.fra} – {args.til}).")
+    print(f"Indlæst {len(linjer)} linjer som kontoudtog #{udtog.id} ({args.kilde}, {fra} – {til}).")
     print(f"Match nu med: python -m app.cli run-rules {kunde.id}")
     return 0
 

@@ -6,6 +6,9 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
+# Tekstgenkendelse til indscannede kontoudtog (dansk). Kører lokalt – intet sendes ud.
+RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-dan \
+    && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 

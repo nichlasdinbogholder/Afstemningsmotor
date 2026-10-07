@@ -219,3 +219,112 @@ def test_csv_uden_beloeb_kolonne_afvises(tmp_path):
     fil.write_text("dato;tekst\n03.09.2026;x\n", encoding="utf-8")
     with pytest.raises(IndlaesningsFejl, match="beloeb"):
         laes_csv(fil)
+
+
+# --- PDF-kontoudtog -------------------------------------------------------------------
+# Opdigtede udtog i de layouts, grossisterne bruger. Rigtige udtog lægges ALDRIG i repoet
+# (de indeholder kundedata).
+
+from app.kontoudtog import importer  # noqa: E402
+from app.kontoudtog import pdf as pdf_modul  # noqa: E402
+from app.kontoudtog.pdf import laes_pdf, tolk_pdf_beloeb  # noqa: E402
+
+
+def _lav_pdf(sti, linjer, x=(20, 45, 75, 130, 165), skrift=9):
+    """Skriv en simpel PDF: hver linje er en liste af (kolonne, tekst); tal højrestilles."""
+    from fpdf import FPDF
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=skrift)
+    y = 20
+    for linje in linjer:
+        for kol, tekst in linje:
+            bredde = pdf.get_string_width(tekst)
+            hoejre = kol >= len(x) - 2 and any(c.isdigit() for c in tekst) and "," in tekst
+            pdf.text(x[kol] - bredde if hoejre else x[kol], y, tekst)
+        y += 6
+    pdf.output(str(sti))
+    return sti
+
+
+@pytest.mark.parametrize("tekst, forventet", [
+    ("1.234,56", Decimal("1234.56")), ("116,55-", Decimal("-116.55")), ("-16.286,74", Decimal("-16286.74")),
+])
+def test_pdf_beloeb_med_minus_foran_og_bagved(tekst, forventet):
+    assert tolk_pdf_beloeb(tekst) == forventet
+
+
+def test_pdf_med_beloeb_og_saldo_kolonne(tmp_path):
+    """Som Brdr. Dahl: både Beløb og Saldo; en forfaldsoversigt efter ultimo tælles ikke med."""
+    fil = _lav_pdf(tmp_path / "a.pdf", [
+        [(0, "KONTOUDTOG")], [(0, "Periode 01-09-2026 - 30-09-2026")],
+        [(0, "Bilagsdato"), (1, "Bilagsnr"), (2, "Tekst"), (3, "Beløb"), (4, "Saldo")],
+        [(2, "Primo saldo"), (4, "1.000,00")],
+        [(0, "08-09-2026"), (1, "112115989"), (2, "FAKT/KN"), (3, "2.500,00"), (4, "3.500,00")],
+        [(0, "21-09-2026"), (1, "31014384"), (2, "INDBET."), (3, "-1.000,00"), (4, "2.500,00")],
+        [(2, "Ultimo saldo DKK"), (4, "2.500,00")],
+        [(0, "Forfaldsdato"), (3, "Beløb")], [(0, "20-10-2026"), (2, "DKK"), (3, "2.500,00")],
+    ])
+    u = laes_pdf(fil)
+    assert u.kontrol_ok and not u.ocr
+    assert [(l["dato"], l["reference"], l["beloeb"]) for l in u.linjer] == [
+        (date(2026, 9, 8), "112115989", Decimal("2500.00")), (date(2026, 9, 21), "31014384", Decimal("-1000.00"))]
+    assert (u.periode_fra, u.periode_til) == (date(2026, 9, 1), date(2026, 9, 30))
+
+
+def test_pdf_med_debet_og_kredit(tmp_path):
+    """Som Davidsen: betalinger står i Kredit og bliver negative; ingen periode -> linjernes datoer."""
+    fil = _lav_pdf(tmp_path / "b.pdf", [
+        [(0, "DATO"), (1, "BILAGSNR."), (2, "TEKST"), (3, "DEBET"), (4, "KREDIT")],
+        [(2, "OVERFØRT"), (3, "500,00")],
+        [(0, "01-12-2025"), (1, "11225"), (2, "FI-INDBETALING"), (4, "500,00")],
+        [(0, "17-12-2025"), (1, "3360"), (2, "RYKKERGEBYR"), (3, "100,00")],
+        [(2, "VORT TILGODEHAVENDE"), (4, "100,00")],
+    ])
+    u = laes_pdf(fil)
+    assert [l["beloeb"] for l in u.linjer] == [Decimal("-500.00"), Decimal("100.00")]
+    assert u.kontrol_ok
+    assert (u.periode_fra, u.periode_til) == (date(2025, 12, 1), date(2025, 12, 17))
+
+
+def test_pdf_der_ikke_stemmer_indlaeses_ikke(tmp_path, db_session, kunde, monkeypatch, capsys):
+    fil = _lav_pdf(tmp_path / "c.pdf", [
+        [(0, "Dato"), (1, "Fakturanr."), (2, "Tekst"), (3, "Beløb")],
+        [(2, "Primosaldo"), (3, "0,00")],
+        [(0, "03-09-26"), (1, "077135372"), (2, "FAKTURA"), (3, "646,30")],
+        [(2, "Ultimosaldo DKK"), (3, "999,99")],
+    ])
+    monkeypatch.setattr(pdf_modul, "_sider_med_ocr", lambda sti: (_ for _ in ()).throw(importer.PdfFejl("ingen")))
+    kode = importer.main(["--kundenummer", "MATCH-1", "--kilde", "grossist", "--kreditor", "45",
+                          "--fortegn", "modsat", "--fil", str(fil)])
+    assert kode == 1
+    assert "STEMMER IKKE" in capsys.readouterr().out
+
+
+def test_indscannet_pdf_laeses_med_tekstgenkendelse(tmp_path):
+    import shutil
+
+    if shutil.which("tesseract") is None:
+        pytest.skip("tesseract er ikke installeret")
+    import pdfplumber
+    from fpdf import FPDF
+
+    tekst_pdf = _lav_pdf(tmp_path / "t.pdf", [
+        [(0, "Dato"), (1, "Fakturanr."), (2, "Tekst"), (3, "Beløb")],
+        [(2, "Primo saldo"), (3, "3.555,63")],
+        [(0, "010726"), (1, "017203487"), (2, "FAKTURA"), (3, "67,96")],
+        [(0, "310726"), (2, "BETALING"), (3, "3.555,63-")],
+        [(2, "Ultimo saldo DKK"), (3, "67,96")],
+    ], skrift=12)
+    with pdfplumber.open(tekst_pdf) as p:  # gør den til et billede uden tekst, som en scanning
+        p.pages[0].to_image(resolution=300).save(tmp_path / "scan.png")
+    scan = FPDF()
+    scan.add_page()
+    scan.image(str(tmp_path / "scan.png"), x=0, y=0, w=210)
+    scan.output(str(tmp_path / "scan.pdf"))
+
+    u = laes_pdf(tmp_path / "scan.pdf")
+    assert u.ocr and u.kontrol_ok
+    assert [(l["dato"], l["beloeb"]) for l in u.linjer] == [
+        (date(2026, 7, 1), Decimal("67.96")), (date(2026, 7, 31), Decimal("-3555.63"))]

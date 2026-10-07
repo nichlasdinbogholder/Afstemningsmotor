@@ -10,3 +10,4 @@ tenacity>=9
 uvicorn[standard]>=0.30
 sentry-sdk[fastapi]>=2.0
 apscheduler>=3.10,<4
+pdfplumber>=0.11

@@ -151,7 +151,12 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   `open_entries` med unik (client_id, systemets id)). Holdt adskilt fra CRM.
 - `app/kontoudtog/` – kontoudtog fra eksterne kilder: tabellerne `statements` (kilde grossist/skattekonto/
   bank/andet, modstykke = finanskonto og/eller `modpart` "kreditor:<nr>", periode, fortegn samme/modsat)
-  og `statement_lines`. `importer.py`: indlæs CSV (`python -m app.kontoudtog.importer …`).
+  og `statement_lines`. `importer.py`: indlæs PDF eller CSV (`python -m app.kontoudtog.importer …`).
+  - `pdf.py`: aflæser grossisters PDF-udtog uden skabelon pr. grossist (kolonneoverskrift Beløb/Debet/
+    Kredit/Saldo, linjer der starter med dato). Indscannede PDF'er læses med Tesseract (lokalt, dansk;
+    installeres i Dockerfile). KONTROL: primo + linjer = ultimo på øret, ellers indlæses udtoget ikke.
+    Prøv uden at gemme: `python -m app.kontoudtog.pdf <fil.pdf>`. Rigtige udtog må ALDRIG i repoet
+    (kundedata) – tests bruger opdigtede PDF'er (fpdf2).
 - `app/rules/kontoudtog.py` – MATCHMOTOREN (to regler): trin 1 reference = bilagsnummer + beløb,
   trin 2 beløb + dato ±5 dage (`DATO_TOLERANCE`), resten → findings `mangler_i_bogfoering` /
   `mangler_paa_kontoudtog`. Én-til-én; match gemmes i `statement_lines.match_entry_id/match_trin`.
