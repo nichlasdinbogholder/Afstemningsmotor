@@ -77,7 +77,7 @@ git checkout claude/blissful-darwin-4x5hkp     # (eller main, når den er flette
 cd /opt/afstemning
 cp .env.example .env
 chmod 600 .env
-openssl rand -base64 32      # → brug som POSTGRES_PASSWORD (gem den i adgangskodemanageren)
+openssl rand -hex 24         # → brug som POSTGRES_PASSWORD (kun 0-9 og a-f, så den ikke ødelægger DATABASE_URL)
 nano .env
 ```
 Udfyld i `.env`:
