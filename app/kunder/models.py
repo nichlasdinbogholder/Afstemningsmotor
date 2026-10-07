@@ -55,6 +55,9 @@ class Client(Base):
         CheckConstraint("antal_ansatte >= 0", name="antal_ansatte_ikke_negativ"),
         kun_vaerdier("payment_allocation_order", ("costs_first", "principal_first")),
         kun_vaerdier("dunning_mode", ("off", "preview")),
+        CheckConstraint("dunning_compensation_step BETWEEN 1 AND 3", name="kompensation_paa_rykker_1_3"),
+        CheckConstraint("reply_to_email IS NULL OR reply_to_email ~ '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$'",
+                        name="svar_email_gyldig"),
         CheckConstraint("dunning_first_after_days >= 1", name="foerste_rykker_efter_forfald"),
         CheckConstraint("dunning_interval_days >= 10", name="rykkerinterval_mindst_10"),
         CheckConstraint("dunning_min_amount >= 0", name="rykker_minimum_ikke_negativ"),
@@ -102,6 +105,10 @@ class Client(Base):
     # Første rykker tidligst N dage efter forfald; derefter mindst M dage mellem rykkerne (loven: >= 10).
     dunning_first_after_days: Mapped[int] = mapped_column(SmallInteger, server_default=text("10"))
     dunning_interval_days: Mapped[int] = mapped_column(SmallInteger, server_default=text("10"))
+    # Kompensationsbeløbet (310 kr., kun erhverv, én gang) lægges på denne rykker. FarPay: rykker 3.
+    dunning_compensation_step: Mapped[int] = mapped_column(SmallInteger, server_default=text("3"))
+    # Svar på en rykker går hertil (Reply-To) – KUNDENS egen adresse, aldrig rykker@dinbogholder.dk.
+    reply_to_email: Mapped[str | None] = mapped_column(String(255))
     # Rækkefølge, når en indbetaling fordeles: gebyrer/renter først eller hovedstolen først.
     payment_allocation_order: Mapped[str] = mapped_column(String(20), server_default="costs_first")
     fee_assignment_signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

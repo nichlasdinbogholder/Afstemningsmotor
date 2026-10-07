@@ -55,3 +55,15 @@ export const SPAERRE: Record<string, string> = {
 export const RYKKERTILSTAND: Record<string, string> = {
   off: "Slået fra", preview: "Prøvekørsel", live: "I drift",
 };
+
+export const SENDSTATUS: Record<string, { tekst: string; farve: string }> = {
+  queued: { tekst: "I kø", farve: "bg-slate-400 text-white" },
+  sent: { tekst: "Sendt", farve: "bg-emerald-600 text-white" },
+  failed: { tekst: "Fejlet", farve: "bg-red-600 text-white" },
+  bounced: { tekst: "Afvist", farve: "bg-red-600 text-white" },
+};
+
+export function adresselinjer(a: { adresse?: string | null; postnr?: string | null; by?: string | null } | null | undefined): string[] {
+  if (!a) return [];
+  return [a.adresse ?? "", [a.postnr, a.by].filter(Boolean).join(" ")].filter(Boolean);
+}

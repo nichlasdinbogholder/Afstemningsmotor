@@ -538,3 +538,43 @@ def test_regnskabsaar_med_afsluttet_markering():
     aar = EconomicAdapter(Klient()).fetch_accounting_years()
     assert [(a.navn, a.fra, a.lukket) for a in aar] == [("2025", date(2025, 1, 1), True),
                                                         ("2026", date(2026, 1, 1), False)]
+
+
+# --- Fakturaer til debitorstyringen: hoved og linjer (felter set i rå JSON) ----------
+
+
+FAKTURA_586 = {
+    "bookedInvoiceNumber": 586, "orderNumber": 450, "date": "2025-11-10", "currency": "DKK",
+    "netAmount": -556.0, "grossAmount": -695.0, "vatAmount": -139.0, "remainder": -695.0, "dueDate": "2025-11-18",
+    "customer": {"customerNumber": 62},
+    "recipient": {"name": "Modtager ApS", "address": "Vej 1", "zip": "2300", "city": "København S"},
+    "delivery": {"address": "Amager port 2", "zip": "2300", "city": "København S"},
+    "notes": {"heading": "Overskrift", "textLine1": "Tekst"}, "references": {"other": "26238 - 742"},
+    "lines": [{"lineNumber": 1, "description": "Spot", "quantity": -1.0, "unitNetPrice": 556.0,
+               "discountPercentage": 0.0, "unitCostPrice": 398.75, "totalNetAmount": -556.0,
+               "unit": {"unitNumber": 1, "name": "stk."}, "product": {"productNumber": "1001"}}],
+}
+
+
+def test_faktura_og_linjer_oversaettes_uden_kostpris(token):
+    kald = []
+
+    def e_conomic(request):
+        kald.append(request.url.path)
+        if request.url.path == "/invoices/booked":
+            return httpx.Response(200, json={"collection": [FAKTURA_586], "pagination": {"results": 1}})
+        return httpx.Response(200, json=FAKTURA_586)
+
+    klient = EconomicKlient(HemmeligtToken("app-" + token), HemmeligtToken(token),
+                            transport=httpx.MockTransport(e_conomic))
+    a = EconomicAdapter(klient)
+    [f] = a.fetch_invoices()
+    assert (f.ordrenummer, f.oevrig_ref, f.netto, f.moms, f.overskrift) == (
+        450, "26238 - 742", Decimal("-556.0"), Decimal("-139.0"), "Overskrift")
+    assert f.modtager == base.Adresse("Modtager ApS", "Vej 1", "2300", "København S")
+    assert f.levering == base.Adresse(None, "Amager port 2", "2300", "København S")
+    [linje] = a.fetch_invoice_lines(586)
+    assert linje == base.FakturaLinje(1, "1001", "Spot", Decimal("-1.0"), "stk.", Decimal("556.0"),
+                                      Decimal("0.0"), Decimal("-556.0"))
+    assert "398.75" not in repr(linje)
+    assert kald == ["/invoices/booked", "/invoices/booked/586"]

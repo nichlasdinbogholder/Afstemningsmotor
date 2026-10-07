@@ -152,6 +152,10 @@ class EconomicKlient:
                 f"Kunne ikke nå e-conomic efter {FORSOEG} forsøg ({type(fejl).__name__})"
             ) from None
 
+    def hent_en(self, sti: str) -> dict:
+        """Hent ét objekt (fx /invoices/booked/586)."""
+        return self._hent_side(sti, None)
+
     def hent_alle(self, sti: str, filter: str | None = None, sort: str | None = None) -> Iterator[dict]:
         """Hent alle rækker fra et liste-endpoint ved at følge `nextPage`."""
         url: str | None = sti

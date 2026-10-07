@@ -85,7 +85,8 @@ def test_kundeliste_med_forfaldne(klient, kunde):
 
 
 def test_debitor_blokeres_og_det_logges(klient, db_session, kunde):
-    d = next(x for x in klient.get(f"/api/opkraevning/{kunde.id}/debitorer").json() if x["nummer"] == "159")
+    d = next(x for x in klient.get(f"/api/opkraevning/{kunde.id}/debitorer").json()["debitorer"]
+             if x["nummer"] == "159")
     assert d["aabent"] == "8980.25" and d["aabne_fakturaer"] == 2
     assert klient.post(f"/api/opkraevning/debitor/{d['id']}", json={"blokeret": True}).status_code == 403
     svar = klient.post(f"/api/opkraevning/debitor/{d['id']}", headers=H,
@@ -129,3 +130,65 @@ def test_samme_spaerre_vises_kun_een_gang(klient, db_session, kunde):
     db_session.flush()
     data = klient.get(f"/api/opkraevning/{kunde.id}/rykkere").json()
     assert sorted(s["aarsag"] for s in data["spaerrer"]) == ["afbetalingsordning", "debitor_blokeret"]
+
+
+def test_debitorer_med_filtre_og_antal(klient, db_session, kunde):
+    data = klient.get(f"/api/opkraevning/{kunde.id}/debitorer").json()
+    assert data["antal"] == {"alt": 2, "med_aabne": 2, "ingen_kanal": 1, "blokeret": 0, "erhverv": 0}
+    ingen = klient.get(f"/api/opkraevning/{kunde.id}/debitorer?filter=ingen_kanal").json()["debitorer"]
+    assert [d["nummer"] for d in ingen] == ["159"]
+    assert klient.get(f"/api/opkraevning/{kunde.id}/debitorer?filter=nej").status_code == 422
+
+
+def test_eksport_logges_og_giver_excel_venlig_csv(klient, db_session, kunde):
+    d = db_session.scalars(select(Debtor).where(Debtor.client_id == kunde.id, Debtor.external_id == "30")).one()
+    d.name = "=HYPERLINK(\"x\")"
+    db_session.flush()
+    svar = klient.get(f"/api/opkraevning/{kunde.id}/eksport/fakturaer.csv?filter=forfaldet")
+    assert svar.status_code == 200 and "attachment" in svar.headers["content-disposition"]
+    tekst = svar.content.decode("utf-8-sig")
+    assert tekst.splitlines()[0].startswith("Kundenr.;Kunde;Fakturanr.")
+    assert "8492,75" in tekst and len(tekst.splitlines()) == 3        # overskrift + 2 forfaldne
+    debitorer = klient.get(f"/api/opkraevning/{kunde.id}/eksport/debitorer.csv").content.decode("utf-8-sig")
+    assert "'=HYPERLINK" in debitorer
+    log = db_session.scalars(select(AuditLog).where(AuditLog.handling == "eksport").order_by(AuditLog.id)).all()
+    assert [(x.detaljer["hvad"], x.detaljer["antal"], x.detaljer["filter"]) for x in log] == [
+        ("fakturaer", 2, "forfaldet"), ("debitorer", 2, "alt")]
+    assert all(x.staff_id is not None for x in log)
+
+
+def test_fakturaside_med_hoved_linjer_og_log(klient, db_session, kunde):
+    f = db_session.scalars(select(Invoice).where(Invoice.client_id == kunde.id, Invoice.invoice_no == "733")).one()
+    f.order_no, f.other_ref, f.delivery = 607, "26238 - 742", {"adresse": "Amager port 2", "postnr": "2300",
+                                                               "by": "Kbh S", "navn": None}
+    f.lines = [{"nr": 1, "beskrivelse": "Spot", "antal": "2", "pris": "265.92", "beloeb": "531.84"}]
+    db_session.flush()
+    data = klient.get(f"/api/opkraevning/faktura/{f.id}").json()
+    assert data["hoved"]["ordrenummer"] == 607 and data["linjer"][0]["beskrivelse"] == "Spot"
+    assert data["betalingsstatus"] == "forfaldet" and data["kanal"] is None
+    assert data["kunde"]["navn"] == "Debitor ApS"
+    assert data["log"][-1]["tekst"] == "Faktura oprettet i regnskabet"
+
+
+def test_indstillinger_kun_admin_og_logges(klient, db_session, kunde):
+    url = f"/api/opkraevning/{kunde.id}/indstillinger"
+    assert klient.get(url).json()["kompensation_paa_rykker"] == 3
+    assert klient.post(url, headers=H, json={"svar_email": "info@kunde.dk"}).status_code == 403   # medarbejder
+    admin = Staff(navn="Ad", email="admin-api@dinbogholder.dk", rolle="admin", aktiv=True)
+    db_session.add(admin)
+    db_session.flush()
+    app.dependency_overrides[login.nuvaerende_medarbejder] = lambda: admin
+    assert klient.post(url, headers=H, json={"svar_email": "ikke en mail"}).status_code == 422
+    assert klient.post(url, headers=H, json={"dage_mellem_rykkere": 9}).status_code == 422      # loven: >= 10
+    assert klient.post(url, headers=H, json={"rykkere": "live"}).status_code == 422             # først efter trin 4
+    assert klient.post(url, headers=H, json={"minimum": None}).status_code == 422
+    svar = klient.post(url, headers=H, json={"svar_email": "info@kunde.dk", "kompensation_paa_rykker": 1})
+    assert (svar.json()["svar_email"], svar.json()["kompensation_paa_rykker"]) == ("info@kunde.dk", 1)
+    log = db_session.scalars(select(AuditLog).where(AuditLog.handling == "indstillinger_aendret")).one()
+    assert log.detaljer == {"svar_email": {"fra": None, "til": "info@kunde.dk"},
+                            "kompensation_paa_rykker": {"fra": 3, "til": 1}} and log.staff_id == admin.id
+
+
+def test_afbetalinger_med_antal(klient, kunde):
+    data = klient.get(f"/api/opkraevning/{kunde.id}/afbetalinger").json()
+    assert data == {"antal": {"alle": 0, "aktive": 0, "misligholdt": 0}, "ordninger": []}

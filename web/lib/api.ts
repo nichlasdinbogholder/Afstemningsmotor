@@ -16,6 +16,7 @@ async function svar<T>(r: Response): Promise<T> {
     try {
       const d = await r.json();
       if (typeof d.detail === "string") besked = d.detail;
+      else if (r.status === 422) besked = "En af værdierne er ikke gyldig – tjek feltet og prøv igen";
     } catch {}
     throw new ApiFejl(r.status, besked);
   }

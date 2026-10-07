@@ -1,7 +1,7 @@
 """Rykkermotoren: byg den næste rykker på en faktura – inden for rentelovens grænser.
 
 `byg_rykker(session, faktura, dag)` lægger en rykker i kø (status `queued`) med gebyr,
-kompensationsbeløb og morarente beregnet til `dag`, eller rejser `LovgraenseFejl` /
+kompensationsbeløb (på kundens valgte rykker) og morarente beregnet til `dag`, eller rejser `LovgraenseFejl` /
 `ManglerReferencesats`. Den afgør IKKE, om en rykker bør sendes (betalt, blokeret, afbetaling
 osv.) – det gør spærrerne i trin 3, før byg_rykker kaldes.
 
@@ -16,6 +16,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.kunder.models import Client
 from app.opkraevning.lov import (
     KOMPENSATIONSBELOEB,
     MAKS_RYKKERGEBYR,
@@ -76,9 +77,12 @@ def byg_rykker(session: Session, faktura: Invoice, dag: date) -> DunningStep:
     kontroller_interval(forrige, dag)
 
     debitor = session.get(Debtor, faktura.debtor_id)
+    kunde = session.get(Client, faktura.client_id)
+    # Kompensation én gang, kun erhverv, på den rykker kunden har valgt (FarPay: rykker 3). Er den
+    # rykker allerede sendt i FarPay (prior_dunning_count), er beløbet krævet dér – ikke igen.
     kompensation = (KOMPENSATIONSBELOEB
-                    if debitor.is_business and not any(r.compensation_amount > 0 for r in tidligere)
-                    and faktura.prior_dunning_count == 0 else Decimal("0.00"))
+                    if debitor.is_business and nr + faktura.prior_dunning_count == kunde.dunning_compensation_step
+                    and not any(r.compensation_amount > 0 for r in tidligere) else Decimal("0.00"))
     kontroller_kompensation(kompensation, debitor.is_business)
     kontroller_rykkergebyr(RYKKERGEBYR)
 

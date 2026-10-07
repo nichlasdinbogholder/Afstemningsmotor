@@ -144,6 +144,18 @@ class Invoice(Base):
     # Rykkere sendt FØR overgangen fra FarPay (trin 10) – tæller med i "højst 3".
     prior_dunning_count: Mapped[int] = mapped_column(SmallInteger, server_default=text("0"))
     prior_last_dunning_at: Mapped[date | None] = mapped_column(Date)  # seneste rykker i FarPay
+    # Fakturahovedet som på den trykte faktura (vises i debitorstyringen).
+    order_no: Mapped[int | None] = mapped_column(Integer)          # orderNumber
+    other_ref: Mapped[str | None] = mapped_column(String(255))    # references.other ("Øvrig ref.")
+    net_amount: Mapped[Decimal | None] = mapped_column(BELOEB)     # netAmount (ekskl. moms)
+    vat_amount: Mapped[Decimal | None] = mapped_column(BELOEB)     # vatAmount
+    recipient: Mapped[dict | None] = mapped_column(JSONB)          # navn/adresse PÅ fakturaen
+    delivery: Mapped[dict | None] = mapped_column(JSONB)           # leveringsadresse
+    heading: Mapped[str | None] = mapped_column(String(255))       # notes.heading
+    text_line: Mapped[str | None] = mapped_column(Text)            # notes.textLine1
+    # Linjerne hentes én gang pr. faktura (en bogført faktura ændres aldrig). NULL = ikke hentet endnu.
+    lines: Mapped[list | None] = mapped_column(JSONB)
+    lines_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _oprettet()
     updated_at: Mapped[datetime] = _oprettet()
 

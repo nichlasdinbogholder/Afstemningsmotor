@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 
 from app import cli
 from app.adaptere.regnskab.base import Debitor as RDebitor
+from app.adaptere.regnskab.base import Adresse as RAdresse
 from app.adaptere.regnskab.base import Faktura as RFaktura
 from app.kunder.models import Client
 from app.opkraevning.models import (
@@ -204,6 +205,8 @@ def test_forhaandsvisning_gemmer_intet(db_session, kunde, faktura, capsys, monke
 class FalskSystem:
     def __init__(self, debitorer, fakturaer):
         self.debitorer, self.fakturaer, self.kald = debitorer, fakturaer, 0
+        self.linjekald: list = []
+        self.loft: int | None = None   # rejs ForMangeKald efter så mange linjekald
 
     def __enter__(self):
         return self
@@ -218,12 +221,23 @@ class FalskSystem:
     def fetch_invoices(self):
         return self.fakturaer
 
+    def fetch_invoice_lines(self, nummer):
+        from app.adaptere.regnskab.base import FakturaLinje, ForMangeKald
+        if self.loft is not None and len(self.linjekald) >= self.loft:
+            raise ForMangeKald("for mange kald", vent_sekunder=60)
+        self.linjekald.append(nummer)
+        return [FakturaLinje(1, "1001", f"Vare til {nummer}", Decimal("2"), "stk", Decimal("265.92"),
+                             Decimal("0"), Decimal("531.84"))]
+
 
 def _system():
     return FalskSystem(
         [RDebitor(62, "Hansen", None, "h@eks.dk", None, "Vej 1", "2300", "Kbh S", None, 1),
          RDebitor(141, "Firma ApS", "DK 12345678", None, "5790000000000", None, None, None, None, 2)],
-        [RFaktura(730, 62, date(2026, 9, 1), FORFALD, Decimal("8607.08"), Decimal("8607.08"), "DKK", None),
+        [RFaktura(730, 62, date(2026, 9, 1), FORFALD, Decimal("8607.08"), Decimal("8607.08"), "DKK", None,
+                  ordrenummer=607, oevrig_ref="26238 - 742", netto=Decimal("6885.66"), moms=Decimal("1721.42"),
+                  modtager=RAdresse("Hansen", "Vej 1", "2300", "Kbh S"), levering=RAdresse(None, "Amager port 2",
+                                                                                           "2300", "Kbh S")),
          RFaktura(586, 141, date(2025, 11, 10), date(2025, 11, 18), Decimal("-695"), Decimal("-695"), "DKK", None),
          RFaktura(100, 141, date(2022, 12, 22), date(2022, 12, 30), Decimal("15166.81"), Decimal("0"), "DKK",
                   "5790000000001")])
@@ -253,6 +267,35 @@ def test_hentning_af_debitorer_fakturaer_og_indbetalinger(db_session, kunde):
     assert (d["62"].blocked_from_dunning, d["62"].note) == (True, "Aftale")
     assert db_session.scalar(select(func.count()).select_from(InvoicePayment)
                              .where(InvoicePayment.invoice_id == f["730"].id)) == 1
+
+
+def test_fakturahoved_og_linjer_hentes_een_gang(db_session, kunde):
+    system = _system()
+    synk_invoices(db_session, kunde.id, system)
+    f = db_session.scalars(select(Invoice).where(Invoice.client_id == kunde.id, Invoice.invoice_no == "730")).one()
+    assert (f.order_no, f.other_ref, f.net_amount, f.vat_amount) == (607, "26238 - 742", Decimal("6885.66"),
+                                                                      Decimal("1721.42"))
+    assert f.recipient == {"navn": "Hansen", "adresse": "Vej 1", "postnr": "2300", "by": "Kbh S"}
+    assert f.delivery["adresse"] == "Amager port 2"
+    assert f.lines == [{"nr": 1, "vare": "1001", "beskrivelse": "Vare til 730", "antal": "2", "enhed": "stk",
+                        "pris": "265.92", "rabat": "0", "beloeb": "531.84"}]
+    assert sorted(system.linjekald) == [100, 586, 730]
+    # En bogført faktura ændres aldrig – linjerne hentes ikke igen.
+    system.linjekald = []
+    synk_invoices(db_session, kunde.id, system)
+    assert system.linjekald == []
+
+
+def test_for_mange_kald_gemmer_det_hentede_og_tager_resten_naeste_gang(db_session, kunde):
+    system = _system()
+    system.loft = 1
+    synk_invoices(db_session, kunde.id, system)          # fejler IKKE
+    hentet = db_session.scalars(select(Invoice.invoice_no).where(Invoice.client_id == kunde.id,
+                                                                 Invoice.lines.is_not(None))).all()
+    assert hentet == ["730"]                             # nyeste først
+    system.linjekald, system.loft = [], None
+    synk_invoices(db_session, kunde.id, system)
+    assert sorted(system.linjekald) == [100, 586]
 
 
 def test_hentning_springes_over_naar_rykkere_er_slaaet_fra(db_session, kunde):

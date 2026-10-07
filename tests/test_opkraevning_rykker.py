@@ -98,18 +98,34 @@ def test_rykker_foer_forfald_afvises(db_session, faktura, satser):
 
 
 def test_kompensation_kun_paa_erhverv(db_session, faktura, satser):
-    """Privat debitor: aldrig kompensation. Bliver debitoren registreret som erhverv senere,
-    opkræves kompensationen én gang – på den næste rykker – og aldrig igen."""
+    """Privat debitor: aldrig kompensation. Bliver debitoren registreret som erhverv inden den valgte
+    rykker (standard: rykker 3, som i FarPay), opkræves kompensationen dér."""
     assert _send(db_session, faktura, date(2026, 9, 25)).compensation_amount == Decimal("0.00")
     db_session.get(Debtor, faktura.debtor_id).is_business = True
-    assert _send(db_session, faktura, date(2026, 10, 5)).compensation_amount == Decimal("310.00")
-    assert _send(db_session, faktura, date(2026, 10, 15)).compensation_amount == Decimal("0.00")
+    assert _send(db_session, faktura, date(2026, 10, 5)).compensation_amount == Decimal("0.00")
+    assert _send(db_session, faktura, date(2026, 10, 15)).compensation_amount == Decimal("310.00")
 
 
-def test_kompensation_paa_foerste_rykker_til_erhverv(db_session, faktura, satser):
+def test_kompensation_paa_kundens_valgte_rykker(db_session, faktura, satser):
     db_session.get(Debtor, faktura.debtor_id).is_business = True
-    foerste = _send(db_session, faktura, date(2026, 9, 25))
-    assert foerste.compensation_amount == Decimal("310.00")
+    db_session.get(Client, faktura.client_id).dunning_compensation_step = 1
+    assert _send(db_session, faktura, date(2026, 9, 25)).compensation_amount == Decimal("310.00")
+    assert _send(db_session, faktura, date(2026, 10, 5)).compensation_amount == Decimal("0.00")
+
+
+def test_kompensation_efter_rykkere_i_farpay(db_session, faktura, satser):
+    """2 rykkere sendt i FarPay: vores første rykker er rykker 3 – og får kompensationen."""
+    db_session.get(Debtor, faktura.debtor_id).is_business = True
+    faktura.prior_dunning_count, faktura.prior_last_dunning_at = 2, date(2026, 9, 20)
+    db_session.flush()
+    assert _send(db_session, faktura, date(2026, 10, 5)).compensation_amount == Decimal("310.00")
+
+
+def test_ingen_kompensation_hvis_farpay_allerede_naaede_den(db_session, faktura, satser):
+    db_session.get(Debtor, faktura.debtor_id).is_business = True
+    db_session.get(Client, faktura.client_id).dunning_compensation_step = 1
+    faktura.prior_dunning_count, faktura.prior_last_dunning_at = 1, date(2026, 9, 20)
+    db_session.flush()
     assert _send(db_session, faktura, date(2026, 10, 5)).compensation_amount == Decimal("0.00")
 
 

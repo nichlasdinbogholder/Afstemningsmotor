@@ -11,6 +11,7 @@ aldrig, hvilket system data kommer fra – det bruger kun AccountingProvider:
         provider.fetch_open_entries()            -> list[AabenPost]   (altid alle)
         provider.fetch_journals()                -> list[Kassekladde]
         provider.fetch_journal_entries(nummer)   -> list[KladdePost]  (endnu ikke bogført)
+        provider.fetch_debtors() / fetch_invoices() / fetch_invoice_lines(nummer)   (opkrævning)
 
 Adapteren oversætter systemets felter til formatet herunder og gætter aldrig:
 et felt, systemet ikke har leveret, bliver None.
@@ -143,6 +144,37 @@ class Faktura:
     restbeloeb: Decimal     # 0 = betalt (systemet udligner selv)
     valuta: str
     ean: str | None         # modtagerens EAN på fakturaen
+    # Fakturahovedet som på den trykte faktura (None = ikke leveret af systemet).
+    ordrenummer: int | None = None
+    oevrig_ref: str | None = None
+    netto: Decimal | None = None
+    moms: Decimal | None = None
+    modtager: "Adresse | None" = None    # navn og adresse PÅ fakturaen (kan afvige fra debitoren i dag)
+    levering: "Adresse | None" = None
+    overskrift: str | None = None
+    tekst: str | None = None
+
+
+@dataclass(frozen=True)
+class Adresse:
+    navn: str | None
+    adresse: str | None
+    postnr: str | None
+    by: str | None
+
+
+@dataclass(frozen=True)
+class FakturaLinje:
+    """En linje på en bogført faktura. Kostpris hentes aldrig – den hører ikke til opkrævningen."""
+
+    linjenummer: int
+    varenummer: str | None
+    beskrivelse: str | None
+    antal: Decimal | None
+    enhed: str | None
+    stykpris: Decimal | None      # ekskl. moms
+    rabat_procent: Decimal | None
+    beloeb: Decimal | None        # linjens beløb ekskl. moms
 
 
 @dataclass(frozen=True)
@@ -243,6 +275,7 @@ class AccountingProvider(Protocol):
     def fetch_accounting_years(self) -> list[Regnskabsaar]: ...
     def fetch_debtors(self) -> list[Debitor]: ...
     def fetch_invoices(self) -> list[Faktura]: ...
+    def fetch_invoice_lines(self, nummer: int) -> list[FakturaLinje]: ...
     def __enter__(self) -> "AccountingProvider": ...
     def __exit__(self, *args) -> None: ...
 

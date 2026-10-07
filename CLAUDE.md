@@ -199,16 +199,21 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   `X-Afstemning: 1`. Læser KUN vores database – aldrig e-conomic direkte.
 - `app/api/opkraevning.py` – DEBITORSTYRINGEN under `/api/opkraevning` (login krævet): `kunder`,
   `{kunde}/fakturaer?filter=&q=` (betalingsstatus + kanal beregnes; filtre alt/ikke_betalt/forfaldet/
-  delvist_betalt/betalt/kreditnota/ingen_kanal/med_rykker), `faktura/{id}`, `{kunde}/debitorer`,
-  `POST debitor/{id}` (blokér/kanal/note → audit_log `debitor_aendret`), `{kunde}/rykkere` (i kø, sendt,
-  spærrer – seneste pr. faktura og årsag), `POST rykker/{id}/fjern` (note krævet), `{kunde}/indstillinger`.
+  delvist_betalt/betalt/kreditnota/ingen_kanal/med_rykker), `faktura/{id}` (hoved, linjer, log), `{kunde}/debitorer
+  ?filter=` (alt/med_aabne/ingen_kanal/blokeret/erhverv), `POST debitor/{id}` (blokér/kanal/note → audit_log
+  `debitor_aendret`), `{kunde}/rykkere` (i kø, sendt, spærrer – seneste pr. faktura og årsag), `POST rykker/{id}/fjern`
+  (note krævet), `{kunde}/afbetalinger?filter=aktive|misligholdt|alle`, `{kunde}/indstillinger` og `POST` samme
+  (KUN admin; lovens grænser i Pydantic + CHECK; audit `indstillinger_aendret` med fra/til),
+  `{kunde}/eksport/fakturaer.csv` og `debitorer.csv` (Excel: `;`, BOM, komma-decimaler, tekst der starter med
+  = + - @ får `'` foran). HVER eksport logges i audit_log (`eksport`, hvad/antal/filter).
 - `app/rules/visning.py` – aktuelle fund (`NOT EXISTS` nyere regelkørsel – bruger indekset), regelnavne.
 - `web/` – WEBDELEN (Next.js 16, TypeScript, Tailwind). Bygges til statiske filer (`output: "export"`), som
   Caddy udleverer (`deploy/Dockerfile.caddy`); intet Node-program i drift. Henter kun fra `/api`
   (`web/lib/api.ts`, `send()` sætter X-Afstemning). Sider: `/` kundeoversigt, `/kunde/?id=` (fund med
   statusskift + historik, kontoudtog med linjer, "Opdater nu"), `/debitorstyring/` (kunder med opkrævning) og
-  `/debitorstyring/kunde/?id=&fane=` (Opkrævninger, Rykkere, Debitorer, Afbetaling, Indstillinger;
-  komponenter i `web/components/debitor/`). Lokalt: `npm run dev` + `DEV_LOGIN=true`
+  `/debitorstyring/kunde/?id=&fane=&filter=&q=&faktura=` (som FarPay: Kunder, Opkrævninger, Rykkere,
+  Afbetaling, Indstillinger; `faktura=` viser fakturaen som en side med linjer og log; komponenter i
+  `web/components/debitor/`). Lokalt: `npm run dev` + `DEV_LOGIN=true`
   på FastAPI og `/dev-login?email=` (virker aldrig med APP_ENV=production). Læs `web/AGENTS.md` før
   ændringer (Next.js 16 adskiller sig fra ældre versioner).
 - Kapacitet (målt, DEPLOY.md): 500 kunder / 20 samtidige medarbejdere; 4 workers, 3 API-processer.
@@ -244,8 +249,13 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   - Hentning: `app/synk/opkraevning.py` (ressource `invoices`, kun når dunning_mode <> 'off'): debitorer
     (`fetch_debtors`), fakturaer (`fetch_invoices`), indbetalinger fra entries (customerPayment med fakturanummer,
     source='regnskab'). Medarbejdernes felter (blokeret, note, kanal) røres aldrig.
-  - Udsendelse (trin 4): fra rykker@dinbogholder.dk, til debitorens e-mail fra e-conomic, Reply-To = KUNDENS
-    e-mail (svar går til kunden, aldrig til os). Layout og tekst afprøves før drift.
+  - Udsendelse (trin 4): fra rykker@dinbogholder.dk, til debitorens e-mail fra e-conomic, Reply-To =
+    `clients.reply_to_email` (KUNDENS adresse, pr. kunde; svar går aldrig til os). Layout og tekst afprøves før drift.
+  - Kompensationsbeløbet (310, kun erhverv, én gang) lægges på rykker `clients.dunning_compensation_step` (1-3,
+    standard 3 som i FarPay), talt inkl. FarPays rykkere.
+  - Fakturahovedet (ordrenr., øvrig ref., netto/moms, modtager, levering, tekst) gemmes på invoices fra
+    /invoices/booked; linjerne (`invoices.lines`, aldrig kostpris) hentes med `fetch_invoice_lines(nr)` – ét kald
+    pr. faktura, kun én gang, højst 300 pr. kørsel, nyeste først; ForMangeKald stopper blot linjehentningen.
   - `app/tid.py`: helligdage, bankdage (`er_bankdag`, `bankdage_tilbage`, `naeste_bankdag`), `dansk_dato`.
   - Inkasso Mægleren har INGEN API: overdragelse sker manuelt ud fra en liste; medarbejderen registrerer sagsnr.
   - Indbetalinger: e-conomic udligner selv (remainder). Bankafstemningen laver i kassekladden 3 ben (bank,

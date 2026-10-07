@@ -39,9 +39,11 @@ from app.adaptere.regnskab.base import (
     DEBET_KREDIT,
     KONTOTYPER,
     AabenPost,
+    Adresse,
     Debitor,
     DelvisHentet,
     Faktura,
+    FakturaLinje,
     ForMangeKald,
     Konto,
     Kassekladde,
@@ -157,6 +159,36 @@ def oversaet_faktura(d: dict) -> Faktura:
         restbeloeb=_decimal(_kraev(d, "remainder", "en faktura")),
         valuta=_kraev(d, "currency", "en faktura"),
         ean=_tekst((d.get("recipient") or {}).get("ean")),
+        ordrenummer=d.get("orderNumber"),
+        oevrig_ref=_tekst((d.get("references") or {}).get("other")),
+        netto=_decimal(d.get("netAmount")),
+        moms=_decimal(d.get("vatAmount")),
+        modtager=_adresse(d.get("recipient")),
+        levering=_adresse(d.get("delivery")),
+        overskrift=_tekst((d.get("notes") or {}).get("heading")),
+        tekst=_tekst((d.get("notes") or {}).get("textLine1")),
+    )
+
+
+def _adresse(d: dict | None) -> Adresse | None:
+    if not d:
+        return None
+    a = Adresse(navn=_tekst(d.get("name")), adresse=_tekst(d.get("address")), postnr=_tekst(d.get("zip")),
+                by=_tekst(d.get("city")))
+    return None if a == Adresse(None, None, None, None) else a
+
+
+def oversaet_fakturalinje(d: dict) -> FakturaLinje:
+    """Feltnavne set i rå JSON fra /invoices/booked/{nr} (Connect El, 07.10.2026). unitCostPrice hentes ikke."""
+    return FakturaLinje(
+        linjenummer=_kraev(d, "lineNumber", "en fakturalinje"),
+        varenummer=_tekst((d.get("product") or {}).get("productNumber")),
+        beskrivelse=_tekst(d.get("description")),
+        antal=_decimal(d.get("quantity")),
+        enhed=_tekst((d.get("unit") or {}).get("name")),
+        stykpris=_decimal(d.get("unitNetPrice")),
+        rabat_procent=_decimal(d.get("discountPercentage")),
+        beloeb=_decimal(d.get("totalNetAmount")),
     )
 
 
@@ -290,6 +322,11 @@ class EconomicAdapter:
 
     def fetch_invoices(self) -> list[Faktura]:
         return [oversaet_faktura(d) for d in self._klient.hent_alle("/invoices/booked")]
+
+    def fetch_invoice_lines(self, nummer: int) -> list[FakturaLinje]:
+        """Linjerne findes kun på den enkelte faktura – ét kald pr. faktura."""
+        d = self._klient.hent_en(f"/invoices/booked/{int(nummer)}")
+        return [oversaet_fakturalinje(x) for x in d.get("lines") or []]
 
     def fetch_suppliers(self) -> list[Leverandoer]:
         return [oversaet_leverandoer(d) for d in self._klient.hent_alle("/suppliers")]
