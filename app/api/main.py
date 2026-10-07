@@ -15,6 +15,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
+from app.api.data import router as data_router
 from app.api.login import db, nuvaerende_medarbejder
 from app.api.login import router as login_router
 from app.config import get_settings
@@ -37,6 +38,7 @@ app.add_middleware(
     https_only=_indstillinger.app_env == "production",
 )
 app.include_router(login_router)
+app.include_router(data_router)
 
 
 @app.get("/", response_class=HTMLResponse)

@@ -69,14 +69,23 @@ def gem_fund(session: Session, client_id: int, regel: Rule, udkast: list[Finding
 def koer_regler(session: Session, client_id: int, since: date | None = None) -> KoerselResultat:
     """Kør alle aktive regler for én kunde. Gemmes ved session.commit() hos den, der kalder."""
     resultat = KoerselResultat(client_id)
-    for regel in alle_regler():
-        if not getattr(regel, "aktiv", True):
-            continue
-        r = gem_fund(session, client_id, regel, regel.run(session, client_id, since))
-        session.add(RuleRun(client_id=client_id, rule_code=regel.code, rule_version=regel.version,
-                            fund=r.fundet))
-        session.flush()
-        log.info("Kunde %s, regel %s: %s fund (%s nye, %s set før)",
-                 client_id, regel.code, r.fundet, r.nye, r.set_igen)
-        resultat.regler.append(r)
+    # Regler må dele mellemresultater inden for ÉN kørsel (session.info["regel_cache"]) –
+    # de ryddes før og efter, så intet gammelt genbruges.
+    session.info["regel_cache"] = {}
+    try:
+        for regel in alle_regler():
+            if not getattr(regel, "aktiv", True):
+                continue
+            _koer_en(session, client_id, regel, since, resultat)
+    finally:
+        session.info.pop("regel_cache", None)
     return resultat
+
+
+def _koer_en(session: Session, client_id: int, regel, since: date | None, resultat: KoerselResultat) -> None:
+    r = gem_fund(session, client_id, regel, regel.run(session, client_id, since))
+    session.add(RuleRun(client_id=client_id, rule_code=regel.code, rule_version=regel.version, fund=r.fundet))
+    session.flush()
+    log.info("Kunde %s, regel %s: %s fund (%s nye, %s set før)",
+             client_id, regel.code, r.fundet, r.nye, r.set_igen)
+    resultat.regler.append(r)

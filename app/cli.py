@@ -21,7 +21,7 @@ import os
 import sys
 from datetime import datetime
 
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import text
 
 import app.models  # noqa: F401
 from app.db import ny_session
@@ -29,8 +29,9 @@ from app.jobs.koe import laeg_i_koe
 from app.jobs.worker import Worker
 from app.kunder.models import Client
 from app.rules.koersel import koer_regler
-from app.rules.models import ALVORLIGHED, STATUSSER, Finding, RuleRun
+from app.rules.models import ALVORLIGHED, STATUSSER, Finding
 from app.rules.status import UgyldigStatus, saet_status
+from app.rules.visning import fund_med_aktuel, sorteringsnoegle
 
 
 def sync_entries(client_id: int, worker: Worker | None = None) -> int:
@@ -87,14 +88,8 @@ def vis_findings(client_id: int, status: str | None = None, severity: str | None
                  alle: bool = False) -> int:
     """Som standard kun AKTUELLE fund: dem, seneste kørsel af reglen stadig fandt.
     Fund, der ikke længere optræder, slettes aldrig – de vises med --alle."""
-    orden = {"high": 0, "medium": 1, "low": 2}
-    seneste = (select(RuleRun.rule_code, func.max(RuleRun.koert_at).label("koert_at"))
-               .where(RuleRun.client_id == client_id).group_by(RuleRun.rule_code).subquery())
-    aktuel = or_(seneste.c.koert_at.is_(None), Finding.last_seen_at >= seneste.c.koert_at)
     with ny_session() as session:
-        stmt = (select(Finding, aktuel.label("aktuel"))
-                .outerjoin(seneste, seneste.c.rule_code == Finding.rule_code)
-                .where(Finding.client_id == client_id))
+        stmt = fund_med_aktuel(client_id)
         if status:
             stmt = stmt.where(Finding.status == status)
         if severity:
@@ -102,7 +97,7 @@ def vis_findings(client_id: int, status: str | None = None, severity: str | None
         raekker = session.execute(stmt).all()
     skjult = sum(1 for _, er_aktuel in raekker if not er_aktuel)
     fund = sorted(((f, er_aktuel) for f, er_aktuel in raekker if alle or er_aktuel),
-                  key=lambda x: (orden[x[0].severity], x[0].period_start or x[0].first_seen_at.date(), x[0].id))
+                  key=lambda x: sorteringsnoegle(x[0]))
     if not fund:
         print("Ingen fund.")
     else:

@@ -132,6 +132,18 @@ def match_kunde(session: Session, client_id: int) -> list[UdtogResultat]:
     return [match_udtog(session, u) for u in udtog]
 
 
+def _match_til_regel(session: Session, client_id: int) -> list[UdtogResultat]:
+    """De to regler bruger samme matchning: inden for én kørsel af koer_regler matches kunden
+    kun én gang (resultatet ligger i session.info["regel_cache"], som koer_regler rydder)."""
+    cache = session.info.get("regel_cache")
+    if cache is None:  # reglen køres alene
+        return match_kunde(session, client_id)
+    noegle = ("matchmotor", client_id)
+    if noegle not in cache:
+        cache[noegle] = match_kunde(session, client_id)
+    return cache[noegle]
+
+
 # --- Fund ----------------------------------------------------------------------------
 
 
@@ -192,7 +204,7 @@ class ManglerIBogfoering:
     def run(self, session: Session, client_id: int, since: date | None) -> list[FindingDraft]:
         udkast = []
         kladde = list(session.execute(KLADDE_SQL, {"client_id": client_id}))
-        for r in match_kunde(session, client_id):
+        for r in _match_til_regel(session, client_id):
             u = r.udtog
             set_foer: Counter = Counter()
             for l in r.umatchede_linjer:
@@ -229,7 +241,7 @@ class ManglerPaaKontoudtog:
 
     def run(self, session: Session, client_id: int, since: date | None) -> list[FindingDraft]:
         udkast = []
-        for r in match_kunde(session, client_id):
+        for r in _match_til_regel(session, client_id):
             u = r.udtog
             for p in r.umatchede_poster:
                 udkast.append(FindingDraft(

@@ -36,6 +36,8 @@ from app.synk.tilstand import KundeIkkeAktiv, SynkDeaktiveret, SynkIGang
 log = logging.getLogger(__name__)
 
 JOBTYPE = "natkoersel_kunde"
+OPDATER_JOBTYPE = "opdater_kunde"
+OPDATER_PRIORITET = 10  # foran natkørslen (100)
 
 
 class NatkoerselFejl(Exception):
@@ -86,7 +88,8 @@ def _fejltekst(fejl: BaseException) -> str:
     return rediger(f"{type(fejl).__name__}: {fejl}").splitlines()[0][:300]
 
 
-def koer_natkoersel(session: Session, client_id: int, adapter_fabrik=hent_adapter) -> dict:
+def koer_natkoersel(session: Session, client_id: int, adapter_fabrik=hent_adapter,
+                    handling: str = "natkoersel_kunde") -> dict:
     """Kør alle trin for én kunde. Returnerer resultatet (det samme, der skrives i audit_log)."""
     trin: dict[str, str] = {}
     tal: dict[str, int] = {}
@@ -139,7 +142,7 @@ def koer_natkoersel(session: Session, client_id: int, adapter_fabrik=hent_adapte
     resultat = {"status": "fejl" if fejlede else "ok", "trin": trin, **tal}
 
     # 4. Log kørslen – også når noget fejlede.
-    session.add(AuditLog(client_id=client_id, handling="natkoersel_kunde", detaljer=resultat))
+    session.add(AuditLog(client_id=client_id, handling=handling, detaljer=resultat))
     session.commit()
     if fejlede:
         log.warning("Natkørsel for kunde %s: %s fejlede", client_id, ", ".join(fejlede))
@@ -150,10 +153,20 @@ def koer_natkoersel(session: Session, client_id: int, adapter_fabrik=hent_adapte
 
 @jobtype(JOBTYPE)
 def natkoersel_kunde(job: JobKontekst) -> None:
+    _koer_som_job(job, "natkoersel_kunde")
+
+
+@jobtype(OPDATER_JOBTYPE)
+def opdater_kunde(job: JobKontekst) -> None:
+    """"Opdater nu" fra webdelen: det samme som natkørslen, for én kunde, forrest i køen."""
+    _koer_som_job(job, "opdater_kunde")
+
+
+def _koer_som_job(job: JobKontekst, handling: str) -> None:
     if job.client_id is None:
         raise ValueError(f"Job {job.job_id} mangler client_id")
     try:
-        resultat = koer_natkoersel(job.session, job.client_id)
+        resultat = koer_natkoersel(job.session, job.client_id, handling=handling)
     except ForMangeKald as fejl:
         raise UdskydJob(fejl.vent_sekunder, str(fejl)) from None
     fejlede = [n for n, s in resultat["trin"].items() if s.startswith("fejl")]

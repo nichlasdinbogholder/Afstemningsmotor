@@ -6,7 +6,7 @@ Rækker kan kun tilføjes – en trigger i databasen afviser ændring og sletnin
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -15,6 +15,8 @@ from app.db import Base
 
 class AuditLog(Base):
     __tablename__ = "audit_log"
+    # Kundeoversigten slår seneste natkørsel op pr. kunde.
+    __table_args__ = (Index("ix_audit_log_kunde_handling_tid", "client_id", "handling", "tidspunkt"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     # Tom, når handlingen ikke vedrører en bestemt kunde/medarbejder.

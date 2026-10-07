@@ -236,6 +236,27 @@ Microsoft-konto hos jer. Når login virker, kan den fælles adgangskode i Caddy 
 | Skift rolle | `rolle --email x@dinbogholder.dk --rolle admin` |
 | Stoppet | `deaktiver --email x@dinbogholder.dk` (adgangen lukkes med det samme) |
 
+## Mange kunder og medarbejdere (målt)
+
+Målt på en maskine som serveren (4 kerner, 16 GB) med **500 kunder**, 5,4 mio. posteringslinjer,
+1,4 mio. kontoudtogslinjer og et års regelkørsler:
+
+| | Tid |
+|---|---|
+| Kundeoversigt (alle 500 kunder) | 0,06 s |
+| Fund / kontoudtog for én kunde | 0,01–0,03 s |
+| 20 medarbejdere, der klikker uafbrudt (114 sider pr. sekund) | typisk 0,1–0,2 s, 95 % under 0,65 s |
+| Reglerne for én kunde (10.000–100.000 linjer) | 2–3 s |
+
+Derfor:
+- Siderne læser **kun vores egen database**, aldrig e-conomic direkte. e-conomic hentes i baggrunden:
+  natkørslen kl. 05:00 og knappen **"Opdater nu"**, der lægger kunden forrest i køen (prioritet 10).
+- **4 workers** kører køen (`deploy.replicas: 4`). Natkørslen for 500 kunder tager så ca. 45 min.
+  Flere: ret tallet i `docker-compose.prod.yml` og kør `up -d`.
+- Webdelen kører med 3 processer, og databasen er indstillet til 16 GB RAM (`command` under `db`).
+- Vokser det ud over det: større server hos Hetzner (8 kerner / 32 GB) og ret `shared_buffers`
+  til 25 % af RAM og `effective_cache_size` til 60 %.
+
 ---
 
 ## Daglig brug

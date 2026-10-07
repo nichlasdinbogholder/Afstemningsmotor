@@ -3,7 +3,7 @@
 #   db         PostgreSQL 16 – kan KUN nås inde fra serveren (ingen åben port)
 #   migrate    opdaterer databasens tabeller (alembic upgrade head) og stopper igen
 #   api        webdelen (FastAPI) – kun bag Caddy
-#   worker     kører job fra jobkøen (flere: --scale worker=2)
+#   worker     kører job fra jobkøen – 4 ad gangen (natkørsel for 500 kunder + "Opdater nu")
 #   scheduler  APScheduler: kl. 05:00 mandag–fredag lægges ét natjob pr. aktiv kunde i kø
 #   caddy      HTTPS med automatisk certifikat; adgangskode foran alt undtagen /health
 #
@@ -27,6 +27,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+    # Indstillet til en server med 16 GB RAM (se DEPLOY.md, "Mange kunder og medarbejdere").
+    command: ["postgres", "-c", "shared_buffers=4GB", "-c", "effective_cache_size=10GB",
+              "-c", "work_mem=32MB", "-c", "maintenance_work_mem=512MB", "-c", "max_connections=150",
+              "-c", "random_page_cost=1.1"]
+    shm_size: 1gb
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -47,6 +52,8 @@ services:
 
   api:
     <<: *app
+    command: ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers",
+              "--forwarded-allow-ips", "*", "--workers", "3"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
       interval: 30s
@@ -56,6 +63,8 @@ services:
   worker:
     <<: *app
     command: ["python", "-m", "app.jobs.worker"]
+    deploy:
+      replicas: 4
 
   scheduler:
     <<: *app
