@@ -156,12 +156,18 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     Kredit/Saldo, linjer der starter med dato). Indscannede PDF'er læses med Tesseract (lokalt, dansk;
     installeres i Dockerfile). KONTROL: primo + linjer = ultimo på øret, ellers indlæses udtoget ikke.
     Prøv uden at gemme: `python -m app.kontoudtog.pdf <fil.pdf>`. Rigtige udtog må ALDRIG i repoet
-    (kundedata) – tests bruger opdigtede PDF'er (fpdf2).
-- `app/rules/kontoudtog.py` – MATCHMOTOREN (to regler): trin 1 reference = bilagsnummer + beløb,
+    (kundedata) – tests bruger opdigtede PDF'er (fpdf2). Stark sender "åbne poster pr. dato" (ikke
+    bevægelser) – læses, men poster uden for listen kan give fund "mangler på kontoudtog".
+  - Skattekonto fra Revibot (CSV med "Søgning fra dato"): `laes_revibot()`; kunden findes via CVR, hver
+    linjes saldo kontrolleres. `python -m app.kontoudtog.importer --konto <skattekonto> --fil <csv>`.
+- `app/rules/kontoudtog.py` – MATCHMOTOREN (to regler): trin 1 reference = bilagsnummer ELLER
+  entries.fakturanummer (leverandørens fakturanr.; foranstillede nuller ignoreres) + beløb,
   trin 2 beløb + dato ±5 dage (`DATO_TOLERANCE`), resten → findings `mangler_i_bogfoering` /
   `mangler_paa_kontoudtog`. Én-til-én; match gemmes i `statement_lines.match_entry_id/match_trin`.
   Uafhængig af kilden. Læser posteringer med SQL (ikke EntryCache), så adapter-laget ikke trækkes med.
   `scripts/matchprocent.sql`: matchprocent pr. kunde.
+- `app/rules/manglende_kontoudtog.py` – fund `mangler_kontoudtog`: leverandør i gruppe 20000 (grossister,
+  `suppliers.gruppe`) med posteringer i en af de 3 seneste hele måneder, men intet kontoudtog for måneden.
 - `app/natkoersel/` – NATKØRSLEN (erstatter på serveren den gamle planlægger `worker --kun-planlaeg`):
   - `scheduler.py`: APScheduler i egen proces (`python -m app.natkoersel.scheduler`, compose-tjenesten
     `scheduler`). Kl. 05:00 dansk tid mandag–fredag: ét `natkoersel_kunde`-job pr. aktiv kunde med
