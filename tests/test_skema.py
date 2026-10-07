@@ -19,6 +19,9 @@ TABELLER = {
     "notes", "documents", "handovers", "audit_log", "accounts", "jobs", "sync_state",
     "customers", "suppliers", "entries", "open_entries", "aabne_post_fund", "findings",
     "finding_events", "rule_runs", "statements", "statement_lines",
+    "debtors", "invoices", "invoice_payments", "payment_allocations", "deliveries", "dunning_steps",
+    "dunning_skips", "installment_plans", "installment_lines", "reference_rates", "collection_cases",
+    "fee_revenue", "billing_periods",
 }
 
 
@@ -67,6 +70,9 @@ def test_alle_staff_kolonner_peger_paa_staff(inspektor):
         "documents": {"uploadet_af"},
         "handovers": {"fra_staff_id", "til_staff_id", "kvitteret_af_staff_id"},
         "audit_log": {"staff_id"},
+        "installment_plans": {"created_by"},
+        "collection_cases": {"requested_by"},
+        "billing_periods": {"released_by"},
     }
     for tabel, kolonner in forventet.items():
         til_staff = {
@@ -109,6 +115,21 @@ def test_alle_staff_kolonner_peger_paa_staff(inspektor):
         ("findings", "severity"),
         ("finding_events", "from_status"),
         ("finding_events", "to_status"),
+        ("clients", "payment_allocation_order"),
+        ("debtors", "preferred_channel"),
+        ("invoices", "kind"),
+        ("invoices", "status"),
+        ("invoice_payments", "source"),
+        ("payment_allocations", "target_type"),
+        ("deliveries", "channel"),
+        ("deliveries", "status"),
+        ("dunning_steps", "status"),
+        ("dunning_skips", "reason"),
+        ("installment_plans", "status"),
+        ("collection_cases", "status"),
+        ("fee_revenue", "fee_type"),
+        ("fee_revenue", "written_off_reason"),
+        ("billing_periods", "status"),
     ],
 )
 def test_statusfelter_er_laast_til_faste_vaerdier(inspektor, tabel, kolonne):

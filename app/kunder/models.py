@@ -5,6 +5,7 @@ bygges ovenpå. Kunder slettes ikke; de sættes til status 'opsagt'.
 """
 
 from datetime import date, datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
@@ -14,6 +15,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     SmallInteger,
     String,
     Text,
@@ -22,6 +24,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base, kun_vaerdier
@@ -50,6 +53,12 @@ class Client(Base):
             name="regnskabsaar_slut_dd_mm",
         ),
         CheckConstraint("antal_ansatte >= 0", name="antal_ansatte_ikke_negativ"),
+        kun_vaerdier("payment_allocation_order", ("costs_first", "principal_first")),
+        CheckConstraint("dunning_min_amount >= 0", name="rykker_minimum_ikke_negativ"),
+        CheckConstraint("collection_min_amount >= 0", name="inkasso_minimum_ikke_negativ"),
+        CheckConstraint("collection_grace_days >= 10", name="inkasso_karens_mindst_10"),
+        CheckConstraint("fi_kreditornummer IS NULL OR fi_kreditornummer ~ '^[0-9]{8}$'",
+                        name="fi_kreditornummer_8_cifre"),
         CheckConstraint("loenkoersel_dag BETWEEN 1 AND 31", name="loenkoersel_dag_1_31"),
         CheckConstraint(
             "opsagt_dato IS NULL OR startdato IS NULL OR opsagt_dato >= startdato",
@@ -83,6 +92,22 @@ class Client(Base):
     kassekladde_navn: Mapped[str | None] = mapped_column(String(255))
     # Manglende kontoudtog fra grossister meldes fra denne måned (tom = måneden, kunden blev oprettet).
     kontoudtog_fra: Mapped[date | None] = mapped_column(Date)
+    # --- Opkrævning (app/opkraevning) ---
+    # Rækkefølge, når en indbetaling fordeles: gebyrer/renter først eller hovedstolen først.
+    payment_allocation_order: Mapped[str] = mapped_column(String(20), server_default="costs_first")
+    fee_assignment_signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    dunning_min_amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), server_default=text("100"))
+    collection_mandate_signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    auto_escalate_to_collection: Mapped[bool] = mapped_column(Boolean, server_default=false())
+    collection_min_amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), server_default=text("500"))
+    collection_grace_days: Mapped[int] = mapped_column(SmallInteger, server_default=text("10"))
+    # Kundens FI-kreditornummer (de 8 cifre efter + i FIK-linjen) – kobler en indbetaling til kunden.
+    fi_kreditornummer: Mapped[str | None] = mapped_column(String(8), unique=True)
+    # Debitorgrupper i kundens e-conomic, der er erhverv (Connect El: {2}). Andre = privat.
+    business_customer_groups: Mapped[list[int]] = mapped_column(ARRAY(Integer), server_default=text("'{}'"))
+    # Konti i KUNDENS kontoplan, hvor bankafstemningen bogfører indbetalte gebyrer og renter.
+    fee_income_account: Mapped[int | None] = mapped_column(Integer)
+    interest_income_account: Mapped[int | None] = mapped_column(Integer)
     momsperiode: Mapped[str | None] = mapped_column(String(20))
     loensystem: Mapped[str | None] = mapped_column(String(100))
     loenkoersel_dag: Mapped[int | None] = mapped_column(SmallInteger)

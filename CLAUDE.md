@@ -206,6 +206,21 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   ændringer (Next.js 16 adskiller sig fra ældre versioner).
 - Kapacitet (målt, DEPLOY.md): 500 kunder / 20 samtidige medarbejdere; 4 workers, 3 API-processer.
 - `app/personale/bruger.py` – `python -m app.personale.bruger vis|opret|rolle|deaktiver|aktiver`.
+- `app/opkraevning/` – OPKRÆVNING (erstatter FarPay). Debitor betaler KUNDENS konto; Din Bogholder fakturerer
+  kunden månedligt for indbetalte gebyrer/renter. Vi modtager ALDRIG selv en betaling fra en debitor.
+  - `models.py` (trin 1): debtors, invoices (kind invoice|credit_note – kreditnota = negativt beløb), invoice_payments,
+    payment_allocations, deliveries, dunning_steps, dunning_skips, installment_plans/lines, reference_rates,
+    collection_cases, fee_revenue, billing_periods. Beløb NUMERIC(15,2). Feltnavne fra rå e-conomic-JSON
+    (`scripts/peek_opkraevning.py [--felter]`). clients har opkrævningsfelterne (payment_allocation_order,
+    dunning_min_amount, fi_kreditornummer, business_customer_groups, fee_income_account, interest_income_account …).
+  - Lovens grænser er i DATABASEN: CHECK gebyr <= 100 og step_no 1-3; triggeren `kontroller_rykker` afviser
+    kreditnota, > 3 rykkere inkl. FarPays (`prior_dunning_count`), < 10 dage efter forrige (inkl.
+    `prior_last_dunning_at`), kompensation uden erhverv og rykker ved aktiv inkassosag. Unik aktiv sag pr. faktura
+    + unik idempotency_key. Gebyr på inkassosag kan ikke være fakturerbart (CHECK).
+  - Inkasso Mægleren har INGEN API: overdragelse sker manuelt ud fra en liste; medarbejderen registrerer sagsnr.
+  - Indbetalinger: e-conomic udligner selv (remainder). Bankafstemningen laver i kassekladden 3 ben (bank,
+    debitor, gebyr-/rentekonto) – kontrolleres FØR bogføring. FIK: betalings-id = fakturanr. + kontrolciffer;
+    FI-kreditornummeret = kunden.
 - `app/fejlrapport.py` – Sentry (`init_fejlrapport("api"|"worker"|"scheduler")`). Slået fra uden
   `SENTRY_DSN`. environment = production (APP_ENV=production) ellers development. API'et bruger
   FastAPI-integrationen. Ingen lokale variabler, ingen personoplysninger; `before_send` fjerner
