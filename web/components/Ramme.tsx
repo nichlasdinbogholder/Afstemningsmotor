@@ -37,7 +37,13 @@ export default function Ramme({ children }: { children: React.ReactNode }) {
     <MigKontekst.Provider value={mig}>
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-          <Link href="/" className="font-semibold text-slate-900">Afstemningsmotor</Link>
+          <div className="flex items-center gap-6">
+            <Link href="/" className="font-semibold text-slate-900">Din Bogholder</Link>
+            <nav className="flex gap-1 text-sm">
+              <Link href="/" className="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900">Afstemning</Link>
+              <Link href="/debitorstyring/" className="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900">Debitorstyring</Link>
+            </nav>
+          </div>
           <div className="flex items-center gap-4 text-sm text-slate-600">
             <span>{mig?.navn}{mig?.rolle === "admin" && <span className="ml-1 text-slate-400">(administrator)</span>}</span>
             <a href="/logout" className="text-slate-500 hover:text-slate-900">Log ud</a>

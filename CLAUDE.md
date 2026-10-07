@@ -197,11 +197,18 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   accepted/ignored; actor = medarbejderens e-mail), `kunder/{id}/kontoudtog`, `kontoudtog/{id}`,
   `POST kunder/{id}/opdater` (job `opdater_kunde`, prioritet 10) og `jobs/{id}`. POST kræver headeren
   `X-Afstemning: 1`. Læser KUN vores database – aldrig e-conomic direkte.
+- `app/api/opkraevning.py` – DEBITORSTYRINGEN under `/api/opkraevning` (login krævet): `kunder`,
+  `{kunde}/fakturaer?filter=&q=` (betalingsstatus + kanal beregnes; filtre alt/ikke_betalt/forfaldet/
+  delvist_betalt/betalt/kreditnota/ingen_kanal/med_rykker), `faktura/{id}`, `{kunde}/debitorer`,
+  `POST debitor/{id}` (blokér/kanal/note → audit_log `debitor_aendret`), `{kunde}/rykkere` (i kø, sendt,
+  spærrer – seneste pr. faktura og årsag), `POST rykker/{id}/fjern` (note krævet), `{kunde}/indstillinger`.
 - `app/rules/visning.py` – aktuelle fund (`NOT EXISTS` nyere regelkørsel – bruger indekset), regelnavne.
 - `web/` – WEBDELEN (Next.js 16, TypeScript, Tailwind). Bygges til statiske filer (`output: "export"`), som
   Caddy udleverer (`deploy/Dockerfile.caddy`); intet Node-program i drift. Henter kun fra `/api`
   (`web/lib/api.ts`, `send()` sætter X-Afstemning). Sider: `/` kundeoversigt, `/kunde/?id=` (fund med
-  statusskift + historik, kontoudtog med linjer, "Opdater nu"). Lokalt: `npm run dev` + `DEV_LOGIN=true`
+  statusskift + historik, kontoudtog med linjer, "Opdater nu"), `/debitorstyring/` (kunder med opkrævning) og
+  `/debitorstyring/kunde/?id=&fane=` (Opkrævninger, Rykkere, Debitorer, Afbetaling, Indstillinger;
+  komponenter i `web/components/debitor/`). Lokalt: `npm run dev` + `DEV_LOGIN=true`
   på FastAPI og `/dev-login?email=` (virker aldrig med APP_ENV=production). Læs `web/AGENTS.md` før
   ændringer (Next.js 16 adskiller sig fra ældre versioner).
 - Kapacitet (målt, DEPLOY.md): 500 kunder / 20 samtidige medarbejdere; 4 workers, 3 API-processer.

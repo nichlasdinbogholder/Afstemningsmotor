@@ -80,6 +80,28 @@ def rediger(tekst: str) -> str:
     return tekst
 
 
+def _rediger_arg(a):
+    if isinstance(a, str):
+        return rediger(a)
+    tekst = str(a)
+    return rediger(tekst) if rediger(tekst) != tekst else a
+
+
+def _rediger_record(record: logging.LogRecord, besked: str) -> None:
+    """Skjul hemmeligheder, men bevar formen på `args`, hvis det kan lade sig gøre – nogle
+    formattere (fx uvicorns adgangslog) pakker args ud og fejler, hvis de mangler."""
+    if isinstance(record.args, tuple) and record.args:
+        record.msg = rediger(str(record.msg))
+        record.args = tuple(_rediger_arg(a) for a in record.args)
+        try:
+            if rediger(record.getMessage()) == record.getMessage():
+                return
+        except Exception:
+            pass
+    record.msg = rediger(besked)
+    record.args = ()
+
+
 def _lav_log_record_factory(gammel):
     formatter = logging.Formatter()
 
@@ -88,8 +110,9 @@ def _lav_log_record_factory(gammel):
         if not _kendte_hemmeligheder:
             return record
         try:
-            record.msg = rediger(record.getMessage())
-            record.args = ()
+            besked = record.getMessage()
+            if rediger(besked) != besked:
+                _rediger_record(record, besked)
         except Exception:
             record.msg = "[logbesked skjult: kunne ikke kontrolleres for hemmeligheder]"
             record.args = ()

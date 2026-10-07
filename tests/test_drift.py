@@ -398,3 +398,25 @@ def test_udskudt_job_sendes_ikke_til_sentry(fang_sentry):
             s.execute(text("DELETE FROM jobs WHERE id = :id"), {"id": job_id})
             s.commit()
     assert sendt == []  # rate limit er ikke en fejl
+
+
+# --- Log-filteret må ikke ødelægge andres logformat ---------------------------------
+
+
+def test_uvicorn_adgangslog_virker_med_logfilteret(token):
+    """uvicorns adgangslog pakker record.args ud (5 værdier). Filteret skal bevare dem."""
+    import logging
+
+    from uvicorn.logging import AccessFormatter
+
+    registrer_hemmelighed(token)
+    fmt = AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s', use_colors=False)
+    log = logging.getLogger("uvicorn.access")
+    ren = log.makeRecord(log.name, logging.INFO, __file__, 1, '%s - "%s %s HTTP/%s" %d',
+                         ("127.0.0.1:1", "GET", "/health", "1.1", 200), None)
+    assert fmt.format(ren) == '127.0.0.1:1 - "GET /health HTTP/1.1" 200 OK'
+
+    med_token = log.makeRecord(log.name, logging.INFO, __file__, 1, '%s - "%s %s HTTP/%s" %d',
+                               ("127.0.0.1:1", "GET", f"/x?t={token}", "1.1", 200), None)
+    tekst = fmt.format(med_token)
+    assert token not in tekst and "GET /x?t=" in tekst and tekst.endswith(" 200 OK")
