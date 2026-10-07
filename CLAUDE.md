@@ -149,6 +149,14 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/regnskab/models.py` – regnskabsdata fra kundernes systemer (`accounts`
   med `tenant_id` = kunden; cache-tabellerne `customers`, `suppliers`, `entries`,
   `open_entries` med unik (client_id, systemets id)). Holdt adskilt fra CRM.
+- `app/kontoudtog/` – kontoudtog fra eksterne kilder: tabellerne `statements` (kilde grossist/skattekonto/
+  bank/andet, modstykke = finanskonto og/eller `modpart` "kreditor:<nr>", periode, fortegn samme/modsat)
+  og `statement_lines`. `importer.py`: indlæs CSV (`python -m app.kontoudtog.importer …`).
+- `app/rules/kontoudtog.py` – MATCHMOTOREN (to regler): trin 1 reference = bilagsnummer + beløb,
+  trin 2 beløb + dato ±5 dage (`DATO_TOLERANCE`), resten → findings `mangler_i_bogfoering` /
+  `mangler_paa_kontoudtog`. Én-til-én; match gemmes i `statement_lines.match_entry_id/match_trin`.
+  Uafhængig af kilden. Læser posteringer med SQL (ikke EntryCache), så adapter-laget ikke trækkes med.
+  `scripts/matchprocent.sql`: matchprocent pr. kunde.
 - `app/natkoersel/` – NATKØRSLEN (erstatter på serveren den gamle planlægger `worker --kun-planlaeg`):
   - `scheduler.py`: APScheduler i egen proces (`python -m app.natkoersel.scheduler`, compose-tjenesten
     `scheduler`). Kl. 05:00 dansk tid mandag–fredag: ét `natkoersel_kunde`-job pr. aktiv kunde med

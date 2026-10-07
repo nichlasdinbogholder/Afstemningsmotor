@@ -29,6 +29,7 @@ KOMMANDOER = [
     "app.cli",
     "app.natkoersel.scheduler",
     "app.natkoersel.status",
+    "app.kontoudtog.importer",
     "app.kunder.adgange",
 ]
 

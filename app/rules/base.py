@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 # Moduler med regler. Ny regel: tilføj ét modulnavn her.
 REGEL_MODULER = (
     "app.rules.duplicate_entries",
+    "app.rules.kontoudtog",
 )
 
 

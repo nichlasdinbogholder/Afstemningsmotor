@@ -4,6 +4,7 @@ from app.afstemning.models import AabenPostFund
 from app.audit.models import AuditLog
 from app.crm.models import Document, Handover, Note, Task, TimeEntry
 from app.jobs.models import Job
+from app.kontoudtog.models import Statement, StatementLine
 from app.kunder.models import Client, Contact, Credential
 from app.personale.models import Staff
 from app.rules.models import Finding, FindingEvent, RuleRun
@@ -28,6 +29,8 @@ __all__ = [
     "Note",
     "OpenEntryCache",
     "Staff",
+    "Statement",
+    "StatementLine",
     "SupplierCache",
     "SyncState",
     "Task",

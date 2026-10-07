@@ -453,7 +453,8 @@ def test_hver_koersel_noteres_i_rule_runs(db_session, kunde, poster):
     poster(2, "2026-04-28", 1310, "100.00")
     _koer(db_session, kunde)
     _koer(db_session, kunde)
-    koersler = db_session.scalars(select(RuleRun).where(RuleRun.client_id == kunde.id)).all()
+    koersler = db_session.scalars(select(RuleRun).where(RuleRun.client_id == kunde.id,
+                                                       RuleRun.rule_code == REGEL)).all()
     assert [(k.rule_code, k.rule_version, k.fund) for k in koersler] == [(REGEL, 9, 1), (REGEL, 9, 1)]
 
 
