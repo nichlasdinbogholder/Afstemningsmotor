@@ -1,6 +1,9 @@
 """Trin 0 for opkrævningsmodulet: vis RÅ JSON fra e-conomic for én faktura og én debitor,
 før datamodellen skrives. Feltnavnene i modellen skal komme herfra – ikke gættes.
 
+    # alle feltnavne på debitorer og fakturaer – uden værdier:
+    docker compose -f docker-compose.prod.yml exec -T api python scripts/peek_opkraevning.py --kundenummer <nr> --felter
+
     # e-conomics offentlige demoaftale (kun opdigtede data – sikkert at dele):
     python scripts/peek_opkraevning.py --demo
 
@@ -27,11 +30,17 @@ STRUKTUR_NOEGLER = {"self", "entryType", "currency", "vatZone", "layoutNumber", 
                     "status", "type", "name_of_endpoint", "collection", "metaData", "templates"}
 
 
-def anonymiser(data, noegle: str | None = None):
+# Objekter, hvis navn ikke er persondata (fx debitorgruppe "Erhverv", momszone "Domestic").
+STRUKTUR_OBJEKTER = {"customerGroup", "vatZone", "paymentTerms", "layout"}
+
+
+def anonymiser(data, noegle: str | None = None, ophav: str | None = None):
     if isinstance(data, dict):
-        return {k: anonymiser(v, k) for k, v in data.items()}
+        if ophav in STRUKTUR_OBJEKTER or "customerGroupNumber" in data and "customers" in data:
+            return {k: (v if k == "name" else anonymiser(v, k)) for k, v in data.items()}
+        return {k: anonymiser(v, k, ophav=k) for k, v in data.items()}
     if isinstance(data, list):
-        return [anonymiser(v, noegle) for v in data]
+        return [anonymiser(v, noegle, ophav) for v in data]
     if isinstance(data, str):
         if (noegle in STRUKTUR_NOEGLER or data.startswith("https://restapi.e-conomic.com")
                 or ISO_DATO.match(data) or VALUTA.match(data) or data in ("", "true", "false")):
@@ -67,6 +76,28 @@ def lav_klient(args):
     return EconomicKlient(app_secret_token(), adgang.token, base_url=get_settings().economic_api_base_url)
 
 
+def feltoversigt(raekker) -> tuple[int, dict[str, int]]:
+    """Kun NAVNE på felter (med under-felter som a.b) og hvor mange rækker har dem – aldrig værdier."""
+    from collections import Counter
+
+    taeller: Counter = Counter()
+    antal = 0
+
+    def gennemgaa(d: dict, praefiks: str, set_: set) -> None:
+        for k, v in d.items():
+            navn = f"{praefiks}{k}"
+            set_.add(navn)
+            if isinstance(v, dict):
+                gennemgaa(v, navn + ".", set_)
+
+    for r in raekker:
+        antal += 1
+        fundet: set = set()
+        gennemgaa(r, "", fundet)
+        taeller.update(fundet)
+    return antal, dict(taeller)
+
+
 def hent(klient, sti: str, **params):
     return klient._hent_side(sti, params or None)  # samme GET med genforsøg som adapteren
 
@@ -78,8 +109,19 @@ def main(argv: list[str] | None = None) -> int:
     hvem.add_argument("--kundenummer", help="en kunde i vores database")
     parser.add_argument("--faktura", type=int, help="bestemt bogført fakturanummer (standard: nyeste ubetalte)")
     parser.add_argument("--vis-persondata", action="store_true", help="vis navne/adresser uændret (del ikke)")
+    parser.add_argument("--felter", action="store_true",
+                        help="gennemgå ALLE debitorer og bogførte fakturaer: vis kun feltnavne og antal (ingen værdier)")
     args = parser.parse_args(argv)
     skjul = not args.vis_persondata
+
+    if args.felter:
+        with lav_klient(args) as k:
+            for sti in ("/customers", "/invoices/booked"):
+                antal, felter = feltoversigt(k.hent_alle(sti))
+                print(f"\n===== {sti}: {antal} rækker – feltnavne og hvor mange der har dem =====")
+                for felt, n in sorted(felter.items()):
+                    print(f"  {felt:55} {n:>7}")
+        return 0
 
     with lav_klient(args) as k:
         vis("GET /invoices  (hvilke faktura-lister findes)", hent(k, "/invoices"), skjul=False)

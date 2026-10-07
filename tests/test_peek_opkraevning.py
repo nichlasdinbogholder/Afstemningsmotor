@@ -43,3 +43,20 @@ def test_kun_get_ingen_token_og_persondata_skjult(capsys, monkeypatch):
     assert "Hanne Hansen" not in ud and "hanne@eksempel.dk" not in ud and "12345678" not in ud
     assert '"dueDate": "2026-09-15"' in ud and '"remainder": 1250.0' in ud and '"currency": "DKK"' in ud
     assert '"name": "«tekst, 12 tegn»"' in ud
+
+
+def test_feltoversigt_viser_kun_navne():
+    antal, felter = peek.feltoversigt([DEBITOR, {"customerNumber": 8, "email": "a@b.dk"}])
+    assert antal == 2
+    assert felter["customerNumber"] == 2 and felter["email"] == 2 and felter["name"] == 1
+    assert felter["customerGroup.customerGroupNumber"] == 1
+    assert "hanne@eksempel.dk" not in str(felter) and "Hanne" not in str(felter)
+
+
+def test_gruppenavn_vises_men_debitornavn_skjules():
+    ud = peek.anonymiser({"name": "Hanne", "customerGroup": {"customerGroupNumber": 1, "name": "Erhverv"},
+                          "vatZone": {"name": "Domestic", "vatZoneNumber": 1}})
+    assert ud["customerGroup"]["name"] == "Erhverv" and ud["vatZone"]["name"] == "Domestic"
+    assert ud["name"] == "«tekst, 5 tegn»"
+    gruppe = peek.anonymiser({"customerGroupNumber": 2, "name": "Privat", "customers": "https://x"})
+    assert gruppe["name"] == "Privat"
