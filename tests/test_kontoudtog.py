@@ -384,7 +384,7 @@ def test_mangler_kontoudtog_fra_grossist(db_session, kunde, post, monkeypatch):
     from app.regnskab.models import SupplierCache
     from app.rules import manglende_kontoudtog as mk
 
-    monkeypatch.setattr(mk, "i_dag", lambda: date(2026, 10, 7))
+    monkeypatch.setattr(mk, "i_dag", lambda: date(2026, 10, 14))  # 10. hverdag i oktober
     db_session.add_all([
         SupplierCache(client_id=kunde.id, leverandoernummer=45, navn="Bygma", gruppe=20000),
         SupplierCache(client_id=kunde.id, leverandoernummer=46, navn="Stark", gruppe=20000),
@@ -401,6 +401,23 @@ def test_mangler_kontoudtog_fra_grossist(db_session, kunde, post, monkeypatch):
     assert sorted(f.title.split(" – ")[0] for f in fund) == [
         "Mangler kontoudtog: Stark (leverandør 46) for august 2026",
         "Mangler kontoudtog: Stark (leverandør 46) for september 2026"]
+
+    # Dagen før fristen: september-udtoget kan stadig nå at komme – kun august meldes.
+    monkeypatch.setattr(mk, "i_dag", lambda: date(2026, 10, 13))
+    resultat = koer_regler(db_session, kunde.id)
+    assert next(r for r in resultat.regler if r.rule_code == "mangler_kontoudtog").fundet == 1
+
+
+@pytest.mark.parametrize("maaned, frist", [
+    (date(2026, 9, 1), date(2026, 10, 14)),
+    (date(2026, 3, 1), date(2026, 4, 17)),   # påsken: skærtorsdag, langfredag og 2. påskedag tæller ikke
+    (date(2026, 4, 1), date(2026, 5, 15)),   # Kristi himmelfartsdag 14.05 tæller ikke
+    (date(2025, 12, 1), date(2026, 1, 15)),  # nytårsdag (torsdag) tæller ikke
+])
+def test_frist_er_10_hverdag_i_maaneden_efter(maaned, frist):
+    from app.rules.manglende_kontoudtog import frist as beregn_frist
+
+    assert beregn_frist(maaned) == frist
 
 
 def test_afsluttede_maaneder_over_aarsskifte():
