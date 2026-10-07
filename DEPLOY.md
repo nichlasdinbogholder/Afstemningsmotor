@@ -1,11 +1,11 @@
 # Serveren – sådan sættes den op
 
-**Færdig når:** `https://afstemning.dinbogholder.dk/health` svarer `{"status":"ok",...}`,
+**Færdig når:** `https://hub.dinbogholder.dk/health` svarer `{"status":"ok",...}`,
 og `scripts/gendan_test.sh` har skrevet **GENDANNELSE OK** på serveren.
 
 Ord, der går igen:
 - **SSH** – sådan logger du ind på serveren fra Terminal på din Mac.
-- **DNS** – "telefonbogen", der fortæller, at `afstemning.dinbogholder.dk` er din server.
+- **DNS** – "telefonbogen", der fortæller, at `hub.dinbogholder.dk` er din server.
 - **Container** – en lille, afgrænset del af serveren, der kører én ting (database, webdel …).
 
 Hemmeligheder skrives ALDRIG i en mail, en chat eller her i repoet. Gem dem i en
@@ -33,7 +33,7 @@ adgangskodemanager (fx 1Password eller Bitwarden). Du får brug for fire:
      Det er et ekstra sikkerhedsnet; det erstatter IKKE databasebackup'en i trin 6.
 4. Notér serverens **IPv4-adresse** (fx `95.217.x.x`).
 
-## Trin 2 · Domæne – peg afstemning.dinbogholder.dk på serveren
+## Trin 2 · Domæne – peg hub.dinbogholder.dk på serveren
 
 Hos den, der styrer DNS for `dinbogholder.dk`:
 - Ny **A-post**: navn `afstemning`, værdi = serverens IPv4-adresse.
@@ -41,7 +41,7 @@ Hos den, der styrer DNS for `dinbogholder.dk`:
 
 Tjek fra din Mac (kan tage fra minutter til et par timer):
 ```bash
-dig +short afstemning.dinbogholder.dk
+dig +short hub.dinbogholder.dk
 ```
 Den skal svare med serverens IP-adresse.
 
@@ -88,7 +88,7 @@ Udfyld i `.env`:
 | `DATABASE_URL` | `postgresql+psycopg://afstemning:<POSTGRES_PASSWORD>@db:5432/afstemningsmotor` (bemærk **@db**) |
 | `CREDENTIALS_KEY` | **præcis den samme som på din Mac** (fra adgangskodemanageren) – ellers kan de gemte tokens ikke læses |
 | `ECONOMIC_APP_SECRET_TOKEN` | som på din Mac |
-| `DOMAIN` | `afstemning.dinbogholder.dk` |
+| `DOMAIN` | `hub.dinbogholder.dk` |
 | `BASIC_AUTH_USER` | fx `dinbogholder` |
 | `BASIC_AUTH_HASH` | se nedenfor |
 
@@ -125,10 +125,10 @@ docker compose -f docker-compose.prod.yml ps
 Alle skal stå som `running` (og `migrate` som `exited (0)` – den opdaterer tabellerne og
 stopper så). Tjek fra din Mac:
 ```bash
-curl https://afstemning.dinbogholder.dk/health
+curl https://hub.dinbogholder.dk/health
 ```
 Svar: `{"status":"ok","database":"ok","databaseversion":"..."}`.
-Åbn `https://afstemning.dinbogholder.dk/docs` i browseren – den skal bede om brugernavn
+Åbn `https://hub.dinbogholder.dk/docs` i browseren – den skal bede om brugernavn
 og adgangskode.
 
 **Data fra din Mac** (valgfrit): vil du have kunder, tokens og fund med fra Mac'en:
@@ -205,7 +205,7 @@ uden lokale variabler, uden personoplysninger, og alle kendte tokens maskeres (`
 1. Gå til **entra.microsoft.com** → **Applications → App registrations → New registration**.
    - Navn: `Afstemningsmotor`
    - Hvem må bruge den: **Accounts in this organizational directory only** (kun jeres egne)
-   - Redirect URI: platform **Web**, adresse `https://afstemning.dinbogholder.dk/auth/callback`
+   - Redirect URI: platform **Web**, adresse `https://hub.dinbogholder.dk/auth/callback`
 2. På oversigtssiden: kopiér **Directory (tenant) ID** og **Application (client) ID**.
 3. **Certificates & secrets → New client secret** (fx 24 måneder). Kopiér **Value** med det
    samme – den vises kun én gang. Den er hemmelig: læg den direkte i `.env` på serveren og i
@@ -218,14 +218,14 @@ MS_TENANT_ID=<Directory (tenant) ID>
 MS_CLIENT_ID=<Application (client) ID>
 MS_CLIENT_SECRET=<Value fra punkt 3>
 SESSION_SECRET=<svaret fra: openssl rand -hex 32>
-PUBLIC_URL=https://afstemning.dinbogholder.dk
+PUBLIC_URL=https://hub.dinbogholder.dk
 ```
 Opret dig selv som administrator og genstart:
 ```bash
 docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml exec -T api python -m app.personale.bruger opret --email nichlas@dinbogholder.dk --navn "Nichlas" --rolle admin
 ```
-Åbn `https://afstemning.dinbogholder.dk` → **Log ind med Microsoft**. Kun medarbejdere, der er
+Åbn `https://hub.dinbogholder.dk` → **Log ind med Microsoft**. Kun medarbejdere, der er
 oprettet (og aktive) med `app.personale.bruger`, kommer ind – også selvom andre har en
 Microsoft-konto hos jer. Når login virker, kan den fælles adgangskode i Caddy fjernes.
 

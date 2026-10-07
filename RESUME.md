@@ -22,10 +22,10 @@
       `python -m app.natkoersel.status`.
 - [x] **Backup uden for serveren:** Hetzner Storage Box BX11 (u685938, Falkenstein – andet
       datacenter end serveren). `backup.sh` kopierer hver backup derover (afprøvet 07.10.2026).
-- [ ] HTTPS på `afstemning.dinbogholder.dk`: venter på DNS (A-post oprettet 07.10).
+- [ ] HTTPS på `hub.dinbogholder.dk`: domænet skiftet 07.10 (før afstemning.dinbogholder.dk) – ny A-post skal oprettes.
 
 ## Næste opgave
-Når DNS virker: genstart caddy, tjek `https://afstemning.dinbogholder.dk/health` og at
+Når DNS virker: genstart caddy, tjek `https://hub.dinbogholder.dk/health` og at
 `/docs` beder om adgangskode. Derefter (valgfrit, men anbefalet): flyt data fra Mac'en til
 serveren (DEPLOY.md trin 5) og kør `scripts/gendan_test.sh` igen med rigtige data. Slå
 automatiske snapshots til på Storage Boxen (gjort 07.10.2026).
