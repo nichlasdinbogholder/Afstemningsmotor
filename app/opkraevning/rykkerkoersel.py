@@ -1,6 +1,6 @@
 """Rykkernes døgn – med et vindue, hvor et menneske kan nå at gribe ind.
 
-kl. 16.00  `laeg_i_koe(kunde, afsendelsesdag)`: næste bankdags rykkere lægges i kø (status
+kl. 16.00  `laeg_i_koe(kunde, afsendelsesdag)`: næste bankdags påmindelser og rykkere lægges i kø (status
            `queued`). Fakturaer, der ikke må rykkes, får deres grunde skrevet i dunning_skips.
 imellem    `fjern_rykker(...)`: en medarbejder fjerner en enkelt rykker (fx kunden ringede og
            aftalte noget i går). Det står i dunning_skips som `fjernet_af_medarbejder`.
@@ -20,8 +20,8 @@ from sqlalchemy.orm import Session
 
 from app.audit.models import AuditLog
 from app.opkraevning.models import Debtor, DunningSkip, DunningStep, Invoice
-from app.opkraevning.rykker import byg_rykker
-from app.opkraevning.spaerrer import kandidater, skriv_spaerrer, spaerrer
+from app.opkraevning.rykker import byg_paamindelse, byg_rykker
+from app.opkraevning.spaerrer import PAAMINDELSE, kandidater, naeste_for_faktura, skriv_spaerrer, spaerrer
 
 
 @dataclass
@@ -38,6 +38,12 @@ class KoeResultat:
     sprunget_over: list[Vurdering] = field(default_factory=list)
 
 
+def _byg_naeste(session: Session, faktura: Invoice, dag: date) -> DunningStep:
+    """Venlig påmindelse eller næste rykker – efter kundens plan (spaerrer.naeste_skridt)."""
+    art, _ = naeste_for_faktura(session, faktura)
+    return byg_paamindelse(session, faktura, dag) if art == PAAMINDELSE else byg_rykker(session, faktura, dag)
+
+
 def laeg_i_koe(session: Session, client_id: int, afsendelsesdag: date) -> KoeResultat:
     resultat = KoeResultat()
     for f in kandidater(session, client_id, afsendelsesdag):
@@ -46,7 +52,7 @@ def laeg_i_koe(session: Session, client_id: int, afsendelsesdag: date) -> KoeRes
             skriv_spaerrer(session, f, v.grunde)
             resultat.sprunget_over.append(v)
         else:
-            v.rykker = byg_rykker(session, f, afsendelsesdag)
+            v.rykker = _byg_naeste(session, f, afsendelsesdag)
             resultat.lagt_i_koe.append(v)
     return resultat
 
@@ -104,7 +110,7 @@ def forhaandsvis(session: Session, client_id: int, dag: date) -> KoeResultat:
             if v.grunde:
                 resultat.sprunget_over.append(v)
             else:
-                r = byg_rykker(session, f, dag)
+                r = _byg_naeste(session, f, dag)
                 v.rykker = DunningStep(step_no=r.step_no, due_at=r.due_at, fee_amount=Decimal(r.fee_amount),
                                        interest_amount=Decimal(r.interest_amount),
                                        compensation_amount=Decimal(r.compensation_amount))

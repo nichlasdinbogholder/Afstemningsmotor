@@ -144,6 +144,7 @@ class Invoice(Base):
     # Rykkere sendt FØR overgangen fra FarPay (trin 10) – tæller med i "højst 3".
     prior_dunning_count: Mapped[int] = mapped_column(SmallInteger, server_default=text("0"))
     prior_last_dunning_at: Mapped[date | None] = mapped_column(Date)  # seneste rykker i FarPay
+    prior_reminder_at: Mapped[date | None] = mapped_column(Date)      # venlig påmindelse sendt i FarPay
     # Fakturahovedet som på den trykte faktura (vises i debitorstyringen).
     order_no: Mapped[int | None] = mapped_column(Integer)          # orderNumber
     other_ref: Mapped[str | None] = mapped_column(String(255))    # references.other ("Øvrig ref.")
@@ -181,10 +182,17 @@ class InvoicePayment(Base):
 
 
 class DunningStep(Base):
+    """En rykker (step_no 1-3) eller den venlige påmindelse (step_no 0 – altid uden gebyr, rente og
+    kompensation, og tæller ikke med i lovens 3 rykkere)."""
+
     __tablename__ = "dunning_steps"
     __table_args__ = (
-        UniqueConstraint("invoice_id", "step_no", name="uq_dunning_steps_faktura_nr"),
-        CheckConstraint("step_no BETWEEN 1 AND 3", name="hoejst_3_rykkere"),
+        # Kun én AKTIV rykker af hvert nummer pr. faktura – en annulleret rykker må gerne afløses af en ny.
+        Index("uq_dunning_steps_faktura_nr", "invoice_id", "step_no", unique=True,
+              postgresql_where=text("status IN ('queued', 'sent')")),
+        CheckConstraint("step_no BETWEEN 0 AND 3", name="hoejst_3_rykkere"),
+        CheckConstraint("step_no > 0 OR (fee_amount = 0 AND interest_amount = 0 AND compensation_amount = 0)",
+                        name="paamindelse_uden_beloeb"),
         CheckConstraint("fee_amount >= 0 AND fee_amount <= 100", name="gebyr_hoejst_100"),
         CheckConstraint("interest_amount >= 0", name="rente_ikke_negativ"),
         CheckConstraint("compensation_amount >= 0", name="kompensation_ikke_negativ"),
@@ -192,8 +200,8 @@ class DunningStep(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id", ondelete="RESTRICT"))
-    step_no: Mapped[int] = mapped_column(SmallInteger)
+    invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id", ondelete="RESTRICT"), index=True)
+    step_no: Mapped[int] = mapped_column(SmallInteger)   # 0 = venlig påmindelse
     due_at: Mapped[date] = mapped_column(Date)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fee_amount: Mapped[Decimal] = mapped_column(BELOEB, server_default=text("0"))

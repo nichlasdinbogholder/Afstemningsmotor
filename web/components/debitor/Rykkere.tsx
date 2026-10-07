@@ -16,7 +16,7 @@ export default function Rykkere({ kundeId }: { kundeId: number }) {
   useEffect(genindlaes, [genindlaes]);
 
   async function fjern(r: Rykker) {
-    const note = window.prompt(`Fjern rykker nr. ${r.nr} på faktura ${r.fakturanummer} til ${r.debitor}?\nSkriv hvorfor (fx "kunden ringede, betaler fredag"):`);
+    const note = window.prompt(`Fjern ${r.nr === 0 ? "den venlige påmindelse" : `rykker nr. ${r.nr}`} på faktura ${r.fakturanummer} til ${r.debitor}?\nSkriv hvorfor (fx "kunden ringede, betaler fredag"):`);
     if (note === null) return;
     try { await send(`/api/opkraevning/rykker/${r.id}/fjern`, { note }); setFejl(null); genindlaes(); }
     catch (e) { setFejl(e instanceof Error ? e.message : "Fejl"); }
@@ -74,7 +74,7 @@ function Tabel({ raekker, tom, handling }: { raekker: Rykker[]; tom: string; han
           {raekker.map((r) => (
             <tr key={r.id} className="border-b border-slate-100 last:border-0">
               <td className="px-3 py-1.5">{r.fakturanummer}</td><td className="px-3 py-1.5">{r.debitor} <span className="text-slate-400">({r.debitornummer})</span></td>
-              <td className="px-3 py-1.5 text-center">{r.nr}</td>
+              <td className="px-3 py-1.5 text-center">{r.nr === 0 ? <span title="Venlig påmindelse – uden gebyr" className="rounded bg-sky-100 px-1.5 text-xs font-semibold text-sky-800">Påmindelse</span> : r.nr}</td>
               <td className="px-3 py-1.5">{r.sendt ? tidspunkt(r.sendt) : dato(r.dato)}</td>
               <td className="px-3 py-1.5 text-right tabular-nums">{beloeb(r.restbeloeb)}</td>
               <td className="px-3 py-1.5 text-right tabular-nums">{beloeb(r.gebyr)}</td>

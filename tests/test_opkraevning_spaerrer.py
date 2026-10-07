@@ -1,7 +1,7 @@
 """Opkrævning trin 3: hvornår en rykker IKKE må sendes – og hentningen af fakturaerne."""
 
 from contextlib import contextmanager
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -42,9 +42,12 @@ DAG = date(2026, 9, 28)        # mandag, 13 dage efter forfald – første rykke
 
 @pytest.fixture
 def kunde(db_session):
+    # Uden venlig påmindelse – de tests står længere nede.
     k = Client(navn="Spærre ApS", kundenummer="SP-1", regnskabssystem="economic", status="aktiv",
                dunning_mode="preview", business_customer_groups=[2])
     db_session.add_all([k, ReferenceRate(valid_from=date(2026, 7, 1), rate=Decimal("1.60"), source="test")])
+    db_session.flush()
+    k.reminder_after_days = None   # (None ved oprettelse giver databasens standard, 5)
     db_session.flush()
     return k
 
@@ -332,3 +335,80 @@ def test_scheduler_har_rykkertiderne():
     tider = {j.id: str(j.trigger) for j in s.get_jobs()}
     assert "hour='16'" in tider["rykker_koe"] and "hour='9'" in tider["rykker_kontrol"]
     assert "mon-fri" in tider["rykker_koe"]
+
+
+# --- Venlig påmindelse (5 dage efter forfald, uden gebyr) – derefter rykker hver 10. dag ----------------
+
+
+def _med_paamindelse(db_session, kunde):
+    kunde.reminder_after_days = 5
+    db_session.flush()
+
+
+def _send(db_session, kunde, dag):
+    [v] = laeg_i_koe(db_session, kunde.id, dag).lagt_i_koe
+    marker_sendt(db_session, v.rykker, datetime(dag.year, dag.month, dag.day, 7, tzinfo=UTC))
+    return v.rykker
+
+
+def test_paamindelse_efter_5_dage_og_derefter_rykker_hver_10_dag(db_session, kunde, faktura):
+    from app.opkraevning.models import FeeRevenue
+
+    _med_paamindelse(db_session, kunde)
+    assert laeg_i_koe(db_session, kunde.id, date(2026, 9, 19)).lagt_i_koe == []          # forfald + 4
+    p = _send(db_session, kunde, date(2026, 9, 20))                                      # forfald + 5
+    assert (p.step_no, p.fee_amount, p.interest_amount, p.compensation_amount) == (0, 0, 0, 0)
+    assert db_session.scalar(select(func.count()).select_from(FeeRevenue)) == 0          # intet at fakturere
+    assert laeg_i_koe(db_session, kunde.id, date(2026, 9, 29)).lagt_i_koe == []          # påmindelse + 9
+    r1 = _send(db_session, kunde, date(2026, 9, 30))                                     # påmindelse + 10
+    assert (r1.step_no, r1.fee_amount) == (1, Decimal("100.00"))
+    assert laeg_i_koe(db_session, kunde.id, date(2026, 10, 9)).lagt_i_koe == []
+    r2 = _send(db_session, kunde, date(2026, 10, 10))
+    r3 = _send(db_session, kunde, date(2026, 10, 20))
+    assert (r2.step_no, r3.step_no) == (2, 3)
+    assert laeg_i_koe(db_session, kunde.id, date(2026, 11, 30)).lagt_i_koe == []         # højst 3 rykkere
+
+
+def test_ingen_ny_paamindelse_efter_farpay(db_session, kunde, faktura):
+    _med_paamindelse(db_session, kunde)
+    faktura.prior_reminder_at = date(2026, 9, 20)                                        # sendt i FarPay
+    db_session.flush()
+    assert laeg_i_koe(db_session, kunde.id, date(2026, 9, 29)).lagt_i_koe == []
+    assert _send(db_session, kunde, date(2026, 9, 30)).step_no == 1
+    # Har FarPay allerede sendt en rykker, kommer der heller ingen påmindelse.
+    faktura2 = Invoice(client_id=kunde.id, external_id="731", invoice_no="731", debtor_id=faktura.debtor_id,
+                       issue_date=date(2026, 9, 1), due_date=FORFALD, amount=Decimal("500"),
+                       amount_outstanding=Decimal("500"), prior_dunning_count=1, prior_last_dunning_at=date(2026, 9, 25))
+    db_session.add(faktura2)
+    db_session.flush()
+    [v] = [v for v in laeg_i_koe(db_session, kunde.id, date(2026, 10, 5)).lagt_i_koe if v.faktura.id == faktura2.id]
+    assert v.rykker.step_no == 1
+
+
+def test_databasen_afviser_forkerte_paamindelser(db_session, kunde, faktura):
+    from sqlalchemy.exc import IntegrityError
+
+    def proev(**felter):
+        with db_session.begin_nested():
+            db_session.add(DunningStep(invoice_id=faktura.id, due_at=date(2026, 9, 20), status="queued", **felter))
+            db_session.flush()
+
+    with pytest.raises(IntegrityError):
+        proev(step_no=0, fee_amount=Decimal("100"))                                      # påmindelse med gebyr
+    _med_paamindelse(db_session, kunde)
+    _send(db_session, kunde, date(2026, 9, 20))
+    with pytest.raises(IntegrityError, match="under 10 dage"):
+        proev(step_no=1, fee_amount=Decimal("100"))                                      # rykker 1 kun 0 dage efter
+    _send(db_session, kunde, date(2026, 9, 30))
+    with pytest.raises(IntegrityError, match="allerede fået en rykker"):
+        with db_session.begin_nested():
+            db_session.add(DunningStep(invoice_id=faktura.id, step_no=0, due_at=date(2026, 10, 1), status="queued"))
+            db_session.flush()
+
+
+def test_annulleret_rykker_kan_afloeses_af_en_ny(db_session, kunde, faktura):
+    """Fejl fra trin 3: databasen tillod kun én rykker nr. 1 pr. faktura – også en annulleret."""
+    [v] = laeg_i_koe(db_session, kunde.id, DAG).lagt_i_koe
+    fjern_rykker(db_session, v.rykker.id, "bo@dinbogholder.dk", "Kunden ringede")
+    [ny] = laeg_i_koe(db_session, kunde.id, DAG + timedelta(days=1)).lagt_i_koe
+    assert ny.rykker.step_no == 1 and ny.rykker.id != v.rykker.id

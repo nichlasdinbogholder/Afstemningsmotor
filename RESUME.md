@@ -324,8 +324,15 @@ Skabelon:
     Falsk-positiv-rate ca. <b/5> %.
 
 ## Opkrævning (erstatter FarPay) – faste opgaver i ugeplanen
-- **1. januar og 1. juli:** sæt Nationalbankens udlånsrente, FØR der sendes rykkere i det nye halvår:
-  `python -m app.opkraevning.referencesats saet --fra ÅÅÅÅ-01-01 --sats <procent> --kilde "Nationalbanken …"`.
+- **Renten følger Nationalbanken automatisk:** hver morgen kl. 6.10 hentes udlånsrenten for halvåret
+  (1.1/1.7), hvis den mangler (Danmarks Statistiks Statistikbank, tabel DNRENTD). **1. januar og 1. juli:** tjek
+  `python -m app.opkraevning.referencesats vis`. Er den ikke kommet (kilden nede/ændret), kan den hentes med
+  `... referencesats hent --gem` eller sættes i hånden med `... saet --fra ÅÅÅÅ-01-01 --sats <procent> --kilde "…"`.
   Mangler satsen, stopper renteberegningen (med vilje) – den gætter ikke.
+- **Rykkerforløbet (besluttet 07.10.2026):** venlig påmindelse (uden gebyr) 5 dage efter forfald, derefter rykker
+  hver 10. dag (rykker 1 = 10 dage efter påmindelsen). Kompensationsgebyret (310 kr., kun erhverv) på rykker 3.
+- **Betalingsnøglen (FIK +71):** 15 cifre = fakturanummer + to kontrolcifre (det sidste = modulus 10). Bekræftet ud
+  fra FarPay: faktura 742 → 000000000074203. FI-kreditornummeret er kundens.
+- Inkasso: Inkasso Mægleren for ALLE kunder (manuel overdragelse ud fra en liste).
 - Karensperioden før inkasso er fast 10 dage for alle kunder (besluttet 07.10.2026).
 

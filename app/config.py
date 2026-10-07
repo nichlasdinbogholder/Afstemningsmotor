@@ -28,6 +28,13 @@ class Settings(BaseSettings):
 
     allow_booking: bool = False
 
+    # Referencesatsen (Nationalbankens udlånsrente) hentes automatisk fra Danmarks Statistiks
+    # Statistikbank (offentlig, ingen nøgle). VALG er kun nødvendig, hvis tabellen har flere mulige
+    # serier – fx "INSTRUMENT=ODKNAA" (kør `python -m app.opkraevning.referencesats hent` for at se dem).
+    referencesats_api_url: str = "https://api.statbank.dk/v1"
+    referencesats_tabel: str = "DNRENTD"
+    referencesats_valg: str | None = None
+
     # Fejlrapporter (Sentry). Tom = slået fra. Selve adressen (DSN) er en hemmelighed.
     sentry_dsn: SecretStr | None = None
 

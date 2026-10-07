@@ -49,7 +49,7 @@ export const SPAERRE: Record<string, string> = {
   afbetalingsordning: "Aktiv afbetalingsordning", under_minimumsbeloeb: "Restbeløb under minimum",
   under_10_dage: "For tidligt (10-dagesreglen/plan)", max_3_rykkere: "Har allerede 3 rykkere",
   aktiv_inkassosag: "Aktiv inkassosag", fjernet_af_medarbejder: "Fjernet af medarbejder",
-  rykker_i_koe: "Rykker ligger allerede i kø",
+  rykker_i_koe: "Påmindelse eller rykker ligger allerede i kø",
 };
 
 export const RYKKERTILSTAND: Record<string, string> = {

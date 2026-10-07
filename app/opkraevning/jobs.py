@@ -3,6 +3,8 @@
   kl. 16.00 på bankdage  `rykker_koe`     – næste bankdags rykkere lægges i kø
   kl. 09.00 på bankdage  `rykker_kontrol` – alle spærrer kontrolleres igen lige før afsendelse
 
+  kl. 06.10 hver dag    `hent_referencesats` – Nationalbankens udlånsrente for halvåret (kun hvis den mangler)
+
 Kun kunder med rykkere i drift (LIVE_TILSTANDE) får job. 'live' kan først vælges, når udsendelsen
 (trin 4) er bygget – indtil da lægges ingen rykkere i kø automatisk.
 """
@@ -20,6 +22,7 @@ from app.opkraevning.rykkerkoersel import kontroller_foer_afsendelse, laeg_i_koe
 from app.tid import TIDSZONE, er_bankdag, naeste_bankdag
 
 KOE = "rykker_koe"
+REFERENCESATS = "hent_referencesats"
 KONTROL = "rykker_kontrol"
 LIVE_TILSTANDE = ("live",)
 
@@ -54,3 +57,17 @@ def rykker_kontrol(job: JobKontekst) -> None:
     job.session.add(AuditLog(client_id=job.client_id, handling="rykkere_kontrolleret",
                              detaljer={"dag": dag.isoformat(), "klar": len(r.lagt_i_koe),
                                        "annulleret": len(r.sprunget_over)}))
+
+
+def planlaeg_referencesats(session: Session, nu: datetime) -> int:
+    """Ét job om dagen – det gør intet, hvis halvårets sats allerede er gemt."""
+    dag = nu.astimezone(TIDSZONE).date()
+    return laeg_i_koe(session, REFERENCESATS, payload={"dag": dag.isoformat()},
+                      idempotens_noegle=f"{REFERENCESATS}:{dag.isoformat()}", prioritet=10).ny
+
+
+@jobtype(REFERENCESATS)
+def hent_referencesats(job: JobKontekst) -> None:
+    from app.opkraevning.nationalbanken import opdater_referencesats
+
+    opdater_referencesats(job.session, date.fromisoformat(job.payload["dag"]))

@@ -138,7 +138,7 @@ SPAERRE_TEKST = {
     "afbetalingsordning": "aktiv afbetalingsordning", "under_minimumsbeloeb": "restbeløb under minimum",
     "under_10_dage": "for tidligt (10-dagesreglen/kundens plan)", "max_3_rykkere": "har allerede 3 rykkere",
     "aktiv_inkassosag": "aktiv inkassosag", "fjernet_af_medarbejder": "fjernet af medarbejder",
-    "rykker_i_koe": "en rykker ligger allerede i kø",
+    "rykker_i_koe": "en påmindelse eller rykker ligger allerede i kø",
 }
 
 
@@ -170,8 +170,9 @@ def dunning_preview(client_id: int, dag: date | None) -> int:
               f"{'komp.':>7}")
         for v in r.lagt_i_koe:
             print(f"  {v.faktura.invoice_no:>8}  {v.debitor.name[:28]:<28} {v.faktura.due_date:%d.%m.%Y} "
-                  f"{_kr(v.faktura.amount_outstanding):>12}  {v.rykker.step_no + v.faktura.prior_dunning_count:>2}  "
+                  f"{_kr(v.faktura.amount_outstanding):>12}  {'P' if v.rykker.step_no == 0 else v.rykker.step_no + v.faktura.prior_dunning_count:>2}  "
                   f"{_kr(v.rykker.fee_amount):>7} {_kr(v.rykker.interest_amount):>8} {_kr(v.rykker.compensation_amount):>7}")
+        print("  (nr P = venlig påmindelse uden gebyr)")
         print(f"\nSPRINGES OVER ({len(r.sprunget_over)})")
         for v in r.sprunget_over:
             grunde = ", ".join(SPAERRE_TEKST.get(k, k) for k, _ in v.grunde)

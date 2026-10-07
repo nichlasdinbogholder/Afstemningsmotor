@@ -192,3 +192,18 @@ def test_indstillinger_kun_admin_og_logges(klient, db_session, kunde):
 def test_afbetalinger_med_antal(klient, kunde):
     data = klient.get(f"/api/opkraevning/{kunde.id}/afbetalinger").json()
     assert data == {"antal": {"alle": 0, "aktive": 0, "misligholdt": 0}, "ordninger": []}
+
+
+def test_paamindelse_kan_slaas_fra_og_betalingsnoegle_vises(klient, db_session, kunde):
+    admin = Staff(navn="Ad", email="admin2-api@dinbogholder.dk", rolle="admin", aktiv=True)
+    db_session.add(admin)
+    db_session.flush()
+    app.dependency_overrides[login.nuvaerende_medarbejder] = lambda: admin
+    url = f"/api/opkraevning/{kunde.id}/indstillinger"
+    assert klient.get(url).json()["paamindelse_efter_dage"] == 5
+    assert klient.post(url, headers=H, json={"paamindelse_efter_dage": None}).json()["paamindelse_efter_dage"] is None
+    assert klient.post(url, headers=H, json={"paamindelse_efter_dage": 0}).status_code == 422
+    f = db_session.scalars(select(Invoice).where(Invoice.client_id == kunde.id, Invoice.invoice_no == "733")).one()
+    assert klient.get(f"/api/opkraevning/faktura/{f.id}").json()["betalingsnoegle"] is None   # intet FI-kreditornr.
+    assert klient.post(url, headers=H, json={"fi_kreditornummer": "80679858"}).status_code == 200
+    assert klient.get(f"/api/opkraevning/faktura/{f.id}").json()["betalingsnoegle"] == "+71<000000000073304 +80679858<"

@@ -98,6 +98,15 @@ def koer_rykkerplanlaegning(type_: str) -> int:
     return nye
 
 
+def koer_referencesatsplanlaegning() -> int:
+    from app.opkraevning.jobs import planlaeg_referencesats
+
+    with ny_session() as session:
+        nye = planlaeg_referencesats(session, datetime.now(TIDSZONE))
+        session.commit()
+    return nye
+
+
 def lav_scheduler() -> BlockingScheduler:
     from app.opkraevning.jobs import KOE, KONTROL
 
@@ -110,6 +119,10 @@ def lav_scheduler() -> BlockingScheduler:
                                                                timezone=TIDSZONE),
                           args=[type_], id=id_, name=f"Rykkere ({type_})", misfire_grace_time=3600,
                           coalesce=True, max_instances=1, replace_existing=True)
+    # Referencesatsen: hentes automatisk fra Nationalbanken – før rykkerne kl. 16 den 1.1/1.7.
+    scheduler.add_job(koer_referencesatsplanlaegning, CronTrigger(hour=6, minute=10, timezone=TIDSZONE),
+                      id="referencesats", name="Referencesats", misfire_grace_time=6 * 3600,
+                      coalesce=True, max_instances=1, replace_existing=True)
     return scheduler
 
 

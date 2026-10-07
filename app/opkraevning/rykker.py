@@ -5,6 +5,8 @@ kompensationsbeløb (på kundens valgte rykker) og morarente beregnet til `dag`,
 `ManglerReferencesats`. Den afgør IKKE, om en rykker bør sendes (betalt, blokeret, afbetaling
 osv.) – det gør spærrerne i trin 3, før byg_rykker kaldes.
 
+`byg_paamindelse(session, faktura, dag)` lægger den venlige påmindelse (step_no 0, uden beløb) i kø.
+
 `marker_sendt(session, rykker, tidspunkt)` sætter rykkeren som sendt og bogfører de pålagte
 beløb i `fee_revenue` (pålagt, endnu ikke indbetalt). En rykker, der fjernes inden afsendelse,
 giver derfor aldrig en gebyrlinje.
@@ -43,10 +45,41 @@ RYKKERGEBYR = MAKS_RYKKERGEBYR
 
 
 def aktive_rykkere(session: Session, faktura: Invoice) -> list[DunningStep]:
+    """Rykkere i kø eller sendt (ikke den venlige påmindelse)."""
     return list(session.scalars(
-        select(DunningStep).where(DunningStep.invoice_id == faktura.id,
+        select(DunningStep).where(DunningStep.invoice_id == faktura.id, DunningStep.step_no > 0,
                                   DunningStep.status.in_(("queued", "sent")))
         .order_by(DunningStep.step_no)))
+
+
+def aktiv_paamindelse(session: Session, faktura: Invoice) -> DunningStep | None:
+    return session.scalars(select(DunningStep).where(DunningStep.invoice_id == faktura.id, DunningStep.step_no == 0,
+                                                     DunningStep.status.in_(("queued", "sent")))).first()
+
+
+def paamindelse_sendt(session: Session, faktura: Invoice) -> date | None:
+    """Dagen for den venlige påmindelse – vores egen eller FarPays."""
+    p = aktiv_paamindelse(session, faktura)
+    if p is not None and p.sent_at is not None:
+        return dansk_dato(p.sent_at)
+    return faktura.prior_reminder_at
+
+
+def byg_paamindelse(session: Session, faktura: Invoice, dag: date) -> DunningStep:
+    """Venlig påmindelse: ingen gebyr, ingen rente, ingen kompensation – og kun før første rykker."""
+    if faktura.kind != "invoice" or faktura.amount <= 0:
+        raise LovgraenseFejl(f"Faktura {faktura.invoice_no} er en kreditnota – den rykkes aldrig")
+    if dag <= faktura.due_date:
+        raise LovgraenseFejl(f"Faktura {faktura.invoice_no} er ikke forfalden ({faktura.due_date:%d.%m.%Y})")
+    if faktura.prior_dunning_count or aktive_rykkere(session, faktura):
+        raise LovgraenseFejl(f"Faktura {faktura.invoice_no} har allerede fået en rykker – ingen påmindelse")
+    if aktiv_paamindelse(session, faktura) is not None or faktura.prior_reminder_at is not None:
+        raise LovgraenseFejl(f"Faktura {faktura.invoice_no} har allerede fået en påmindelse")
+    p = DunningStep(invoice_id=faktura.id, step_no=0, due_at=dag, status="queued", fee_amount=Decimal("0.00"),
+                    interest_amount=Decimal("0.00"), compensation_amount=Decimal("0.00"))
+    session.add(p)
+    session.flush()
+    return p
 
 
 def hovedstol_bevaegelser(session: Session, faktura: Invoice) -> list[tuple[date, Decimal]]:
@@ -73,7 +106,9 @@ def byg_rykker(session: Session, faktura: Invoice, dag: date) -> DunningStep:
             raise LovgraenseFejl(f"Rykker nr. {sidste.step_no} på faktura {faktura.invoice_no} er ikke sendt endnu")
         forrige = dansk_dato(sidste.sent_at)
     else:
-        forrige = faktura.prior_last_dunning_at
+        # Rykker 1 kommer tidligst 10 dage efter den venlige påmindelse og FarPays seneste rykker.
+        forrige = max((d for d in (faktura.prior_last_dunning_at, paamindelse_sendt(session, faktura)) if d),
+                      default=None)
     kontroller_interval(forrige, dag)
 
     debitor = session.get(Debtor, faktura.debtor_id)

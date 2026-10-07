@@ -7,7 +7,7 @@ import { beloeb, dato, RYKKERTILSTAND } from "@/lib/format";
 
 type Data = {
   virksomhed: { navn: string; cvr: string | null; adresse: string | null; postnr: string | null; by: string | null; kundenummer: string };
-  svar_email: string | null; kompensation_paa_rykker: number; rykkergebyr: string; kompensationsbeloeb: string;
+  svar_email: string | null; kompensation_paa_rykker: number; paamindelse_efter_dage: number | null; rykkergebyr: string; kompensationsbeloeb: string;
   rentesats: string | null; inkasso_efter_dage: number; rykkere: string; minimum: string;
   foerste_rykker_efter_dage: number; dage_mellem_rykkere: number; fordeling: string; erhvervsgrupper: number[];
   fi_kreditornummer: string | null; gebyrkonto: number | null; rentekonto: number | null; gebyraftale: string | null;
@@ -53,7 +53,8 @@ export default function Indstillinger({ kundeId, aendret }: { kundeId: number; a
         <Kort titel="Rykkerprocedure" ok neutral {...kortProps}
               felter={[
                 { felt: "rykkere", tekst: "Rykkere", type: "valg", valg: [["off", "Slået fra"], ["preview", "Prøvekørsel"]] },
-                { felt: "foerste_rykker_efter_dage", tekst: "Rykker 1: dage efter forfald", type: "tal" },
+                { felt: "paamindelse_efter_dage", tekst: "Venlig påmindelse: dage efter forfald (tom = ingen påmindelse)", type: "tal" },
+                { felt: "foerste_rykker_efter_dage", tekst: "Rykker 1 uden påmindelse: dage efter forfald", type: "tal" },
                 { felt: "dage_mellem_rykkere", tekst: "Dage mellem rykkerne (mindst 10)", type: "tal" },
                 { felt: "kompensation_paa_rykker", tekst: "Kompensationsgebyr på rykker", type: "valg", valg: [["1", "1"], ["2", "2"], ["3", "3"]] },
               ]}>
@@ -62,10 +63,19 @@ export default function Indstillinger({ kundeId, aendret }: { kundeId: number; a
             <thead className="text-left text-xs font-semibold"><tr><th className="px-2 py-1">Rykker</th><th className="px-2 py-1">Antal dage</th>
               <th className="px-2 py-1">Kompensationsgebyr (kun erhverv)</th><th className="px-2 py-1 text-right">Gebyr</th></tr></thead>
             <tbody>
+              {d.paamindelse_efter_dage !== null && (
+                <tr className="border-t border-sky-100">
+                  <td className="px-2 py-1">Venlig påmindelse</td>
+                  <td className="px-2 py-1">{d.paamindelse_efter_dage} efter forfald</td>
+                  <td className="px-2 py-1" /><td className="px-2 py-1 text-right">uden gebyr</td>
+                </tr>
+              )}
               {[1, 2, 3].map((n) => (
                 <tr key={n} className="border-t border-sky-100">
                   <td className="px-2 py-1">{n}</td>
-                  <td className="px-2 py-1">{n === 1 ? `${d.foerste_rykker_efter_dage} efter forfald` : `${d.dage_mellem_rykkere} efter forrige`}</td>
+                  <td className="px-2 py-1">{n > 1 ? `${d.dage_mellem_rykkere} efter forrige`
+                    : d.paamindelse_efter_dage !== null ? `${d.dage_mellem_rykkere} efter påmindelsen`
+                    : `${d.foerste_rykker_efter_dage} efter forfald`}</td>
                   <td className="px-2 py-1">{n === d.kompensation_paa_rykker ? `${beloeb(d.kompensationsbeloeb)} kr.` : ""}</td>
                   <td className="px-2 py-1 text-right">{beloeb(d.rykkergebyr)} kr.</td>
                 </tr>

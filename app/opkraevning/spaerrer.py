@@ -33,21 +33,39 @@ INDBETALING_BANKDAGE = 2
 
 
 def _sendte_og_koe(session: Session, faktura: Invoice) -> tuple[list[DunningStep], list[DunningStep]]:
+    """Sendte og ventende rykkere – INKL. den venlige påmindelse (step_no 0)."""
     rykkere = session.scalars(select(DunningStep).where(DunningStep.invoice_id == faktura.id,
                                                         DunningStep.status.in_(("queued", "sent")))
                               .order_by(DunningStep.step_no)).all()
     return [r for r in rykkere if r.status == "sent"], [r for r in rykkere if r.status == "queued"]
 
 
-def naeste_rykkerdag(kunde: Client, faktura: Invoice, sendte: list[DunningStep]) -> date:
-    """Tidligst mulige dag for næste rykker efter kundens plan (og aldrig under lovens 10 dage)."""
-    if sendte:
-        return dansk_dato(sendte[-1].sent_at) + timedelta(days=max(kunde.dunning_interval_days,
-                                                                     MIN_DAGE_MELLEM_RYKKERE))
+PAAMINDELSE, RYKKER = "paamindelse", "rykker"
+
+
+def naeste_skridt(kunde: Client, faktura: Invoice, sendte: list[DunningStep]) -> tuple[str, date]:
+    """Hvad er næste skridt på fakturaen, og hvornår tidligst?
+
+    Venlig påmindelse `reminder_after_days` efter forfald (hvis kunden bruger den, og fakturaen hverken har fået
+    påmindelse eller rykker – heller ikke i FarPay). Derefter rykker hver `dunning_interval_days` (loven: >= 10),
+    regnet fra seneste rykker eller påmindelse. Uden påmindelse: rykker 1 `dunning_first_after_days` efter forfald."""
+    interval = timedelta(days=max(kunde.dunning_interval_days, MIN_DAGE_MELLEM_RYKKERE))
+    rykkere = [r for r in sendte if r.step_no > 0]
+    if rykkere:
+        return RYKKER, dansk_dato(rykkere[-1].sent_at) + interval
     if faktura.prior_last_dunning_at:
-        return faktura.prior_last_dunning_at + timedelta(days=max(kunde.dunning_interval_days,
-                                                                  MIN_DAGE_MELLEM_RYKKERE))
-    return faktura.due_date + timedelta(days=kunde.dunning_first_after_days)
+        return RYKKER, faktura.prior_last_dunning_at + interval
+    paamindelse = next((dansk_dato(r.sent_at) for r in sendte if r.step_no == 0), faktura.prior_reminder_at)
+    if paamindelse:
+        return RYKKER, paamindelse + interval
+    if kunde.reminder_after_days is not None:
+        return PAAMINDELSE, faktura.due_date + timedelta(days=kunde.reminder_after_days)
+    return RYKKER, faktura.due_date + timedelta(days=kunde.dunning_first_after_days)
+
+
+def naeste_for_faktura(session: Session, faktura: Invoice) -> tuple[str, date]:
+    sendte, _ = _sendte_og_koe(session, faktura)
+    return naeste_skridt(session.get(Client, faktura.client_id), faktura, sendte)
 
 
 def spaerrer(session: Session, faktura: Invoice, dag: date, *, ved_afsendelse: DunningStep | None = None
@@ -105,10 +123,12 @@ def spaerrer(session: Session, faktura: Invoice, dag: date, *, ved_afsendelse: D
     i_koe = [r for r in i_koe if ved_afsendelse is None or r.id != ved_afsendelse.id]
     if i_koe:
         grund("rykker_i_koe", rykker=i_koe[0].step_no)
-    if len(sendte) + faktura.prior_dunning_count >= MAKS_RYKKERE:
-        grund("max_3_rykkere", sendt=len(sendte) + faktura.prior_dunning_count)
-    elif dag < naeste_rykkerdag(kunde, faktura, sendte):
-        grund("under_10_dage", tidligst=naeste_rykkerdag(kunde, faktura, sendte).isoformat())
+    antal = len([r for r in sendte if r.step_no > 0]) + faktura.prior_dunning_count
+    _, tidligst = naeste_skridt(kunde, faktura, sendte)
+    if antal >= MAKS_RYKKERE:
+        grund("max_3_rykkere", sendt=antal)
+    elif dag < tidligst:
+        grund("under_10_dage", tidligst=tidligst.isoformat())
     return grunde
 
 
@@ -119,7 +139,7 @@ def skriv_spaerrer(session: Session, faktura: Invoice, grunde: list[tuple[str, d
 
 
 def kandidater(session: Session, client_id: int, dag: date) -> list[Invoice]:
-    """Fakturaer, hvor næste rykker efter kundens plan er nået senest `dag`, og som stadig har et
+    """Fakturaer, hvor næste skridt (påmindelse eller rykker) efter kundens plan er nået senest `dag`, og som stadig har et
     restbeløb. Kun dem vurderes (og får evt. en spærre skrevet) – så dunning_skips ikke fyldes op
     med betalte fakturaer hver dag."""
     kunde = session.get(Client, client_id)
@@ -129,6 +149,7 @@ def kandidater(session: Session, client_id: int, dag: date) -> list[Invoice]:
     ud = []
     for f in fakturaer:
         sendte, _ = _sendte_og_koe(session, f)
-        if len(sendte) + f.prior_dunning_count < MAKS_RYKKERE and naeste_rykkerdag(kunde, f, sendte) <= dag:
+        antal = len([r for r in sendte if r.step_no > 0]) + f.prior_dunning_count
+        if antal < MAKS_RYKKERE and naeste_skridt(kunde, f, sendte)[1] <= dag:
             ud.append(f)
     return ud

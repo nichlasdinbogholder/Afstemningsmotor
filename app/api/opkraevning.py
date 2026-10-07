@@ -31,6 +31,7 @@ from app.opkraevning.models import (
     Invoice,
     InvoicePayment,
 )
+from app.opkraevning.fik import UgyldigFIK, fik_linje
 from app.opkraevning.lov import (
     INKASSO_KARENS_DAGE,
     KOMPENSATIONSBELOEB,
@@ -89,7 +90,7 @@ FILTRE = ("alt", "ikke_betalt", "forfaldet", "delvist_betalt", "betalt", "kredit
 
 def _rykkere_pr_faktura():
     return (select(DunningStep.invoice_id, func.count().label("antal"))
-            .where(DunningStep.status == "sent").group_by(DunningStep.invoice_id).subquery())
+            .where(DunningStep.status == "sent", DunningStep.step_no > 0).group_by(DunningStep.invoice_id).subquery())
 
 
 @router.get("/kunder")
@@ -212,11 +213,12 @@ def faktura(invoice_id: int, session: Session = Depends(db)) -> dict:
                   "moms": _kr(f.vat_amount), "modtager": f.recipient, "levering": f.delivery,
                   "overskrift": f.heading, "tekst": f.text_line},
         "linjer": f.lines,   # None = ikke hentet endnu
+        "betalingsnoegle": _betalingsnoegle(f, k),
         "log": _log(session, f, betalinger, rykkere, spaerrer),
         "debitor": _debitor_json(d),
         "betalinger": [{"dato": b.payment_date.isoformat(), "beloeb": _kr(b.amount), "kilde": b.source}
                        for b in betalinger],
-        "rykkere": [{"id": r.id, "nr": r.step_no + f.prior_dunning_count, "status": r.status,
+        "rykkere": [{"id": r.id, "nr": _nr(r, f.prior_dunning_count), "status": r.status,
                      "dato": r.due_at.isoformat(), "sendt": r.sent_at.isoformat() if r.sent_at else None,
                      "gebyr": _kr(r.fee_amount), "rente": _kr(r.interest_amount),
                      "kompensation": _kr(r.compensation_amount)} for r in rykkere],
@@ -238,12 +240,12 @@ def _log(session: Session, f: Invoice, betalinger, rykkere, spaerrer) -> list[di
     ud = [{"tid": tid(f.issue_date), "tekst": "Faktura oprettet i regnskabet"}]
     ud += [{"tid": tid(b.payment_date), "tekst": f"Indbetaling {b.amount} kr. ({b.source})"} for b in betalinger]
     for r in rykkere:
-        nr = r.step_no + f.prior_dunning_count
-        ud.append({"tid": tid(r.created_at), "tekst": f"Rykker {nr} lagt i kø til {r.due_at:%d.%m.%Y}"})
+        navn = "Venlig påmindelse" if r.step_no == 0 else f"Rykker {r.step_no + f.prior_dunning_count}"
+        ud.append({"tid": tid(r.created_at), "tekst": f"{navn} lagt i kø til {r.due_at:%d.%m.%Y}"})
         if r.sent_at:
-            ud.append({"tid": tid(r.sent_at), "tekst": f"Rykker {nr} sendt"})
+            ud.append({"tid": tid(r.sent_at), "tekst": f"{navn} sendt"})
         elif r.status == "cancelled":
-            ud.append({"tid": tid(r.created_at), "tekst": f"Rykker {nr} annulleret"})
+            ud.append({"tid": tid(r.created_at), "tekst": f"{navn} annulleret"})
     sete = set()
     for sp in spaerrer:   # nyeste først – kun seneste pr. årsag
         if sp.reason not in sete:
@@ -260,6 +262,21 @@ def _log(session: Session, f: Invoice, betalinger, rykkere, spaerrer) -> list[di
                  else "Debitor ændret: " + ", ".join(f"{k}" for k in a.detaljer if k != "debitor_id"))
         ud.append({"tid": tid(a.tidspunkt), "tekst": tekst, "af": af})
     return sorted(ud, key=lambda x: x["tid"], reverse=True)
+
+
+def _betalingsnoegle(f: Invoice, k: Client) -> str | None:
+    """FIK-linjen med KUNDENS FI-kreditornummer – aldrig Din Bogholders."""
+    if f.kind != "invoice" or not k.fi_kreditornummer:
+        return None
+    try:
+        return fik_linje(f.invoice_no, k.fi_kreditornummer)
+    except (UgyldigFIK, ValueError):
+        return None
+
+
+def _nr(r: DunningStep, tidligere: int) -> int:
+    """Rykkerens nummer inkl. FarPays rykkere. 0 = venlig påmindelse."""
+    return 0 if r.step_no == 0 else r.step_no + tidligere
 
 
 def _debitor_json(d: Debtor) -> dict:
@@ -372,7 +389,7 @@ def rykkere(client_id: int, session: Session = Depends(db)) -> dict:
                                .where(Invoice.client_id == client_id, *betingelser).order_by(orden).limit(antal)).all()
 
     def json(r, fnr, tidl, rest, navn, ext):
-        return {"id": r.id, "fakturanummer": fnr, "debitor": navn, "debitornummer": ext, "nr": r.step_no + tidl,
+        return {"id": r.id, "fakturanummer": fnr, "debitor": navn, "debitornummer": ext, "nr": _nr(r, tidl),
                 "status": r.status, "dato": r.due_at.isoformat(), "sendt": r.sent_at.isoformat() if r.sent_at else None,
                 "restbeloeb": _kr(rest), "gebyr": _kr(r.fee_amount), "rente": _kr(r.interest_amount),
                 "kompensation": _kr(r.compensation_amount)}
@@ -421,6 +438,7 @@ def indstillinger(client_id: int, session: Session = Depends(db)) -> dict:
         "virksomhed": {"navn": k.navn, "cvr": k.cvr, "adresse": k.adresse, "postnr": k.postnr, "by": k.by,
                        "kundenummer": k.kundenummer},
         "svar_email": k.reply_to_email, "kompensation_paa_rykker": k.dunning_compensation_step,
+        "paamindelse_efter_dage": k.reminder_after_days,
         "rykkergebyr": _kr(RYKKERGEBYR), "kompensationsbeloeb": _kr(KOMPENSATIONSBELOEB),
         "rentesats": rentesats, "inkasso_efter_dage": INKASSO_KARENS_DAGE,
         "rykkere": k.dunning_mode, "minimum": _kr(k.dunning_min_amount),
@@ -443,6 +461,7 @@ class IndstillingAendring(BaseModel):
     foerste_rykker_efter_dage: int | None = Field(default=None, ge=1, le=365)
     dage_mellem_rykkere: int | None = Field(default=None, ge=MIN_DAGE_MELLEM_RYKKERE, le=365)
     kompensation_paa_rykker: int | None = Field(default=None, ge=1, le=MAKS_RYKKERE)
+    paamindelse_efter_dage: int | None = Field(default=None, ge=1, le=60)   # null = ingen påmindelse
     fi_kreditornummer: str | None = Field(default=None, pattern="^[0-9]{8}$")
     gebyrkonto: int | None = Field(default=None, ge=1)
     rentekonto: int | None = Field(default=None, ge=1)
@@ -453,6 +472,7 @@ _INDSTILLING_FELTER = {
     "rykkere": "dunning_mode", "svar_email": "reply_to_email", "minimum": "dunning_min_amount",
     "foerste_rykker_efter_dage": "dunning_first_after_days", "dage_mellem_rykkere": "dunning_interval_days",
     "kompensation_paa_rykker": "dunning_compensation_step", "fi_kreditornummer": "fi_kreditornummer",
+    "paamindelse_efter_dage": "reminder_after_days",
     "gebyrkonto": "fee_income_account", "rentekonto": "interest_income_account",
     "erhvervsgrupper": "business_customer_groups",
 }

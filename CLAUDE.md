@@ -235,7 +235,18 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     hovedstol, sats = referencesats for halvåret + 8. `referencesats()` rejser `ManglerReferencesats` – aldrig gæt.
   - `rykker.py`: `byg_rykker(session, faktura, dag)` (kø, gebyr 100, kompensation én gang til erhverv, kun NY rente)
     og `marker_sendt(...)` (først her oprettes fee_revenue-linjer). Spærrer (betalt m.m.) kommer i trin 3.
-  - `referencesats.py`: `python -m app.opkraevning.referencesats vis | saet --fra ÅÅÅÅ-01-01|07-01 --sats --kilde`.
+  - `referencesats.py`: `python -m app.opkraevning.referencesats vis | hent [--dato] [--gem] | saet --fra ÅÅÅÅ-01-01|07-01
+    --sats --kilde`. `nationalbanken.py`: henter AUTOMATISK udlånsrenten (Statistikbanken api.statbank.dk, tabel
+    DNRENTD – indstillinger REFERENCESATS_API_URL/_TABEL/_VALG) via jobtypen `hent_referencesats`, som scheduleren
+    lægger i kø kl. 06.10 hver dag; gør intet, hvis halvårets sats findes; overskriver aldrig; gætter aldrig
+    (`HentFejl` ved tvivl: flere serier, gammel dato, mærkeligt tal).
+  - VENLIG PÅMINDELSE = dunning_steps.step_no 0 (CHECK: altid 0 kr.; triggeren: kun før første rykker, og rykker 1
+    tidligst 10 dage efter den). `clients.reminder_after_days` (standard 5, NULL = ingen); derefter rykker hver
+    `dunning_interval_days`. `spaerrer.naeste_skridt()` afgør påmindelse/rykker og dato; `invoices.prior_reminder_at`
+    = påmindelse sendt i FarPay. Tæller ALDRIG med i de 3 rykkere. Kun én AKTIV (queued/sent) rykker pr. nummer
+    (delvist unikt indeks) – en annulleret kan afløses.
+  - `fik.py`: betalingsnøglen +71<15 cifre +FI-kreditornr.<; id = fakturanummer + to kontrolcifre ("0" + modulus 10).
+    `betalings_id()`, `fik_linje()`, `laes_fik()` (gætter aldrig – `UgyldigFIK`).
   - `app/tid.py`: `dansk_dato()` – lovens dage regnes i dansk tid.
   - `spaerrer.py` (trin 3): `spaerrer(session, faktura, dag)` = ALLE grunde til ikke at rykke (betalt/krediteret/
     afskrevet/kreditnota/ikke forfalden, indbetaling seneste 2 bankdage uanset beløb, indbetaling i kassekladde,
@@ -257,10 +268,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     /invoices/booked; linjerne (`invoices.lines`, aldrig kostpris) hentes med `fetch_invoice_lines(nr)` – ét kald
     pr. faktura, kun én gang, højst 300 pr. kørsel, nyeste først; ForMangeKald stopper blot linjehentningen.
   - `app/tid.py`: helligdage, bankdage (`er_bankdag`, `bankdage_tilbage`, `naeste_bankdag`), `dansk_dato`.
-  - Inkasso Mægleren har INGEN API: overdragelse sker manuelt ud fra en liste; medarbejderen registrerer sagsnr.
+  - Inkasso Mægleren (for ALLE kunder) har INGEN API: overdragelse sker manuelt ud fra en liste; medarbejderen registrerer sagsnr.
   - Indbetalinger: e-conomic udligner selv (remainder). Bankafstemningen laver i kassekladden 3 ben (bank,
-    debitor, gebyr-/rentekonto) – kontrolleres FØR bogføring. FIK: betalings-id = fakturanr. + kontrolciffer;
-    FI-kreditornummeret = kunden.
+    debitor, gebyr-/rentekonto) – kontrolleres FØR bogføring. FIK: betalings-id = fakturanr. + to kontrolcifre
+    (`fik.py`); FI-kreditornummeret = kunden.
 - `app/fejlrapport.py` – Sentry (`init_fejlrapport("api"|"worker"|"scheduler")`). Slået fra uden
   `SENTRY_DSN`. environment = production (APP_ENV=production) ellers development. API'et bruger
   FastAPI-integrationen. Ingen lokale variabler, ingen personoplysninger; `before_send` fjerner

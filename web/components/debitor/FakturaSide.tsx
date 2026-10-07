@@ -14,6 +14,7 @@ type Detalje = {
   hoved: { ordrenummer: number | null; oevrig_ref: string | null; netto: string | null; moms: string | null;
            modtager: Adresse; levering: Adresse; overskrift: string | null; tekst: string | null };
   linjer: Linje[] | null;
+  betalingsnoegle: string | null;
   log: { tid: string; tekst: string; aarsag?: string; af?: string | null }[];
   debitor: { nummer: string; navn: string; email: string | null; cvr: string | null; ean: string | null; adresse: string | null;
              postnr: string | null; by: string | null; erhverv: boolean; kanal: string | null; blokeret: boolean; note: string | null };
@@ -87,6 +88,8 @@ export default function FakturaSide({ fakturaId, tilbage }: { fakturaId: number;
             {f.hoved.oevrig_ref && <><dt className="font-semibold">Øvrig ref.</dt><dd className="text-right">{f.hoved.oevrig_ref}</dd></>}
             {levering.length > 0 && <><dt className="font-semibold">Leveringsadresse</dt><dd className="text-right">{levering.map((l) => <span key={l} className="block">{l}</span>)}</dd></>}
             {f.ean && <><dt className="font-semibold">EAN</dt><dd className="text-right">{f.ean}</dd></>}
+            {f.betalingsnoegle && <><dt className="col-span-2 mt-3 font-semibold">Betalingsnøgle</dt>
+              <dd className="col-span-2 font-mono text-[13px]">{f.betalingsnoegle}</dd></>}
           </dl>
         </div>
 
@@ -142,7 +145,7 @@ export default function FakturaSide({ fakturaId, tilbage }: { fakturaId: number;
         <Kort titel={`Rykkere${f.tidligere_rykkere ? ` (heraf ${f.tidligere_rykkere} fra FarPay)` : ""}`}>
           {f.rykkere.length === 0 ? <p className="text-slate-400">Ingen</p> : f.rykkere.map((r) => (
             <p key={r.id} className="flex justify-between">
-              <span>Nr. {r.nr} · {r.status === "sent" ? `sendt ${tidspunkt(r.sendt)}` : r.status === "queued" ? `i kø til ${dato(r.dato)}` : "annulleret"}</span>
+              <span>{r.nr === 0 ? "Venlig påmindelse" : `Nr. ${r.nr}`} · {r.status === "sent" ? `sendt ${tidspunkt(r.sendt)}` : r.status === "queued" ? `i kø til ${dato(r.dato)}` : "annulleret"}</span>
               <span className="tabular-nums text-slate-600">{beloeb(r.gebyr)} + {beloeb(r.rente)}{Number(r.kompensation) > 0 && ` + ${beloeb(r.kompensation)}`}</span>
             </p>
           ))}
