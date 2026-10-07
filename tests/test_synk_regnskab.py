@@ -449,7 +449,7 @@ def test_kun_adapter_laget_bruger_e_conomic_direkte():
 def test_reglerne_hoejere_oppe_kender_ikke_regnskabssystemet():
     """Synkronisering, afstemning, jobs, regnskabsdata og planlægning må ikke nævne et system."""
     brud = []
-    for mappe in ("synk", "afstemning", "jobs", "regnskab", "planlaegning", "rules"):
+    for mappe in ("synk", "afstemning", "jobs", "regnskab", "planlaegning", "rules", "natkoersel"):
         for fil in (APP / mappe).rglob("*.py"):
             for nr, linje in enumerate(fil.read_text().splitlines(), 1):
                 kode = linje.split("#")[0]

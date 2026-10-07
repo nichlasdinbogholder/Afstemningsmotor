@@ -27,6 +27,8 @@ KOMMANDOER = [
     "app.afstemning.fejlkonto",
     "app.afstemning.regler",
     "app.cli",
+    "app.natkoersel.scheduler",
+    "app.natkoersel.status",
     "app.kunder.adgange",
 ]
 

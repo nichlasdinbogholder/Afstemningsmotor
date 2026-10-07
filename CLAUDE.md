@@ -149,6 +149,16 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/regnskab/models.py` – regnskabsdata fra kundernes systemer (`accounts`
   med `tenant_id` = kunden; cache-tabellerne `customers`, `suppliers`, `entries`,
   `open_entries` med unik (client_id, systemets id)). Holdt adskilt fra CRM.
+- `app/natkoersel/` – NATKØRSLEN (erstatter på serveren den gamle planlægger `worker --kun-planlaeg`):
+  - `scheduler.py`: APScheduler i egen proces (`python -m app.natkoersel.scheduler`, compose-tjenesten
+    `scheduler`). Kl. 05:00 dansk tid mandag–fredag: ét `natkoersel_kunde`-job pr. aktiv kunde med
+    aktiv adgang, spredt over 2 timer, idempotensnøgle `nat:<kunde>:<dato>`, logges i audit_log
+    (`natkoersel_planlagt`). `--koer-nu` planlægger med det samme.
+  - `job.py`: jobtypen `natkoersel_kunde`: synk (kontoplan, kunder, leverandører, posteringer, åbne
+    poster) → regelmotoren → kassekladdekontrollen (fund i findings som `fejlkonto_kassekladde`) →
+    audit_log (`natkoersel_kunde`). Et trin der fejler stopper ikke de næste; jobbet fejler til sidst
+    (prøves igen, Sentry med tags). ForMangeKald udskyder hele jobbet.
+  - `status.py`: `python -m app.natkoersel.status [--dato]` – gik nattens kørsel godt? (kode 0/1/2/3).
 - `app/api/main.py` – webdelen (FastAPI). Indtil videre kun `GET /health` (database + version,
   aldrig hemmeligheder). `uvicorn app.api.main:app`.
 - `app/fejlrapport.py` – Sentry (`init_fejlrapport("api"|"worker"|"scheduler")`). Slået fra uden

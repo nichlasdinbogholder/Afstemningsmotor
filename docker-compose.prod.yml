@@ -4,7 +4,7 @@
 #   migrate    opdaterer databasens tabeller (alembic upgrade head) og stopper igen
 #   api        webdelen (FastAPI) – kun bag Caddy
 #   worker     kører job fra jobkøen (flere: --scale worker=2)
-#   scheduler  lægger dagens synkronisering og regelkørsel i kø hver time
+#   scheduler  APScheduler: kl. 05:00 mandag–fredag lægges ét natjob pr. aktiv kunde i kø
 #   caddy      HTTPS med automatisk certifikat; adgangskode foran alt undtagen /health
 #
 # Alle værdier læses fra .env på serveren (skabelon: .env.example, afsnittet "Server").
@@ -59,7 +59,7 @@ services:
 
   scheduler:
     <<: *app
-    command: ["python", "-m", "app.jobs.worker", "--kun-planlaeg"]
+    command: ["python", "-m", "app.natkoersel.scheduler"]
 
   caddy:
     image: caddy:2

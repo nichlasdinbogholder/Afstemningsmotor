@@ -13,7 +13,13 @@
 - [x] **Backup + afprøvet gendannelse med rigtige data** (07.10.2026): alle 22 tabeller har
       samme antal rækker gendannet og nu, samme databaseversion, 2 af 2 tokens → GENDANNELSE OK.
       Natlig backup kl. 02:15 og månedlig gendannelsestest via /etc/cron.d/afstemning.
-- [x] **Sentry** modtager rapporter fra serveren (testrapport set 07.10.2026).
+- [x] **Sentry** modtager rapporter fra serveren (testrapport set 07.10.2026). Jobfejl sendes med
+      tags job_id, client_id og job_type; følsomme felter fjernes (afprøvet med /debug/boom og et
+      fejlende job 07.10.2026; /debug/boom er fjernet igen).
+- [x] **Natkørsel** (bygget 07.10.2026, ikke kørt på serveren endnu): APScheduler kl. 05:00
+      mandag–fredag → ét job pr. aktiv kunde, spredt over 2 timer: synk (inkl. kontoplan) →
+      regelmotor → kassekladdekontrol → audit_log. Se resultatet med
+      `python -m app.natkoersel.status`.
 - [x] **Backup uden for serveren:** Hetzner Storage Box BX11 (u685938, Falkenstein – andet
       datacenter end serveren). `backup.sh` kopierer hver backup derover (afprøvet 07.10.2026).
 - [ ] HTTPS på `afstemning.dinbogholder.dk`: venter på DNS (A-post oprettet 07.10).
@@ -39,12 +45,14 @@ så kontoplaner (og dermed bankkonti til dubletreglen) hentes lige nu ikke autom
 - 07.10.2026: Server CPX32 (4 vCPU, 8 GB, 80 GB) i Helsinki – rigeligt til 200 kunder ifølge
   overslaget (10–20 GB data); disken blev ikke gjort større ved Rescale, så der kan skaleres ned.
 - 07.10.2026: Sentry kun med fejlrapporter (ingen logs/tracing), EU-dataregion.
+- 07.10.2026: Natkørslen (05:00 hverdage) ERSTATTER den gamle planlægger, der spredte hentninger
+  over hele døgnet hver dag og kørte regler kl. 23:30. Konsekvens: ingen hentning i weekenden.
+  Ét job pr. kunde (ikke ét pr. trin), så regler og kassekladdekontrol altid kører EFTER hentningen.
 - 07.10.2026: Backup-kopien ligger i Falkenstein, serveren i Helsinki – så ét datacenter ikke
   kan tage begge. Serveren har sin egen nøgle til Storage Boxen (/root/.ssh/storagebox).
 
 ## Ting jeg er i tvivl om
-- Kontoplanen hentes ikke automatisk efter 07.10.2026 (Mac-tidsplanen er fjernet). Skal med i
-  serverens natlige plan i session 4.
+- Kontoplanen hentes nu i natkørslen (07.10.2026) – hullet fra Mac-tidsplanen er lukket.
 - Bankkonti genkendes på "bank" i navnet. Har nogen kunder bankkonti med andre navne?
 
 ## Sidste kommando jeg kørte
