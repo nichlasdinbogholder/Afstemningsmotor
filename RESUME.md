@@ -8,9 +8,11 @@
 - [x] Dubletreglen (version 9): 11 fund på 7 års bogføring, heraf 1 bekræftet fejl (AUB).
 - [x] **Serveren kører hos Hetzner** (CPX32, Helsinki, 204.168.242.139, firewall: kun 22,
       80, 443): db, api, worker, scheduler og caddy kører; databasens tabeller er bygget.
-- [x] **Backup + afprøvet gendannelse på serveren:** `scripts/backup.sh` og
-      `scripts/gendan_test.sh` → GENDANNELSE OK (07.10.2026, tom database). Natlig backup
-      kl. 02:15 og månedlig gendannelsestest via /etc/cron.d/afstemning.
+- [x] **Data flyttet fra Mac'en til serveren** (07.10.2026): 2 kunder, 43.601 posteringer,
+      12.137 fund, 2 af 2 tokens kan læses. Serverens database er nu den rigtige.
+- [x] **Backup + afprøvet gendannelse med rigtige data** (07.10.2026): alle 22 tabeller har
+      samme antal rækker gendannet og nu, samme databaseversion, 2 af 2 tokens → GENDANNELSE OK.
+      Natlig backup kl. 02:15 og månedlig gendannelsestest via /etc/cron.d/afstemning.
 - [x] **Sentry** modtager rapporter fra serveren (testrapport set 07.10.2026).
 - [x] **Backup uden for serveren:** Hetzner Storage Box BX11 (u685938, Falkenstein – andet
       datacenter end serveren). `backup.sh` kopierer hver backup derover (afprøvet 07.10.2026).
@@ -20,7 +22,9 @@
 Når DNS virker: genstart caddy, tjek `https://afstemning.dinbogholder.dk/health` og at
 `/docs` beder om adgangskode. Derefter (valgfrit, men anbefalet): flyt data fra Mac'en til
 serveren (DEPLOY.md trin 5) og kør `scripts/gendan_test.sh` igen med rigtige data. Slå
-automatiske snapshots til på Storage Boxen (beskytter mod, at en hacket server sletter kopierne).
+automatiske snapshots til på Storage Boxen (gjort 07.10.2026).
+Så session 4: kontoplanen skal med i serverens natlige plan – natkørslen på Mac'en er fjernet,
+så kontoplaner (og dermed bankkonti til dubletreglen) hentes lige nu ikke automatisk nogen steder.
 
 ## Beslutninger jeg har truffet
 - 04.10.2026: Dubletreglen strammes ikke mere – usikre fund afgøres af medarbejderen
@@ -39,15 +43,16 @@ automatiske snapshots til på Storage Boxen (beskytter mod, at en hacket server 
   kan tage begge. Serveren har sin egen nøgle til Storage Boxen (/root/.ssh/storagebox).
 
 ## Ting jeg er i tvivl om
+- Kontoplanen hentes ikke automatisk efter 07.10.2026 (Mac-tidsplanen er fjernet). Skal med i
+  serverens natlige plan i session 4.
 - Bankkonti genkendes på "bank" i navnet. Har nogen kunder bankkonti med andre navne?
-- Kontoplanen hentes i dag kun af natkørslen på Mac'en (launchd). På serveren skal den
-  med i den natlige plan (session 4) – ellers kan dubletreglen ikke se nye bankkonti.
 
 ## Sidste kommando jeg kørte
 ```
-scripts/gendan_test.sh   (på serveren, 07.10.2026)
+scripts/backup.sh && scripts/gendan_test.sh   (på serveren, 07.10.2026, rigtige data)
+entries 43601 / 43601, findings 12137 / 12137, credentials 2 / 2
 Databaseversion: gendannet 3867971909b7, nu 3867971909b7
-Tokens: 0 af 0 tokens kan læses med CREDENTIALS_KEY
+Tokens: 2 af 2 tokens kan læses med CREDENTIALS_KEY
 GENDANNELSE OK
 ```
 
