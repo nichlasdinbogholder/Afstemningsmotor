@@ -78,14 +78,14 @@ def test_trin1_eksakt_paa_bilagsnummer_og_beloeb(db_session, kunde, post):
 
 def test_trin1_paa_leverandoerens_fakturanummer(db_session, kunde, post):
     """Grossisten skriver sit fakturanummer (Fakt.nr.) – det står i feltet Fakturanr. ved bogføringen.
-    Foranstillede nuller tæller ikke (Bygma: 077135372)."""
-    post(1, "2026-09-10", "-646.30", bilag=21742, faktura="77135372")
-    post(2, "2026-09-03", "-646.30", bilag=21743)
-    u = _udtog(db_session, kunde, [("2026-09-03", "077135372", "646.30")])
+    Foranstillede nuller tæller ikke (fx 012345678)."""
+    post(1, "2026-09-10", "-512.40", bilag=10001, faktura="12345678")
+    post(2, "2026-09-03", "-512.40", bilag=10002)
+    u = _udtog(db_session, kunde, [("2026-09-03", "012345678", "512.40")])
     _koer(db_session, kunde)
     linje = db_session.scalars(select(StatementLine).where(StatementLine.statement_id == u.id)).one()
     assert linje.match_trin == "bilag_beloeb"
-    assert db_session.get(EntryCache, linje.match_entry_id).bilagsnummer == 21742
+    assert db_session.get(EntryCache, linje.match_entry_id).bilagsnummer == 10001
 
 
 def test_trin2_beloeb_og_dato_inden_for_5_dage(db_session, kunde, post):
@@ -305,7 +305,7 @@ def test_pdf_der_ikke_stemmer_indlaeses_ikke(tmp_path, db_session, kunde, monkey
     fil = _lav_pdf(tmp_path / "c.pdf", [
         [(0, "Dato"), (1, "Fakturanr."), (2, "Tekst"), (3, "Beløb")],
         [(2, "Primosaldo"), (3, "0,00")],
-        [(0, "03-09-26"), (1, "077135372"), (2, "FAKTURA"), (3, "646,30")],
+        [(0, "03-09-26"), (1, "012345678"), (2, "FAKTURA"), (3, "512,40")],
         [(2, "Ultimosaldo DKK"), (3, "999,99")],
     ])
     monkeypatch.setattr(pdf_modul, "_sider_med_ocr", lambda sti: (_ for _ in ()).throw(importer.PdfFejl("ingen")))
@@ -440,10 +440,10 @@ def test_pdf_indlaeses_og_grossisten_findes_ud_fra_cvr(tmp_path, db_session, kun
         yield db_session
 
     monkeypatch.setattr(importer, "ny_session", samme)
-    db_session.add_all([SupplierCache(client_id=kunde.id, leverandoernummer=310, navn="AO", cvr="DK58210617"),
+    db_session.add_all([SupplierCache(client_id=kunde.id, leverandoernummer=310, navn="AO", cvr="DK99999999"),
                         SupplierCache(client_id=kunde.id, leverandoernummer=311, navn="Andet", cvr="12345678")])
     fil = _lav_pdf(tmp_path / "ao.pdf", [
-        [(0, "KONTOUDTOG")], [(0, "CVR-nr. 58210617")], [(0, "Perioden: 01/09/26-30/09/26")],
+        [(0, "KONTOUDTOG")], [(0, "CVR-nr. 99999999")], [(0, "Perioden: 01/09/26-30/09/26")],
         [(0, "Dato"), (1, "Fakturanr."), (2, "Tekst"), (3, "Beløb")],
         [(2, "Primo saldo"), (3, "0,00")],
         [(0, "03/09/26"), (1, "23508677"), (2, "FAKTURA"), (3, "2.924,00")],
@@ -474,16 +474,16 @@ def test_mangler_i_bogfoering_viser_at_fakturaen_ligger_i_kassekladde(db_session
 
     db_session.add_all([
         JournalEntryCache(client_id=kunde.id, kladde_nummer=3, kladde_navn="Indkøb", bilagsnummer=21800,
-                          dato=date(2026, 9, 9), konto=5800, beloeb=Decimal("953.53"),
-                          modpart="kreditor:45", fakturanummer="23582765"),
+                          dato=date(2026, 9, 9), konto=5800, beloeb=Decimal("812.75"),
+                          modpart="kreditor:45", fakturanummer="87654321"),
         JournalEntryCache(client_id=kunde.id, kladde_nummer=3, kladde_navn="Indkøb", bilagsnummer=21801,
                           dato=date(2026, 9, 12), konto=5800, beloeb=Decimal("-148.50"), modpart="kreditor:45"),
     ])
-    _udtog(db_session, kunde, [("2026-09-09", "023582765", "953.53"),   # på fakturanummer
+    _udtog(db_session, kunde, [("2026-09-09", "087654321", "812.75"),   # på fakturanummer
                                ("2026-09-11", "999", "148.50"),         # på beløb og dato
                                ("2026-09-20", "888", "77.00")])         # mangler helt
     _koer(db_session, kunde)
     titler = {f.detail["reference"]: f.title for f in _fund(db_session, kunde, I_BOGF)}
-    assert titler["023582765"].endswith("ligger i kassekladde Indkøb (bilag 21800), ikke bogført")
+    assert titler["087654321"].endswith("ligger i kassekladde Indkøb (bilag 21800), ikke bogført")
     assert titler["999"].endswith("ligger i kassekladde Indkøb (bilag 21801), ikke bogført")
     assert "kassekladde" not in titler["888"]

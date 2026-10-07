@@ -486,9 +486,9 @@ def test_e_conomic_adapteren_implementerer_hele_interfacet():
 
 
 def test_leverandoerens_fakturanummer_og_leverandoergruppe_oversaettes():
-    p = oversaet_postering({"entryNumber": 1, "voucherNumber": 21742, "entryType": "supplierInvoice",
-                            "supplier": {"supplierNumber": 45}, "supplierInvoiceNumber": " 077135372 "})
-    assert (p.bilagsnummer, p.fakturanummer) == (21742, "077135372")
+    p = oversaet_postering({"entryNumber": 1, "voucherNumber": 10001, "entryType": "supplierInvoice",
+                            "supplier": {"supplierNumber": 45}, "supplierInvoiceNumber": " 012345678 "})
+    assert (p.bilagsnummer, p.fakturanummer) == (10001, "012345678")
     assert oversaet_postering({"entryNumber": 2, "invoiceNumber": 1001,
                                "customer": {"customerNumber": 7}}).fakturanummer == "1001"
     assert oversaet_postering({"entryNumber": 3}).fakturanummer is None
@@ -506,14 +506,14 @@ def test_kassekladder_hentes_fuldt_og_bogfoerte_linjer_forsvinder(db_session):
     kunde = _kunde(db_session, "KL-1")
     k = Kassekladde(3, "Indkøb")
     linje = lambda nr, faktura: KladdePost(3, nr, 21800 + nr, date(2026, 9, 9), 5800, None, "AO",  # noqa: E731
-                                           Decimal("-953.53"), "DKK", "supplierInvoice",
-                                           modpart="kreditor:58210617", fakturanummer=faktura)
-    synk_journals(db_session, kunde.id, SimuleretAdapter(kladder={k: [linje(1, "23582765"), linje(2, "1")]}))
+                                           Decimal("-812.75"), "DKK", "supplierInvoice",
+                                           modpart="kreditor:99999999", fakturanummer=faktura)
+    synk_journals(db_session, kunde.id, SimuleretAdapter(kladder={k: [linje(1, "87654321"), linje(2, "1")]}))
     raekker = db_session.scalars(select(JournalEntryCache).where(JournalEntryCache.client_id == kunde.id)).all()
     assert sorted((r.kladde_navn, r.fakturanummer, r.modpart) for r in raekker) == [
-        ("Indkøb", "1", "kreditor:58210617"), ("Indkøb", "23582765", "kreditor:58210617")]
+        ("Indkøb", "1", "kreditor:99999999"), ("Indkøb", "87654321", "kreditor:99999999")]
     # Linje 2 er bogført i mellemtiden – den forsvinder fra kladden og fra vores kopi.
-    synk_journals(db_session, kunde.id, SimuleretAdapter(kladder={k: [linje(1, "23582765")]}))
+    synk_journals(db_session, kunde.id, SimuleretAdapter(kladder={k: [linje(1, "87654321")]}))
     assert db_session.scalar(select(func.count()).select_from(JournalEntryCache).where(
         JournalEntryCache.client_id == kunde.id)) == 1
 
@@ -521,9 +521,9 @@ def test_kassekladder_hentes_fuldt_og_bogfoerte_linjer_forsvinder(db_session):
 def test_kladdepost_faar_leverandoer_og_fakturanummer():
     from app.adaptere.economic.adapter import oversaet_kladdepost
 
-    p = oversaet_kladdepost(3, {"journalEntryNumber": 7, "entryType": "supplierInvoice", "amount": 953.53,
-                                "supplier": {"supplierNumber": 58210617}, "supplierInvoiceNumber": "23582765"})
-    assert (p.modpart, p.fakturanummer) == ("kreditor:58210617", "23582765")
+    p = oversaet_kladdepost(3, {"journalEntryNumber": 7, "entryType": "supplierInvoice", "amount": 812.75,
+                                "supplier": {"supplierNumber": 99999999}, "supplierInvoiceNumber": "87654321"})
+    assert (p.modpart, p.fakturanummer) == ("kreditor:99999999", "87654321")
 
 
 def test_regnskabsaar_med_afsluttet_markering():

@@ -150,7 +150,7 @@ def laes_revibot(sti: Path) -> RevibotUdtog:
 
 
 def find_leverandoer(session, client_id: int, cvr_numre: list[str]) -> list[tuple[int, str]]:
-    """Kundens leverandører med et af CVR-numrene (fx 'DK58210617' eller '58 21 06 17' i e-conomic)."""
+    """Kundens leverandører med et af CVR-numrene (fx 'DK12345678' eller '12 34 56 78' i e-conomic)."""
     if not cvr_numre:
         return []
     return [tuple(r) for r in session.execute(text("""

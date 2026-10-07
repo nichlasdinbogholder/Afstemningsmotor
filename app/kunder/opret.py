@@ -1,6 +1,6 @@
 """Opret en kunde i kundekartoteket (clients).
 
-    python -m app.kunder.opret --navn "Connect El ApS" --kundenummer 1045 --cvr 12345678 --system economic
+    python -m app.kunder.opret --navn "Eksempel ApS" --kundenummer 1045 --cvr 12345678 --system economic
     python -m app.kunder.opret --vis
     python -m app.kunder.opret --kundenummer 1045 --kontoudtog-fra 2026-09-01   (ret en eksisterende kunde)
 
