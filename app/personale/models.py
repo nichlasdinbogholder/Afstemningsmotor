@@ -25,6 +25,10 @@ class Staff(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True)
     rolle: Mapped[str] = mapped_column(String(20), server_default="medarbejder")
     aktiv: Mapped[bool] = mapped_column(Boolean, server_default=true())
+    # Microsofts faste id for brugeren – bindes ved første login, så en genbrugt
+    # e-mailadresse ikke giver adgang til en anden persons konto.
+    microsoft_oid: Mapped[str | None] = mapped_column(String(64), unique=True)
+    sidst_logget_ind: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     oprettet: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -199,6 +199,43 @@ den forlader serveren.
 Både webdelen (`api`) og `worker`/`scheduler` sender fejl til Sentry. Rapporterne sendes
 uden lokale variabler, uden personoplysninger, og alle kendte tokens maskeres (`****abcd`).
 
+## Trin 8 · Login med Microsoft (samme adgangskode som Outlook)
+
+**Hos Microsoft** – gøres af jeres Microsoft 365-administrator:
+1. Gå til **entra.microsoft.com** → **Applications → App registrations → New registration**.
+   - Navn: `Afstemningsmotor`
+   - Hvem må bruge den: **Accounts in this organizational directory only** (kun jeres egne)
+   - Redirect URI: platform **Web**, adresse `https://afstemning.dinbogholder.dk/auth/callback`
+2. På oversigtssiden: kopiér **Directory (tenant) ID** og **Application (client) ID**.
+3. **Certificates & secrets → New client secret** (fx 24 måneder). Kopiér **Value** med det
+   samme – den vises kun én gang. Den er hemmelig: læg den direkte i `.env` på serveren og i
+   adgangskodemanageren. Skriv i kalenderen, hvornår den udløber.
+4. Login behøver ingen ekstra rettigheder (standarden "User.Read" er nok).
+
+**På serveren** (`nano .env`):
+```
+MS_TENANT_ID=<Directory (tenant) ID>
+MS_CLIENT_ID=<Application (client) ID>
+MS_CLIENT_SECRET=<Value fra punkt 3>
+SESSION_SECRET=<svaret fra: openssl rand -hex 32>
+PUBLIC_URL=https://afstemning.dinbogholder.dk
+```
+Opret dig selv som administrator og genstart:
+```bash
+docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml exec -T api python -m app.personale.bruger opret --email nichlas@dinbogholder.dk --navn "Nichlas" --rolle admin
+```
+Åbn `https://afstemning.dinbogholder.dk` → **Log ind med Microsoft**. Kun medarbejdere, der er
+oprettet (og aktive) med `app.personale.bruger`, kommer ind – også selvom andre har en
+Microsoft-konto hos jer. Når login virker, kan den fælles adgangskode i Caddy fjernes.
+
+| Medarbejdere | Kommando (`docker compose -f docker-compose.prod.yml exec -T api python -m app.personale.bruger …`) |
+|---|---|
+| Se alle | `vis` |
+| Ny medarbejder | `opret --email x@dinbogholder.dk --navn "Navn" --rolle medarbejder` (eller `admin`) |
+| Skift rolle | `rolle --email x@dinbogholder.dk --rolle admin` |
+| Stoppet | `deaktiver --email x@dinbogholder.dk` (adgangen lukkes med det samme) |
+
 ---
 
 ## Daglig brug

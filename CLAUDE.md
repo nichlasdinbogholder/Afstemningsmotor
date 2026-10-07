@@ -178,8 +178,15 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     audit_log (`natkoersel_kunde`). Et trin der fejler stopper ikke de næste; jobbet fejler til sidst
     (prøves igen, Sentry med tags). ForMangeKald udskyder hele jobbet.
   - `status.py`: `python -m app.natkoersel.status [--dato]` – gik nattens kørsel godt? (kode 0/1/2/3).
-- `app/api/main.py` – webdelen (FastAPI). Indtil videre kun `GET /health` (database + version,
-  aldrig hemmeligheder). `uvicorn app.api.main:app`.
+- `app/api/main.py` – webdelen (FastAPI): `GET /health` (database + version, aldrig hemmeligheder,
+  kræver aldrig login), forsiden `/`. `uvicorn app.api.main:app`.
+- `app/api/login.py` – login med Microsoft (OIDC via Authlib, kun jeres tenant): `/login`, `/auth/callback`,
+  `/logout`, `/mig`, `/admin/medarbejdere`. Kun AKTIVE medarbejdere i `staff` (e-mail) kommer ind;
+  `microsoft_oid` bindes ved første login. Roller `admin`/`medarbejder`: brug `Depends(nuvaerende_medarbejder)`
+  eller `Depends(kraev_admin)` på nye sider. Medarbejderen slås op ved HVER forespørgsel. Cookien
+  (`afstemning_login`, underskrevet med SESSION_SECRET) indeholder kun medarbejder-id. Login/afvisning → audit_log.
+  Slået fra uden MS_TENANT_ID/MS_CLIENT_ID/MS_CLIENT_SECRET/SESSION_SECRET. Opsætning: DEPLOY.md trin 8.
+- `app/personale/bruger.py` – `python -m app.personale.bruger vis|opret|rolle|deaktiver|aktiver`.
 - `app/fejlrapport.py` – Sentry (`init_fejlrapport("api"|"worker"|"scheduler")`). Slået fra uden
   `SENTRY_DSN`. environment = production (APP_ENV=production) ellers development. API'et bruger
   FastAPI-integrationen. Ingen lokale variabler, ingen personoplysninger; `before_send` fjerner

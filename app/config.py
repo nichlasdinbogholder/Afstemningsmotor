@@ -31,6 +31,16 @@ class Settings(BaseSettings):
     # Fejlrapporter (Sentry). Tom = slået fra. Selve adressen (DSN) er en hemmelighed.
     sentry_dsn: SecretStr | None = None
 
+    # Login med Microsoft (samme konto som Outlook). Tomme = login er slået fra.
+    # Id'erne er ikke hemmelige; client secret og session-nøglen er.
+    ms_tenant_id: str | None = None
+    ms_client_id: str | None = None
+    ms_client_secret: SecretStr | None = None
+    # Nøgle til at underskrive login-cookien. Lav en med: openssl rand -hex 32
+    session_secret: SecretStr | None = None
+    # Adressen, brugerne åbner (til Microsofts tilbagesendelse efter login).
+    public_url: str = "http://localhost:8000"
+
 
 @lru_cache
 def get_settings() -> Settings:
