@@ -159,7 +159,7 @@ def test_rykker_faar_kun_ny_rente(db_session, faktura, satser):
 
 def test_betaling_paa_hovedstol_nedsaetter_renten(db_session, faktura, satser):
     betaling = InvoicePayment(invoice_id=faktura.id, payment_date=date(2026, 9, 20), amount=Decimal("5000"),
-                              source="economic", external_id="e1")
+                              source="regnskab", external_id="e1")
     db_session.add(betaling)
     db_session.flush()
     db_session.add(PaymentAllocation(payment_id=betaling.id, invoice_id=faktura.id, target_type="principal",

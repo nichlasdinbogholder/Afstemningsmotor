@@ -39,7 +39,9 @@ from app.adaptere.regnskab.base import (
     DEBET_KREDIT,
     KONTOTYPER,
     AabenPost,
+    Debitor,
     DelvisHentet,
+    Faktura,
     ForMangeKald,
     Konto,
     Kassekladde,
@@ -125,6 +127,36 @@ def oversaet_kunde(d: dict) -> Kunde:
         betalingsbetingelse=_nummer(d.get("paymentTerms"), "paymentTermsNumber"),
         spaerret=d.get("barred"),
         saldo=_decimal(d.get("balance")),
+    )
+
+
+def oversaet_debitor(d: dict) -> Debitor:
+    """Feltnavne set i rå JSON fra /customers (Connect El, 07.10.2026)."""
+    return Debitor(
+        kundenummer=_kraev(d, "customerNumber", "en kunde"),
+        navn=_kraev(d, "name", "en kunde"),
+        cvr=_tekst(d.get("corporateIdentificationNumber")),
+        email=_tekst(d.get("email")),
+        ean=_tekst(d.get("ean")),
+        adresse=_tekst(d.get("address")),
+        postnr=_tekst(d.get("zip")),
+        by=_tekst(d.get("city")),
+        land=_tekst(d.get("country")),
+        gruppe=_nummer(d.get("customerGroup"), "customerGroupNumber"),
+    )
+
+
+def oversaet_faktura(d: dict) -> Faktura:
+    """Feltnavne set i rå JSON fra /invoices/booked (Connect El, 07.10.2026)."""
+    return Faktura(
+        nummer=_kraev(d, "bookedInvoiceNumber", "en faktura"),
+        kundenummer=_kraev(d.get("customer") or {}, "customerNumber", "en fakturas kunde"),
+        dato=_dato(_kraev(d, "date", "en faktura")),
+        forfaldsdato=_dato(_kraev(d, "dueDate", "en faktura")),
+        beloeb=_decimal(_kraev(d, "grossAmount", "en faktura")),
+        restbeloeb=_decimal(_kraev(d, "remainder", "en faktura")),
+        valuta=_kraev(d, "currency", "en faktura"),
+        ean=_tekst((d.get("recipient") or {}).get("ean")),
     )
 
 
@@ -252,6 +284,12 @@ class EconomicAdapter:
 
     def fetch_customers(self) -> list[Kunde]:
         return [oversaet_kunde(d) for d in self._klient.hent_alle("/customers")]
+
+    def fetch_debtors(self) -> list[Debitor]:
+        return [oversaet_debitor(d) for d in self._klient.hent_alle("/customers")]
+
+    def fetch_invoices(self) -> list[Faktura]:
+        return [oversaet_faktura(d) for d in self._klient.hent_alle("/invoices/booked")]
 
     def fetch_suppliers(self) -> list[Leverandoer]:
         return [oversaet_leverandoer(d) for d in self._klient.hent_alle("/suppliers")]

@@ -23,6 +23,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.rules.base import FindingDraft, registrer_regel
+from app.tid import helligdage, nte_hverdag, paaskedag  # noqa: F401  (paaskedag/helligdage bruges af tests)
 
 GROSSIST_GRUPPE = 20000
 MAANEDER_TILBAGE = 3
@@ -53,42 +54,6 @@ MANGLER_SQL = text("""
 
 def i_dag() -> date:
     return date.today()
-
-
-def paaskedag(aar: int) -> date:
-    """Påskedag (gregoriansk, "anonym" algoritme)."""
-    a, b, c = aar % 19, aar // 100, aar % 100
-    d, e = b // 4, b % 4
-    f = (b + 8) // 25
-    g = (b - f + 1) // 3
-    h = (19 * a + b - d - g + 15) % 30
-    i, k = c // 4, c % 4
-    l = (32 + 2 * e + 2 * i - h - k) % 7  # noqa: E741
-    m = (a + 11 * h + 22 * l) // 451
-    maaned = (h + l - 7 * m + 114) // 31
-    return date(aar, maaned, (h + l - 7 * m + 114) % 31 + 1)
-
-
-def helligdage(aar: int) -> set[date]:
-    """Danske helligdage og banklukkedage (store bededag er afskaffet fra 2024)."""
-    p = paaskedag(aar)
-    dage = {date(aar, 1, 1), p - timedelta(days=3), p - timedelta(days=2), p + timedelta(days=1),
-            p + timedelta(days=39), p + timedelta(days=50), date(aar, 6, 5),
-            date(aar, 12, 24), date(aar, 12, 25), date(aar, 12, 26), date(aar, 12, 31)}
-    if aar < 2024:
-        dage.add(p + timedelta(days=26))
-    return dage
-
-
-def nte_hverdag(aar: int, maaned: int, n: int) -> date:
-    """Den n'te hverdag (mandag–fredag, ikke helligdag) i måneden."""
-    dag, fundet, fri = date(aar, maaned, 1), 0, helligdage(aar)
-    while True:
-        if dag.weekday() < 5 and dag not in fri:
-            fundet += 1
-            if fundet == n:
-                return dag
-        dag += timedelta(days=1)
 
 
 def frist(maaned_start: date) -> date:

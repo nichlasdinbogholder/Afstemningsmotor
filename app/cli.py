@@ -19,7 +19,7 @@ import getpass
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import text
 
@@ -131,6 +131,69 @@ def set_status(finding_id: int, status: str, note: str | None) -> int:
     return 0
 
 
+SPAERRE_TEKST = {
+    "betalt": "betalt", "krediteret": "krediteret", "afskrevet": "afskrevet", "kreditnota": "kreditnota",
+    "ikke_forfalden": "ikke forfalden", "indbetaling_seneste_2_bankdage": "indbetaling de seneste 2 bankdage",
+    "indbetaling_i_kassekladde": "indbetaling ligger i kassekladden", "debitor_blokeret": "debitor blokeret",
+    "afbetalingsordning": "aktiv afbetalingsordning", "under_minimumsbeloeb": "restbeløb under minimum",
+    "under_10_dage": "for tidligt (10-dagesreglen/kundens plan)", "max_3_rykkere": "har allerede 3 rykkere",
+    "aktiv_inkassosag": "aktiv inkassosag", "fjernet_af_medarbejder": "fjernet af medarbejder",
+    "rykker_i_koe": "en rykker ligger allerede i kø",
+}
+
+
+def _kr(b) -> str:
+    return f"{b:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def dunning_preview(client_id: int, dag: date | None) -> int:
+    """Hvad ville rykkermotoren lægge i kø? Intet gemmes og intet sendes."""
+    from app.opkraevning.lov import ManglerReferencesats
+    from app.opkraevning.rykkerkoersel import forhaandsvis
+    from app.tid import TIDSZONE
+
+    dag = dag or datetime.now(TIDSZONE).date()
+    with ny_session() as session:
+        kunde = session.get(Client, client_id)
+        if kunde is None:
+            print("Fejl: kunden findes ikke", file=sys.stderr)
+            return 2
+        try:
+            r = forhaandsvis(session, client_id, dag)
+        except ManglerReferencesats as fejl:
+            print(f"Fejl: {fejl}", file=sys.stderr)
+            return 2
+        print(f"Rykkere for {kunde.navn} pr. {dag:%d.%m.%Y}  (forhåndsvisning – intet gemmes, intet sendes;"
+              f" rykkere: {kunde.dunning_mode})\n")
+        print(f"VILLE BLIVE SENDT ({len(r.lagt_i_koe)})")
+        print(f"  {'faktura':>8}  {'debitor':<28} {'forfald':<10} {'restbeløb':>12}  nr  {'gebyr':>7} {'rente':>8} "
+              f"{'komp.':>7}")
+        for v in r.lagt_i_koe:
+            print(f"  {v.faktura.invoice_no:>8}  {v.debitor.name[:28]:<28} {v.faktura.due_date:%d.%m.%Y} "
+                  f"{_kr(v.faktura.amount_outstanding):>12}  {v.rykker.step_no + v.faktura.prior_dunning_count:>2}  "
+                  f"{_kr(v.rykker.fee_amount):>7} {_kr(v.rykker.interest_amount):>8} {_kr(v.rykker.compensation_amount):>7}")
+        print(f"\nSPRINGES OVER ({len(r.sprunget_over)})")
+        for v in r.sprunget_over:
+            grunde = ", ".join(SPAERRE_TEKST.get(k, k) for k, _ in v.grunde)
+            print(f"  {v.faktura.invoice_no:>8}  {v.debitor.name[:28]:<28} {_kr(v.faktura.amount_outstanding):>12}  {grunde}")
+    return 0
+
+
+def dunning_remove(rykker_id: int, note: str) -> int:
+    from app.opkraevning.rykkerkoersel import KanIkkeFjernes, fjern_rykker
+
+    af = os.environ.get("USER") or getpass.getuser()
+    with ny_session() as session:
+        try:
+            r = fjern_rykker(session, rykker_id, af, note)
+        except KanIkkeFjernes as fejl:
+            print(f"Fejl: {fejl}", file=sys.stderr)
+            return 2
+        session.commit()
+    print(f"Rykker {r.id} er fjernet (af {af}). Grunden står i dunning_skips.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.cli", description="Kør ting i hånden.")
     under = parser.add_subparsers(dest="kommando", required=True)
@@ -147,6 +210,12 @@ def main(argv: list[str] | None = None) -> int:
     ss.add_argument("finding_id", type=int)
     ss.add_argument("status", choices=[s for s in STATUSSER if s != "open"] + ["open"])
     ss.add_argument("--note", help="hvorfor (gemmes i finding_events)")
+    dp = under.add_parser("dunning-preview", help="vis hvilke rykkere der ville blive sendt (gemmer intet)")
+    dp.add_argument("client_id", type=int)
+    dp.add_argument("--dag", type=date.fromisoformat, help="standard: i dag")
+    dr = under.add_parser("dunning-remove", help="fjern en rykker i kø, før den sendes")
+    dr.add_argument("rykker_id", type=int)
+    dr.add_argument("--note", required=True, help="hvorfor (fx 'kunden ringede, betaler fredag')")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
                         datefmt="%H:%M:%S")
@@ -158,6 +227,10 @@ def main(argv: list[str] | None = None) -> int:
         return vis_findings(args.client_id, args.status, args.severity, args.alle)
     if args.kommando == "set-status":
         return set_status(args.finding_id, args.status, args.note)
+    if args.kommando == "dunning-preview":
+        return dunning_preview(args.client_id, args.dag)
+    if args.kommando == "dunning-remove":
+        return dunning_remove(args.rykker_id, args.note)
     return 2
 
 

@@ -140,7 +140,9 @@ def bekraeft(session: Session, kundenummer: str, adapter_fabrik=hent_adapter,
 
     tilstande = session.scalars(select(SyncState).where(
         SyncState.client_id == kunde.id, SyncState.ressource.in_(list(SYNK_FUNKTIONER)))).all()
-    tjek(len(tilstande) == len(SYNK_FUNKTIONER) and all(t.status == "ok" and t.antal_fejl_i_traek == 0 for t in tilstande),
+    # Fakturaer (opkrævning) hentes kun for kunder, hvor rykkere er slået til.
+    forventet = len(SYNK_FUNKTIONER) - (1 if kunde.dunning_mode == "off" else 0)
+    tjek(len(tilstande) == forventet and all(t.status == "ok" and t.antal_fejl_i_traek == 0 for t in tilstande),
          "sync_state: alle ressourcer står som 'ok' uden fejl",
          ", ".join(f"{t.ressource}={t.status}" for t in tilstande))
     return _slut(tjek)

@@ -116,6 +116,36 @@ class Kunde:
 
 
 @dataclass(frozen=True)
+class Debitor:
+    """En kunde med kontaktoplysninger til opkrævning (persondata – kun til kunder med opkrævning slået til)."""
+
+    kundenummer: int
+    navn: str
+    cvr: str | None
+    email: str | None
+    ean: str | None
+    adresse: str | None
+    postnr: str | None
+    by: str | None
+    land: str | None
+    gruppe: int | None
+
+
+@dataclass(frozen=True)
+class Faktura:
+    """En bogført salgsfaktura (eller kreditnota – negativt beløb)."""
+
+    nummer: int
+    kundenummer: int
+    dato: date
+    forfaldsdato: date
+    beloeb: Decimal         # inkl. moms
+    restbeloeb: Decimal     # 0 = betalt (systemet udligner selv)
+    valuta: str
+    ean: str | None         # modtagerens EAN på fakturaen
+
+
+@dataclass(frozen=True)
 class Leverandoer:
     leverandoernummer: int
     navn: str
@@ -211,6 +241,8 @@ class AccountingProvider(Protocol):
     def fetch_journals(self) -> list[Kassekladde]: ...
     def fetch_journal_entries(self, nummer: int) -> list[KladdePost]: ...
     def fetch_accounting_years(self) -> list[Regnskabsaar]: ...
+    def fetch_debtors(self) -> list[Debitor]: ...
+    def fetch_invoices(self) -> list[Faktura]: ...
     def __enter__(self) -> "AccountingProvider": ...
     def __exit__(self, *args) -> None: ...
 

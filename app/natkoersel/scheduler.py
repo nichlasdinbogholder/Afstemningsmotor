@@ -88,10 +88,28 @@ def koer_planlaegning() -> dict:
     return resultat
 
 
+def koer_rykkerplanlaegning(type_: str) -> int:
+    from app.opkraevning.jobs import planlaeg_rykkerjob
+
+    with ny_session() as session:
+        nye = planlaeg_rykkerjob(session, type_, datetime.now(TIDSZONE))
+        session.commit()
+    log.info("Rykkerjob %s: %s nye job", type_, nye)
+    return nye
+
+
 def lav_scheduler() -> BlockingScheduler:
+    from app.opkraevning.jobs import KOE, KONTROL
+
     scheduler = BlockingScheduler(timezone=TIDSZONE)
     scheduler.add_job(koer_planlaegning, trigger(), id="natkoersel", name="Natkørsel",
                       misfire_grace_time=3 * 3600, coalesce=True, max_instances=1, replace_existing=True)
+    # Rykkere: kl. 16 lægges næste bankdags rykkere i kø; kl. 9 kontrolleres de igen før afsendelse.
+    for id_, type_, time in (("rykker_koe", KOE, 16), ("rykker_kontrol", KONTROL, 9)):
+        scheduler.add_job(koer_rykkerplanlaegning, CronTrigger(day_of_week=UGEDAGE, hour=time, minute=0,
+                                                               timezone=TIDSZONE),
+                          args=[type_], id=id_, name=f"Rykkere ({type_})", misfire_grace_time=3600,
+                          coalesce=True, max_instances=1, replace_existing=True)
     return scheduler
 
 

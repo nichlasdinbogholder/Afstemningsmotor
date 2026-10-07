@@ -225,6 +225,21 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     og `marker_sendt(...)` (først her oprettes fee_revenue-linjer). Spærrer (betalt m.m.) kommer i trin 3.
   - `referencesats.py`: `python -m app.opkraevning.referencesats vis | saet --fra ÅÅÅÅ-01-01|07-01 --sats --kilde`.
   - `app/tid.py`: `dansk_dato()` – lovens dage regnes i dansk tid.
+  - `spaerrer.py` (trin 3): `spaerrer(session, faktura, dag)` = ALLE grunde til ikke at rykke (betalt/krediteret/
+    afskrevet/kreditnota/ikke forfalden, indbetaling seneste 2 bankdage uanset beløb, indbetaling i kassekladde,
+    debitor blokeret, afbetalingsordning, under kundens minimum, aktiv inkassosag, rykker i kø, 3 rykkere, for tidligt
+    efter kundens plan). Skrives i dunning_skips. `kandidater()` = kun fakturaer, hvor næste rykker er nået.
+  - `rykkerkoersel.py`: `laeg_i_koe` (kl. 16, næste bankdag), `kontroller_foer_afsendelse` (kl. 9 – annullerer og
+    skriver grunden), `fjern_rykker` (medarbejder, note krævet), `forhaandsvis` (gemmer intet).
+    `jobs.py`: jobtyperne `rykker_koe`/`rykker_kontrol` planlagt af natkørslens scheduler – kun for
+    `clients.dunning_mode='live'`, som først kan vælges efter trin 4. Indtil da: 'off' (standard) | 'preview'.
+  - CLI: `python -m app.cli dunning-preview <id> [--dag]`, `dunning-remove <rykker_id> --note "..."`.
+  - Hentning: `app/synk/opkraevning.py` (ressource `invoices`, kun når dunning_mode <> 'off'): debitorer
+    (`fetch_debtors`), fakturaer (`fetch_invoices`), indbetalinger fra entries (customerPayment med fakturanummer,
+    source='regnskab'). Medarbejdernes felter (blokeret, note, kanal) røres aldrig.
+  - Udsendelse (trin 4): fra rykker@dinbogholder.dk, til debitorens e-mail fra e-conomic, Reply-To = KUNDENS
+    e-mail (svar går til kunden, aldrig til os). Layout og tekst afprøves før drift.
+  - `app/tid.py`: helligdage, bankdage (`er_bankdag`, `bankdage_tilbage`, `naeste_bankdag`), `dansk_dato`.
   - Inkasso Mægleren har INGEN API: overdragelse sker manuelt ud fra en liste; medarbejderen registrerer sagsnr.
   - Indbetalinger: e-conomic udligner selv (remainder). Bankafstemningen laver i kassekladden 3 ben (bank,
     debitor, gebyr-/rentekonto) – kontrolleres FØR bogføring. FIK: betalings-id = fakturanr. + kontrolciffer;

@@ -12,6 +12,7 @@ Feltnavnene i e-conomic er set i rå JSON (scripts/peek_opkraevning.py, Connect 
   debitor  /customers       : customerNumber, name, email, corporateIdentificationNumber, ean,
                               address, zip, city, country, customerGroup.customerGroupNumber
   indbetaling (entries)     : entryType=customerPayment, entryNumber, date, amount, invoiceNumber
+                              (gemmes med source='regnskab')
 
 Lovens grænser (renteloven) er låst i databasen – ikke indstillinger:
   rykkergebyr <= 100 kr. pr. skrivelse, højst 3 rykkere pr. faktura, mindst 10 dage mellem
@@ -52,7 +53,7 @@ BELOEB = Numeric(15, 2)
 KANALER = ("email", "ean", "print", "eboks")
 FAKTURA_ARTER = ("invoice", "credit_note")
 FAKTURA_STATUSSER = ("open", "paid", "credited", "written_off")
-BETALINGSKILDER = ("economic", "kassekladde", "inkasso", "farpay", "manuel")
+BETALINGSKILDER = ("regnskab", "kassekladde", "inkasso", "farpay", "manuel")  # regnskab = kundens regnskabssystem
 ALLOKERINGSMAAL = ("fee", "compensation", "interest", "principal")
 UDSENDELSE_STATUSSER = ("queued", "sent", "failed", "bounced")
 RYKKER_STATUSSER = ("queued", "sent", "cancelled", "failed")
@@ -60,7 +61,7 @@ SPAERRE_AARSAGER = (
     "betalt", "krediteret", "afskrevet", "kreditnota", "ikke_forfalden",
     "indbetaling_seneste_2_bankdage", "indbetaling_i_kassekladde", "debitor_blokeret",
     "afbetalingsordning", "under_minimumsbeloeb", "under_10_dage", "max_3_rykkere",
-    "aktiv_inkassosag", "fjernet_af_medarbejder",
+    "aktiv_inkassosag", "fjernet_af_medarbejder", "rykker_i_koe",
 )
 ORDNING_STATUSSER = ("active", "completed", "defaulted", "cancelled")
 SAG_STATUSSER = ("requested", "open", "paid", "closed", "withdrawn", "rejected")

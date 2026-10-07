@@ -54,6 +54,9 @@ class Client(Base):
         ),
         CheckConstraint("antal_ansatte >= 0", name="antal_ansatte_ikke_negativ"),
         kun_vaerdier("payment_allocation_order", ("costs_first", "principal_first")),
+        kun_vaerdier("dunning_mode", ("off", "preview")),
+        CheckConstraint("dunning_first_after_days >= 1", name="foerste_rykker_efter_forfald"),
+        CheckConstraint("dunning_interval_days >= 10", name="rykkerinterval_mindst_10"),
         CheckConstraint("dunning_min_amount >= 0", name="rykker_minimum_ikke_negativ"),
         CheckConstraint("collection_min_amount >= 0", name="inkasso_minimum_ikke_negativ"),
         CheckConstraint("fi_kreditornummer IS NULL OR fi_kreditornummer ~ '^[0-9]{8}$'",
@@ -92,6 +95,13 @@ class Client(Base):
     # Manglende kontoudtog fra grossister meldes fra denne måned (tom = måneden, kunden blev oprettet).
     kontoudtog_fra: Mapped[date | None] = mapped_column(Date)
     # --- Opkrævning (app/opkraevning) ---
+    # Rykkere: 'off' (standard – intet hentes eller sendes), 'preview' (fakturaer hentes og
+    # dunning-preview kan vise, hva der VILLE blive sendt – intet sendes). 'live' tilføjes først,
+    # når udsendelsen (trin 4) er bygget.
+    dunning_mode: Mapped[str] = mapped_column(String(10), server_default="off")
+    # Første rykker tidligst N dage efter forfald; derefter mindst M dage mellem rykkerne (loven: >= 10).
+    dunning_first_after_days: Mapped[int] = mapped_column(SmallInteger, server_default=text("10"))
+    dunning_interval_days: Mapped[int] = mapped_column(SmallInteger, server_default=text("10"))
     # Rækkefølge, når en indbetaling fordeles: gebyrer/renter først eller hovedstolen først.
     payment_allocation_order: Mapped[str] = mapped_column(String(20), server_default="costs_first")
     fee_assignment_signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

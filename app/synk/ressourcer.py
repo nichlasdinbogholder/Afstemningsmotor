@@ -10,16 +10,16 @@ uden at data er gemt. Systemet kaldes KUN gennem adapter-laget.
 """
 
 import logging
-from collections.abc import Iterator
-from contextlib import contextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 
 from sqlalchemy import delete, func, literal_column, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401  (alle tabeller skal være kendt)
-from app.adaptere.regnskab.base import AccountingProvider, DelvisHentet, PosteringsSvar, hent_adapter
+from app.adaptere.regnskab.base import AccountingProvider, DelvisHentet, PosteringsSvar
+from app.synk.faelles import SynkResultat, _adapter  # noqa: F401  (genbruges af andre moduler)
+from app.synk.opkraevning import synk_invoices
 from app.regnskab.models import AccountingYearCache, CustomerCache, EntryCache, JournalEntryCache, OpenEntryCache, SupplierCache
 from app.synk.tilstand import registrer_fejl, synk_transaktion
 
@@ -32,25 +32,6 @@ ANALYZE_EFTER = 1000
 
 # Så mange rækker pr. INSERT (PostgreSQL tillader højst 65.535 værdier pr. sætning).
 BLOK = 1000
-
-
-@dataclass(frozen=True)
-class SynkResultat:
-    ressource: str
-    antal: int
-    fjernet: int = 0
-    nye: int = 0
-    opdaterede: int = 0
-    cursor: str | None = None
-
-
-@contextmanager
-def _adapter(session: Session, client_id: int, adapter: AccountingProvider | None) -> Iterator:
-    if adapter is not None:
-        yield adapter
-    else:
-        with hent_adapter(session, client_id) as a:
-            yield a
 
 
 def _upsert(session: Session, model, raekker: list[dict], noegle: list[str]) -> tuple[int, int]:
@@ -205,3 +186,6 @@ SYNK_FUNKTIONER = {
     "open_entries": synk_open_entries,
     "journals": synk_journals,
 }
+
+# Opkrævning: debitorer og fakturaer – efter posteringerne, så indbetalingerne er hentet.
+SYNK_FUNKTIONER["invoices"] = synk_invoices
