@@ -1,22 +1,24 @@
 # Hvor er jeg
 
-**Sidst opdateret:** 04.10.2026
+**Sidst opdateret:** 07.10.2026
 
 ## Kører i dag
-- [x] Posteringer hentes fra e-conomic for én kunde (Din Bogholder ApS, 43.463 posteringer)
-      med `python -m app.cli sync-entries <id>`; bogmærket gør, at kun nye hentes næste gang.
-- [x] Dubletreglen (version 9) kører med `python -m app.cli run-rules <id>`: 11 fund på
-      7 års bogføring, heraf 1 bekræftet fejl (AUB). Status sættes med `set-status` og logges.
-- [x] Klar til serveren (session 3): `/health`, Docker Compose (Postgres, API, worker,
-      scheduler, Caddy med HTTPS), krypteret backup + gendannelsestest, Sentry. Afprøvet
-      lokalt (backup → gendannelse → GENDANNELSE OK; forkert nøgle → FEJLET). Selve serveren
-      er IKKE sat op endnu – det gøres efter `DEPLOY.md`.
+- [x] Posteringer hentes fra e-conomic (Din Bogholder ApS, 43.463 posteringer) med
+      `python -m app.cli sync-entries <id>`; bogmærket gør, at kun nye hentes næste gang.
+- [x] Dubletreglen (version 9): 11 fund på 7 års bogføring, heraf 1 bekræftet fejl (AUB).
+- [x] **Serveren kører hos Hetzner** (CPX32, Helsinki, 204.168.242.139, firewall: kun 22,
+      80, 443): db, api, worker, scheduler og caddy kører; databasens tabeller er bygget.
+- [x] **Backup + afprøvet gendannelse på serveren:** `scripts/backup.sh` og
+      `scripts/gendan_test.sh` → GENDANNELSE OK (07.10.2026, tom database). Natlig backup
+      kl. 02:15 og månedlig gendannelsestest via /etc/cron.d/afstemning.
+- [x] **Sentry** modtager rapporter fra serveren (testrapport set 07.10.2026).
+- [ ] HTTPS på `afstemning.dinbogholder.dk`: venter på DNS (A-post oprettet 07.10).
 
 ## Næste opgave
-Følg `DEPLOY.md` trin 1–7: bestil serveren hos Hetzner, peg `afstemning.dinbogholder.dk` på
-den, start containerne, kør `scripts/backup.sh` og `scripts/gendan_test.sh` på serveren.
-Færdig når `https://afstemning.dinbogholder.dk/health` svarer og gendannelser.log siger
-GENDANNELSE OK.
+Når DNS virker: genstart caddy, tjek `https://afstemning.dinbogholder.dk/health` og at
+`/docs` beder om adgangskode. Derefter (valgfrit, men anbefalet): flyt data fra Mac'en til
+serveren (DEPLOY.md trin 5) og kør `scripts/gendan_test.sh` igen med rigtige data, og
+bestil en Storage Box til backup uden for serveren (`BACKUP_FJERN`).
 
 ## Beslutninger jeg har truffet
 - 04.10.2026: Dubletreglen strammes ikke mere – usikre fund afgøres af medarbejderen
@@ -28,6 +30,9 @@ GENDANNELSE OK.
 - 04.10.2026: Backup'en krypteres (gpg) på serveren, før den gemmes eller kopieres væk;
   nøglen og CREDENTIALS_KEY gemmes i en adgangskodemanager, aldrig sammen med backup'en.
 - 04.10.2026: Scheduleren er sin egen tjeneste (`worker --kun-planlaeg`), workers kan skaleres.
+- 07.10.2026: Server CPX32 (4 vCPU, 8 GB, 80 GB) i Helsinki – rigeligt til 200 kunder ifølge
+  overslaget (10–20 GB data); disken blev ikke gjort større ved Rescale, så der kan skaleres ned.
+- 07.10.2026: Sentry kun med fejlrapporter (ingen logs/tracing), EU-dataregion.
 
 ## Ting jeg er i tvivl om
 - Bankkonti genkendes på "bank" i navnet. Har nogen kunder bankkonti med andre navne?
@@ -36,9 +41,9 @@ GENDANNELSE OK.
 
 ## Sidste kommando jeg kørte
 ```
-scripts/gendan_test.sh   (lokalt, mod udviklingsdatabasen)
+scripts/gendan_test.sh   (på serveren, 07.10.2026)
 Databaseversion: gendannet 3867971909b7, nu 3867971909b7
-Tokens: 1 af 1 tokens kan læses med CREDENTIALS_KEY
+Tokens: 0 af 0 tokens kan læses med CREDENTIALS_KEY
 GENDANNELSE OK
 ```
 
