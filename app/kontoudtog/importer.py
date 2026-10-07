@@ -1,7 +1,7 @@
 """Indlæs et kontoudtog fra en PDF- eller CSV-fil (indtil indlæsning fra mail/SharePoint er bygget).
 
-    python -m app.kontoudtog.importer --kundenummer 40850635 --kilde grossist \\
-        --kreditor 45 --fortegn modsat --fil bygma.pdf
+    python -m app.kontoudtog.importer --kundenummer 40850635 --fil bygma.pdf
+        (grossisten findes ud fra CVR i udtoget; ellers angiv --kreditor 45)
 
     python -m app.kontoudtog.importer --kundenummer 40850635 --kilde grossist \\
         --kreditor 45 --fra 2026-09-01 --til 2026-09-30 --fortegn modsat --fil udtog.csv
@@ -39,7 +39,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 import app.models  # noqa: F401
 from app.db import ny_session
@@ -149,6 +149,16 @@ def laes_revibot(sti: Path) -> RevibotUdtog:
     return RevibotUdtog(linjer, cvr, fra, til, fejl)
 
 
+def find_leverandoer(session, client_id: int, cvr_numre: list[str]) -> list[tuple[int, str]]:
+    """Kundens leverandører med et af CVR-numrene (fx 'DK58210617' eller '58 21 06 17' i e-conomic)."""
+    if not cvr_numre:
+        return []
+    return [tuple(r) for r in session.execute(text("""
+        SELECT leverandoernummer, navn FROM suppliers
+        WHERE client_id = :c AND right(regexp_replace(coalesce(cvr, ''), '[^0-9]', '', 'g'), 8) = ANY(:cvr)
+        ORDER BY leverandoernummer"""), {"c": client_id, "cvr": list(cvr_numre)})]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Indlæs et kontoudtog fra en PDF- eller CSV-fil.")
     parser.add_argument("--kundenummer", help="kan udelades for Revibot-filer (kunden findes ud fra CVR)")
@@ -164,10 +174,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.kreditor and args.debitor:
         parser.error("brug enten --kreditor eller --debitor")
     modpart = (f"kreditor:{args.kreditor}" if args.kreditor else f"debitor:{args.debitor}" if args.debitor else None)
-    if args.konto is None and modpart is None:
+    er_pdf = args.fil.suffix.lower() == ".pdf"
+    if args.konto is None and modpart is None and not er_pdf:
         parser.error("angiv --konto og/eller --kreditor/--debitor (hvad udtoget skal sammenlignes med)")
 
-    fra, til, cvr = args.fra, args.til, None
+    fra, til, cvr, pdf_cvr = args.fra, args.til, None, []
     kilde, fortegn = args.kilde, args.fortegn
     try:
         if args.fil.suffix.lower() == ".csv" and er_revibot(args.fil):
@@ -190,6 +201,7 @@ def main(argv: list[str] | None = None) -> int:
                       "Se det igennem med: python -m app.kontoudtog.pdf " + args.fil.name, file=sys.stderr)
                 return 1
             linjer, fra, til = pdf.linjer, fra or pdf.periode_fra, til or pdf.periode_til
+            pdf_cvr = pdf.cvr_numre
         else:
             linjer = laes_csv(args.fil)
     except (IndlaesningsFejl, PdfFejl, OSError, csv.Error) as fejl:
@@ -197,7 +209,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if fra is None or til is None:
         parser.error("angiv --fra og --til")
-    if kilde is None or fortegn is None:
+    if (kilde is None or fortegn is None) and not (er_pdf and args.konto is None and modpart is None):
         parser.error("angiv --kilde og --fortegn")
     if args.kundenummer is None and cvr is None:
         parser.error("angiv --kundenummer")
@@ -211,6 +223,20 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         if args.kundenummer and cvr and kunde.cvr and kunde.cvr != cvr:
             print(f"Fejl: Filen er for CVR {cvr}, men kunden har CVR {kunde.cvr}", file=sys.stderr)
+            return 2
+        if args.konto is None and modpart is None:
+            fundne = find_leverandoer(session, kunde.id, pdf_cvr)
+            if len(fundne) != 1:
+                print("Fejl: Grossisten kunne ikke findes ud fra CVR i udtoget "
+                      f"({', '.join(pdf_cvr) or 'intet CVR fundet'}; {len(fundne)} leverandører passer). "
+                      "Angiv --kreditor <leverandørnummer>.", file=sys.stderr)
+                return 2
+            nr, navn = fundne[0]
+            modpart = f"kreditor:{nr}"
+            kilde, fortegn = kilde or "grossist", fortegn or "modsat"
+            print(f"Grossist fundet ud fra CVR: {navn} (leverandør {nr}).")
+        if kilde is None or fortegn is None:
+            print("Fejl: angiv --kilde og --fortegn", file=sys.stderr)
             return 2
         udtog = indlaes(session, kunde.id, kilde, fra, til, fortegn, linjer,
                         args.konto, modpart, args.fil.name)

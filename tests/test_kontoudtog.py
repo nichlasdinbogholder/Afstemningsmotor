@@ -426,3 +426,30 @@ def test_afsluttede_maaneder_over_aarsskifte():
     assert afsluttede_maaneder(date(2026, 2, 10), 3) == [
         (date(2026, 1, 1), date(2026, 1, 31)), (date(2025, 12, 1), date(2025, 12, 31)),
         (date(2025, 11, 1), date(2025, 11, 30))]
+
+
+def test_pdf_indlaeses_og_grossisten_findes_ud_fra_cvr(tmp_path, db_session, kunde, monkeypatch, capsys):
+    from contextlib import contextmanager
+
+    from app.kontoudtog.models import Statement
+    from app.regnskab.models import SupplierCache
+
+    @contextmanager
+    def samme():
+        yield db_session
+
+    monkeypatch.setattr(importer, "ny_session", samme)
+    db_session.add_all([SupplierCache(client_id=kunde.id, leverandoernummer=310, navn="AO", cvr="DK58210617"),
+                        SupplierCache(client_id=kunde.id, leverandoernummer=311, navn="Andet", cvr="12345678")])
+    fil = _lav_pdf(tmp_path / "ao.pdf", [
+        [(0, "KONTOUDTOG")], [(0, "CVR-nr. 58210617")], [(0, "Perioden: 01/09/26-30/09/26")],
+        [(0, "Dato"), (1, "Fakturanr."), (2, "Tekst"), (3, "Beløb")],
+        [(2, "Primo saldo"), (3, "0,00")],
+        [(0, "03/09/26"), (1, "23508677"), (2, "FAKTURA"), (3, "2.924,00")],
+        [(2, "Ultimo til betaling:"), (3, "2.924,00")],
+    ])
+    assert importer.main(["--kundenummer", "MATCH-1", "--fil", str(fil)]) == 0
+    assert "AO (leverandør 310)" in capsys.readouterr().out
+    u = db_session.scalars(select(Statement).where(Statement.client_id == kunde.id)).one()
+    assert (u.kilde, u.modpart, u.fortegn, u.periode_fra, u.periode_til) == (
+        "grossist", "kreditor:310", "modsat", date(2026, 9, 1), date(2026, 9, 30))

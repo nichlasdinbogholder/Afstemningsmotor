@@ -64,3 +64,24 @@ def test_kommando_viser_hjaelp(modul):
         [sys.executable, "-m", modul, "--help"], cwd=ROD, capture_output=True, text=True
     )
     assert resultat.returncode == 0, resultat.stderr[-800:]
+
+
+def test_opret_kunde(db_session, monkeypatch, capsys):
+    from contextlib import contextmanager
+
+    from sqlalchemy import select
+
+    from app.kunder import opret
+    from app.kunder.models import Client
+
+    @contextmanager
+    def samme():
+        yield db_session
+
+    monkeypatch.setattr(opret, "ny_session", samme)
+    assert opret.main(["--navn", "Test El ApS", "--kundenummer", "T-1045", "--cvr", "1234 5678",
+                       "--system", "economic"]) == 0
+    k = db_session.scalars(select(Client).where(Client.kundenummer == "T-1045")).one()
+    assert (k.cvr, k.status, k.regnskabssystem) == ("12345678", "aktiv", "economic")
+    assert "gem_token --kundenummer T-1045" in capsys.readouterr().out
+    assert opret.main(["--navn", "Igen", "--kundenummer", "T-1045", "--system", "economic"]) == 2

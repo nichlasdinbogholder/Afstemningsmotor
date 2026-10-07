@@ -26,6 +26,7 @@ from pathlib import Path
 BELOEB = re.compile(r"^-?\d{1,3}(?:\.\d{3})*,\d{2}-?$|^-?\d+,\d{2}-?$")
 DATO_SEP = re.compile(r"^(\d{1,2})[-./](\d{1,2})[-./](\d{2}|\d{4})$")
 DATO_KORT = re.compile(r"^(\d{2})(\d{2})(\d{2})$")  # 310726 (fx Fog)
+CVR = re.compile(r"CVR[^0-9]{0,15}((?:DK-?)?\d{2} ?\d{2} ?\d{2} ?\d{2})", re.IGNORECASE)
 PERIODE = re.compile(r"(\d{1,2}[-./]\d{1,2}[-./]\d{2,4}|\d{6})\s*-\s*(\d{1,2}[-./]\d{1,2}[-./]\d{2,4}|\d{6})")
 
 KOLONNER = {"beløb": "beloeb", "beloeb": "beloeb", "debet": "debet", "kredit": "kredit", "saldo": "saldo"}
@@ -54,6 +55,7 @@ class PdfUdtog:
     periode_til: date | None
     ocr: bool = False
     advarsler: list[str] = field(default_factory=list)
+    cvr_numre: list[str] = field(default_factory=list)  # CVR-numre i teksten (bruges til at finde grossisten)
 
     @property
     def sum_linjer(self) -> Decimal:
@@ -281,7 +283,14 @@ def tolk_sider(sider: list[list[list[Ord]]], ocr: bool = False) -> PdfUdtog:
     if fra is None and linjer:
         fra, til = min(l["dato"] for l in linjer), max(l["dato"] for l in linjer)
         advarsler.append("Ingen periode på udtoget – bruger første og sidste linjes dato")
-    return PdfUdtog(linjer, primo, ultimo, fra, til, ocr, advarsler)
+    cvr_numre: list[str] = []
+    for side in sider:
+        for linje in side:
+            for m in CVR.finditer(" ".join(o.tekst for o in linje)):
+                nr = re.sub(r"\D", "", m.group(1))
+                if len(nr) == 8 and nr not in cvr_numre:
+                    cvr_numre.append(nr)
+    return PdfUdtog(linjer, primo, ultimo, fra, til, ocr, advarsler, cvr_numre)
 
 
 def laes_pdf(sti: Path) -> PdfUdtog:
