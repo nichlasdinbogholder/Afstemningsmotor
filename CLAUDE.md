@@ -152,7 +152,11 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/api/main.py` – webdelen (FastAPI). Indtil videre kun `GET /health` (database + version,
   aldrig hemmeligheder). `uvicorn app.api.main:app`.
 - `app/fejlrapport.py` – Sentry (`init_fejlrapport("api"|"worker"|"scheduler")`). Slået fra uden
-  `SENTRY_DSN`. Ingen lokale variabler, ingen personoplysninger, alle tekster køres gennem `rediger()`.
+  `SENTRY_DSN`. environment = production (APP_ENV=production) ellers development. API'et bruger
+  FastAPI-integrationen. Ingen lokale variabler, ingen personoplysninger; `before_send` fjerner
+  alle felter, hvis navn indeholder token/secret/key/password/authorization (FOELSOMME_NAVNE),
+  og alle tekster køres gennem `rediger()`. Worker: hvert job har tags job_id, client_id,
+  job_type, og en jobfejl sendes med `capture_exception` (UdskydJob sendes ikke).
 - `app/sikkerhed/tjek_tokens.py` – kan alle tokens læses med `CREDENTIALS_KEY`? (kun antal).
   Bruger `kan_dekrypteres()` i kryptering.py, som genbruger det ENE dekrypteringssted.
 - Server: `Dockerfile`, `docker-compose.prod.yml` (db uden åben port, migrate, api, worker,

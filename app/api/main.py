@@ -28,3 +28,9 @@ def health() -> JSONResponse:
     except Exception:  # noqa: BLE001 – detaljer kan indeholde serveradresser; vises ikke
         return JSONResponse({"status": "fejl", "database": "svarer ikke"}, status_code=503)
     return JSONResponse({"status": "ok", "database": "ok", "databaseversion": version})
+
+
+# MIDLERTIDIG – kun til at se, at fejl fra webdelen lander i Sentry. FJERNES IGEN.
+@app.get("/debug/boom")
+def debug_boom() -> None:
+    raise RuntimeError("Test af Sentry: /debug/boom")

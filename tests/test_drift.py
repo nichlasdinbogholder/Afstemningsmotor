@@ -250,3 +250,137 @@ def test_scheduler_planlaegger_og_koerer_ingen_job(monkeypatch):
     monkeypatch.setattr(w, "koer_et_job", lambda *a, **k: pytest.fail("scheduler må ikke køre job"))
     w.koer_scheduler(interval=0.01)
     assert kald == ["planlagt"]
+
+
+# --- Sentry: følsomme felter, miljø, webdel og jobs -----------------------------------
+
+
+def test_foelsomme_felter_fjernes_uanset_hvor_de_ligger():
+    haendelse = {
+        "request": {"headers": {"Authorization": "Bearer abc123", "X-AgreementGrantToken": "kunde-tok",
+                                "X-AppSecretToken": "app-hemmelig", "Accept": "application/json"},
+                    "cookies": {"session": "s"}},
+        "extra": {"niveau1": {"niveau2": [{"api_key": "k1", "password": "p1", "ok": "synlig"}]}},
+        "breadcrumbs": {"values": [{"data": {"client_secret": "cs", "url": "https://x"}}]},
+        "contexts": {"headers_som_par": [["authorization", "Basic xyz"], ["user-agent", "httpx"]]},
+    }
+    renset = rens_haendelse(haendelse)
+    tekst = json.dumps(renset)
+    for hemmelighed in ("abc123", "kunde-tok", "app-hemmelig", "k1", "p1", "cs", "xyz", '"s"'):
+        assert hemmelighed not in tekst, hemmelighed
+    assert renset["request"]["headers"]["Accept"] == "application/json"
+    assert renset["extra"]["niveau1"]["niveau2"][0]["ok"] == "synlig"
+    assert renset["contexts"]["headers_som_par"][1] == ["user-agent", "httpx"]
+    assert renset["request"]["headers"]["Authorization"] == "[fjernet]"
+
+
+@pytest.mark.parametrize("app_env, forventet", [
+    ("production", "production"), ("PROD", "production"),
+    ("development", "development"), ("", "development"), ("test", "development"),
+])
+def test_environment_er_production_eller_development(monkeypatch, app_env, forventet):
+    monkeypatch.setenv("APP_ENV", app_env)
+    get_settings.cache_clear()
+    try:
+        assert sentry_indstillinger("api")["environment"] == forventet
+    finally:
+        get_settings.cache_clear()
+
+
+def test_api_bruger_fastapi_integrationen_og_worker_goer_ikke():
+    navne = {type(i).__name__ for i in sentry_indstillinger("api")["integrations"]}
+    assert {"FastApiIntegration", "StarletteIntegration"} <= navne
+    assert sentry_indstillinger("worker")["integrations"] == []
+
+
+@pytest.fixture
+def fang_sentry():
+    """Slå Sentry til med en transport, der fanger rapporterne i stedet for at sende dem."""
+    sendt: list[dict] = []
+
+    class FangTransport(sentry_sdk.transport.Transport):
+        def capture_envelope(self, envelope):
+            for item in envelope.items:
+                if item.headers.get("type") == "event":
+                    sendt.append(json.loads(item.payload.get_bytes()))
+
+    def start(komponent):
+        indstillinger = sentry_indstillinger(komponent)
+        indstillinger.update(dsn="https://offentlig@example.invalid/1", transport=FangTransport)
+        sentry_sdk.init(**indstillinger)
+        return sendt
+
+    yield start
+    sentry_sdk.flush()
+    sentry_sdk.get_client().close()
+    sentry_sdk.init(dsn=None)
+
+
+def test_debug_boom_lander_i_sentry_uden_authorization_header(fang_sentry):
+    sendt = fang_sentry("api")
+    klient = TestClient(api.app, raise_server_exceptions=False)
+    svar = klient.get("/debug/boom", headers={"Authorization": "Basic hemmelig-base64"})
+    sentry_sdk.flush()
+    assert svar.status_code == 500
+    assert len(sendt) == 1
+    haendelse = sendt[0]
+    assert haendelse["exception"]["values"][-1]["value"] == "Test af Sentry: /debug/boom"
+    assert "hemmelig-base64" not in json.dumps(haendelse)
+
+
+def test_fejl_i_et_job_lander_i_sentry_med_job_tags(fang_sentry, db_session, token):
+    from app.jobs.koe import laeg_i_koe
+    from app.jobs.register import afregistrer, jobtype
+    from app.jobs.worker import Worker
+    from app.db import ny_session
+
+    @jobtype("test_sentry_boom")
+    def boom(job):
+        raise RuntimeError(f"jobbet fejlede – kundens nøgle {token} må ikke med")
+
+    registrer_hemmelighed(token)
+    with ny_session() as s:
+        client_id = s.scalar(text("SELECT min(id) FROM clients"))
+        job_id = laeg_i_koe(s, "test_sentry_boom", client_id=client_id).job_id
+        s.commit()
+    sendt = fang_sentry("worker")
+    try:
+        Worker(kun_typer=["test_sentry_boom"]).koer_et_job(bestemt_id=job_id)
+        sentry_sdk.flush()
+    finally:
+        afregistrer("test_sentry_boom")
+        with ny_session() as s:
+            s.execute(text("DELETE FROM jobs WHERE id = :id"), {"id": job_id})
+            s.commit()
+
+    assert len(sendt) == 1, [h.get("message") or h.get("exception") for h in sendt]
+    tags = sendt[0]["tags"]
+    assert tags["job_id"] == str(job_id)
+    assert tags["job_type"] == "test_sentry_boom"
+    assert tags["client_id"] == (str(client_id) if client_id is not None else "ingen")
+    assert token not in json.dumps(sendt[0])
+
+
+def test_udskudt_job_sendes_ikke_til_sentry(fang_sentry):
+    from app.jobs.koe import laeg_i_koe
+    from app.jobs.register import UdskydJob, afregistrer, jobtype
+    from app.jobs.worker import Worker
+    from app.db import ny_session
+
+    @jobtype("test_sentry_venter")
+    def venter(job):
+        raise UdskydJob(30, "for mange kald")
+
+    with ny_session() as s:
+        job_id = laeg_i_koe(s, "test_sentry_venter").job_id
+        s.commit()
+    sendt = fang_sentry("worker")
+    try:
+        Worker(kun_typer=["test_sentry_venter"]).koer_et_job(bestemt_id=job_id)
+        sentry_sdk.flush()
+    finally:
+        afregistrer("test_sentry_venter")
+        with ny_session() as s:
+            s.execute(text("DELETE FROM jobs WHERE id = :id"), {"id": job_id})
+            s.commit()
+    assert sendt == []  # rate limit er ikke en fejl

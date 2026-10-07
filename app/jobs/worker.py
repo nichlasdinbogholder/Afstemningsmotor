@@ -26,6 +26,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 
+import sentry_sdk
 from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session
 
@@ -170,8 +171,10 @@ class Worker:
         if r is None:
             log.warning("Job %s var ikke længere vores – fejlen blev ikke gemt", job.id)
         elif r.status == "fejlet":
-            log.error("Job %s (%s) fejlede endeligt efter %s forsøg: %s",
-                      job.id, job.type, job.forsoeg, fejl)
+            # warning, ikke error: fejlen er allerede sendt til Sentry med stak og tags,
+            # og en error-log ville give en dublet uden dem.
+            log.warning("Job %s (%s) fejlede ENDELIGT efter %s forsøg: %s",
+                        job.id, job.type, job.forsoeg, fejl)
         else:
             log.warning("Job %s (%s) fejlede (forsøg %s af %s) – prøver igen %s: %s",
                         job.id, job.type, job.forsoeg, job.max_forsoeg,
@@ -182,11 +185,22 @@ class Worker:
         job = self.tag_naeste(bestemt_id)
         if job is None:
             return False
+        # Alt, hvad der sendes til Sentry under jobbet, får jobbets tags – så der kan
+        # filtreres på kunde. (Uden SENTRY_DSN gør sentry_sdk ingenting.)
+        with sentry_sdk.new_scope() as scope:
+            scope.set_tag("job_id", str(job.id))
+            scope.set_tag("job_type", job.type)
+            scope.set_tag("client_id", str(job.client_id) if job.client_id is not None else "ingen")
+            self._udfoer(job)
+        return True
+
+    def _udfoer(self, job: _TagetJob) -> None:
         try:
             funktion = hent_funktion(job.type)
         except UkendtJobtype as fejl:
+            sentry_sdk.capture_exception(fejl)
             self._marker_fejl(job, str(fejl), endelig=True)
-            return True
+            return
 
         session = self._session_fabrik()
         try:
@@ -213,10 +227,10 @@ class Worker:
             log.info("Job %s (%s) udskudt %.0f s: %s", job.id, job.type, udskyd.sekunder, udskyd)
         except Exception as fejl:  # noqa: BLE001 – ét jobs fejl må aldrig stoppe workeren
             session.rollback()
+            sentry_sdk.capture_exception(fejl)  # med jobbets tags (se koer_et_job)
             self._marker_fejl(job, f"{type(fejl).__name__}: {fejl}")
         finally:
             session.close()
-        return True
 
     # --- Løkken -------------------------------------------------------------
 
