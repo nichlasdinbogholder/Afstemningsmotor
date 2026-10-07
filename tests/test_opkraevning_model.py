@@ -181,10 +181,11 @@ def test_kun_en_aktiv_afbetalingsordning(db_session, faktura):
 
 def test_kunde_indstillinger_har_lovlige_vaerdier(db_session, kunde):
     db_session.refresh(kunde)  # standardværdierne sættes af databasen
-    assert (kunde.payment_allocation_order, kunde.dunning_min_amount, kunde.collection_grace_days,
+    assert (kunde.payment_allocation_order, kunde.dunning_min_amount,
             kunde.collection_min_amount, kunde.auto_escalate_to_collection) == (
-        "costs_first", Decimal("100.00"), 10, Decimal("500.00"), False)
-    for felt, vaerdi in (("payment_allocation_order", "random"), ("collection_grace_days", 5),
+        "costs_first", Decimal("100.00"), Decimal("500.00"), False)
+    assert not hasattr(kunde, "collection_grace_days")  # karensen er fast for alle (lov.INKASSO_KARENS_DAGE)
+    for felt, vaerdi in (("payment_allocation_order", "random"), ("dunning_min_amount", -1),
                          ("fi_kreditornummer", "1234")):
         with pytest.raises(IntegrityError):
             with db_session.begin_nested():

@@ -217,6 +217,14 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     kreditnota, > 3 rykkere inkl. FarPays (`prior_dunning_count`), < 10 dage efter forrige (inkl.
     `prior_last_dunning_at`), kompensation uden erhverv og rykker ved aktiv inkassosag. Unik aktiv sag pr. faktura
     + unik idempotency_key. Gebyr på inkassosag kan ikke være fakturerbart (CHECK).
+  - `lov.py` (trin 2): rentelovens grænser som konstanter + kontroller (MAKS_RYKKERGEBYR 100, MAKS_RYKKERE 3,
+    MIN_DAGE_MELLEM_RYKKERE 10, KOMPENSATIONSBELOEB 310, INKASSO_KARENS_DAGE 10 – fast for ALLE kunder).
+    `beregn_morarente(...)`: pr. dag (dagene EFTER forfald t.o.m. til-dato), faktiske dage/365, på udestående
+    hovedstol, sats = referencesats for halvåret + 8. `referencesats()` rejser `ManglerReferencesats` – aldrig gæt.
+  - `rykker.py`: `byg_rykker(session, faktura, dag)` (kø, gebyr 100, kompensation én gang til erhverv, kun NY rente)
+    og `marker_sendt(...)` (først her oprettes fee_revenue-linjer). Spærrer (betalt m.m.) kommer i trin 3.
+  - `referencesats.py`: `python -m app.opkraevning.referencesats vis | saet --fra ÅÅÅÅ-01-01|07-01 --sats --kilde`.
+  - `app/tid.py`: `dansk_dato()` – lovens dage regnes i dansk tid.
   - Inkasso Mægleren har INGEN API: overdragelse sker manuelt ud fra en liste; medarbejderen registrerer sagsnr.
   - Indbetalinger: e-conomic udligner selv (remainder). Bankafstemningen laver i kassekladden 3 ben (bank,
     debitor, gebyr-/rentekonto) – kontrolleres FØR bogføring. FIK: betalings-id = fakturanr. + kontrolciffer;

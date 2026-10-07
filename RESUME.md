@@ -322,3 +322,10 @@ Skabelon:
     Dubletregel v<N> kørt <dato> på <kunde>. <N> fund (high/medium: x/y).
     Kontrolleret 5 stk: <a> rigtige, <b> falske (<hvorfor>).
     Falsk-positiv-rate ca. <b/5> %.
+
+## Opkrævning (erstatter FarPay) – faste opgaver i ugeplanen
+- **1. januar og 1. juli:** sæt Nationalbankens udlånsrente, FØR der sendes rykkere i det nye halvår:
+  `python -m app.opkraevning.referencesats saet --fra ÅÅÅÅ-01-01 --sats <procent> --kilde "Nationalbanken …"`.
+  Mangler satsen, stopper renteberegningen (med vilje) – den gætter ikke.
+- Karensperioden før inkasso er fast 10 dage for alle kunder (besluttet 07.10.2026).
+

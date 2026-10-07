@@ -56,7 +56,6 @@ class Client(Base):
         kun_vaerdier("payment_allocation_order", ("costs_first", "principal_first")),
         CheckConstraint("dunning_min_amount >= 0", name="rykker_minimum_ikke_negativ"),
         CheckConstraint("collection_min_amount >= 0", name="inkasso_minimum_ikke_negativ"),
-        CheckConstraint("collection_grace_days >= 10", name="inkasso_karens_mindst_10"),
         CheckConstraint("fi_kreditornummer IS NULL OR fi_kreditornummer ~ '^[0-9]{8}$'",
                         name="fi_kreditornummer_8_cifre"),
         CheckConstraint("loenkoersel_dag BETWEEN 1 AND 31", name="loenkoersel_dag_1_31"),
@@ -100,7 +99,6 @@ class Client(Base):
     collection_mandate_signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     auto_escalate_to_collection: Mapped[bool] = mapped_column(Boolean, server_default=false())
     collection_min_amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), server_default=text("500"))
-    collection_grace_days: Mapped[int] = mapped_column(SmallInteger, server_default=text("10"))
     # Kundens FI-kreditornummer (de 8 cifre efter + i FIK-linjen) – kobler en indbetaling til kunden.
     fi_kreditornummer: Mapped[str | None] = mapped_column(String(8), unique=True)
     # Debitorgrupper i kundens e-conomic, der er erhverv (Connect El: {2}). Andre = privat.
