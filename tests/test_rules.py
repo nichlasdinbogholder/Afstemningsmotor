@@ -410,9 +410,9 @@ def test_rettelse_med_samme_bilagsnummer_er_ikke_dublet(db_session, kunde, poste
 
 def test_genbrugt_bilagsnummer_fra_et_andet_aar_er_ikke_en_rettelse(db_session, kunde, poster):
     """H må ikke snydes af et bilagsnummer, der går igen år senere (nummerering forfra)."""
-    _bankudgift(poster, 1, 100, "2023-05-30", "Forsikring", "2400.00", 2600)
-    _bankudgift(poster, 3, 101, "2023-05-30", "Forsikring", "2400.00", 2600)
-    poster(9, "2025-05-30", 2600, "-2400.00", tekst="Andet bilag 100", bilag=100)
+    _bankudgift(poster, 1, 100, "2024-08-30", "Forsikring", "2400.00", 2600)
+    _bankudgift(poster, 3, 101, "2024-08-30", "Forsikring", "2400.00", 2600)
+    poster(9, "2022-05-30", 2600, "-2400.00", tekst="Andet bilag 100", bilag=100)
     assert _koer(db_session, kunde).fundet == 1
 
 
@@ -455,7 +455,7 @@ def test_hver_koersel_noteres_i_rule_runs(db_session, kunde, poster):
     _koer(db_session, kunde)
     koersler = db_session.scalars(select(RuleRun).where(RuleRun.client_id == kunde.id,
                                                        RuleRun.rule_code == REGEL)).all()
-    assert [(k.rule_code, k.rule_version, k.fund) for k in koersler] == [(REGEL, 9, 1), (REGEL, 9, 1)]
+    assert [(k.rule_code, k.rule_version, k.fund) for k in koersler] == [(REGEL, 10, 1), (REGEL, 10, 1)]
 
 
 # --- Status og log ---------------------------------------------------------------
@@ -520,7 +520,7 @@ def test_ingen_aendring_ingen_log(db_session, kunde, poster):
 def test_regel_er_registreret():
     regler = {r.code: r for r in alle_regler()}
     assert regler[REGEL].name_da == "Muligt dobbeltbogført beløb"
-    assert regler[REGEL].version == 9
+    assert regler[REGEL].version == 10
 
 
 def test_jobtypen_run_rules(db_session, kunde, poster):
@@ -635,3 +635,15 @@ def test_regler_trækker_heller_ikke_provider_ind_ad_omveje():
             "assert not bad, bad\n")
     r = subprocess.run([sys.executable, "-c", kode], cwd=ROD, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr[-800:]
+
+
+def test_kun_de_seneste_12_maaneder(db_session, kunde, poster):
+    """Ældre år er typisk afsluttet – en dublet dér kan ikke rettes og meldes ikke (J).
+    De 12 måneder regnes fra kundens nyeste postering, ikke fra i dag."""
+    poster(1, "2025-03-02", 6903, "60.00")   # dublet, men 13 måneder før nyeste postering
+    poster(2, "2025-03-02", 6903, "60.00")
+    poster(3, "2026-04-02", 6904, "75.00")   # dublet inden for 12 måneder
+    poster(4, "2026-04-02", 6904, "75.00")
+    _koer(db_session, kunde)
+    fund = _fund(db_session, kunde)
+    assert len(fund) == 1 and "75,00" in fund[0].title
