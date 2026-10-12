@@ -31,6 +31,10 @@ def _bank(instrumenter=INSTRUMENTER, tider=None, vaerdi="1.60", kald=None):
             return httpx.Response(200, json={"id": "DNRENTD", "variables": [
                 {"id": "INSTRUMENT", "text": "instrument", "values": instrumenter},
                 {"id": "LAND", "text": "land", "values": [{"id": "DK", "text": "Danmark"}]},
+                # Som i den rigtige tabel (set på serveren 12.10.2026): tre opgørelser – vi bruger E.
+                {"id": "OPGOER", "text": "opgørelse", "values": [
+                    {"id": "E", "text": "Daglige renter (procent)"}, {"id": "A", "text": "Gennemsnit (procent)"},
+                    {"id": "T", "text": "Omsætning (mio. kroner)"}]},
                 {"id": "Tid", "text": "tid", "time": True, "values": tider}]})
         if request.url.path.endswith("/data"):
             krop = json.loads(request.content)
@@ -49,6 +53,7 @@ def test_satsen_hentes_og_gemmes_med_kilde(db_session):
     krop = json.loads(kald[-1].content)
     assert {"code": "INSTRUMENT", "values": ["OIRNAA"]} in krop["variables"]
     assert {"code": "Tid", "values": ["2026M07D01"]} in krop["variables"]
+    assert {"code": "OPGOER", "values": ["E"]} in krop["variables"]
     log = db_session.scalars(select(AuditLog).where(AuditLog.handling == "referencesats_hentet")).one()
     assert log.detaljer["sats"] == "1.60"
 
@@ -82,7 +87,7 @@ def test_gaetter_aldrig_og_gemmer_intet(db_session, bank, besked):
 
 
 def test_serien_kan_vaelges_i_indstillingerne(db_session, monkeypatch):
-    monkeypatch.setattr(get_settings(), "referencesats_valg", "INSTRUMENT=X")
+    monkeypatch.setattr(get_settings(), "referencesats_valg", "OPGOER=E; INSTRUMENT=X")
     bank = _bank(instrumenter=INSTRUMENTER + [{"id": "X", "text": "Udlånsrente, dag-til-dag"}])
     assert "INSTRUMENT=X" in hent_sats(date(2026, 7, 1), bank).serie
 
@@ -105,3 +110,15 @@ def test_job_planlaegges_en_gang_om_dagen_og_scheduler_har_tiden(db_session):
     assert db_session.scalars(select(Job).where(Job.type == REFERENCESATS)).one().payload == {"dag": "2026-07-01"}
     tider = {j.id: str(j.trigger) for j in lav_scheduler().get_jobs()}
     assert "hour='6'" in tider["referencesats"] and "minute='10'" in tider["referencesats"]
+
+
+def test_uden_valg_af_opgoerelse_gaettes_der_ikke(db_session, monkeypatch):
+    monkeypatch.setattr(get_settings(), "referencesats_valg", None)
+    with pytest.raises(HentFejl, match="OPGOER"):
+        hent_sats(date(2026, 7, 1), _bank())
+
+
+def test_valg_af_ukendt_variabel_afvises(db_session, monkeypatch):
+    monkeypatch.setattr(get_settings(), "referencesats_valg", "OPGOER=E; FINDESIKKE=1")
+    with pytest.raises(HentFejl, match="FINDESIKKE"):
+        hent_sats(date(2026, 7, 1), _bank())

@@ -31,9 +31,10 @@ class Settings(BaseSettings):
     # Referencesatsen (Nationalbankens udlånsrente) hentes automatisk fra Danmarks Statistiks
     # Statistikbank (offentlig, ingen nøgle). VALG er kun nødvendig, hvis tabellen har flere mulige
     # serier – fx "INSTRUMENT=ODKNAA" (kør `python -m app.opkraevning.referencesats hent` for at se dem).
+    # DNRENTD har opgørelserne E (daglige renter), A (gennemsnit) og T (omsætning): vi bruger E.
     referencesats_api_url: str = "https://api.statbank.dk/v1"
     referencesats_tabel: str = "DNRENTD"
-    referencesats_valg: str | None = None
+    referencesats_valg: str | None = "OPGOER=E"
 
     # Fejlrapporter (Sentry). Tom = slået fra. Selve adressen (DSN) er en hemmelighed.
     sentry_dsn: SecretStr | None = None

@@ -92,7 +92,11 @@ def vaelg_serie(info: dict) -> tuple[dict[str, str], str, list[date]]:
                 raise HentFejl(f"Kan ikke vælge entydigt for {v['id']} – sæt REFERENCESATS_VALG. Muligheder: "
                                f"{muligheder}")
         beskrivelse.append(f"{v['id']}={valg[v['id']]} ({vaerdier[valg[v['id']]]})")
-    if not any("udlån" in b.casefold() for b in beskrivelse) and not _valg_fra_indstilling():
+    ukendte = set(valg) - {v["id"] for v in variabler}
+    if ukendte:
+        raise HentFejl(f"REFERENCESATS_VALG nævner {', '.join(sorted(ukendte))}, som ikke findes i tabellen")
+    # Referencesatsen ER udlånsrenten – en serie uden "udlån" i navnet er aldrig den rigtige.
+    if not any("udlån" in b.casefold() for b in beskrivelse):
         raise HentFejl("Fandt ingen serie med udlånsrenten i tabellen")
     return valg, ", ".join(beskrivelse), datoer
 
