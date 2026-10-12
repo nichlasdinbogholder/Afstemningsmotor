@@ -181,3 +181,25 @@ def test_dev_login_kun_lokalt(db_session, medarbejdere, monkeypatch, app_env, de
                          follow_redirects=False).status_code == 403  # deaktiveret
     finally:
         app.dependency_overrides.clear()
+
+
+def test_fejl_fra_microsoft_vises_som_ufarlig_kode(db_session, klient, monkeypatch):
+    from authlib.integrations.base_client import MismatchingStateError, OAuthError
+
+    class Fejlende:
+        def __init__(self, fejl):
+            self.fejl = fejl
+
+        async def authorize_access_token(self, request):
+            raise self.fejl
+
+    monkeypatch.setattr(login, "_microsoft", lambda: Fejlende(OAuthError(
+        "invalid_client", "AADSTS7000215: Invalid client secret provided. Trace ID: abc hemmelig-del")))
+    svar = klient.get("/auth/callback", follow_redirects=False)
+    assert svar.status_code == 400
+    assert "invalid_client, AADSTS7000215" in svar.json()["detail"] and "Value" in svar.json()["detail"]
+    assert "hemmelig-del" not in svar.text and "Trace" not in svar.text
+    monkeypatch.setattr(login, "_microsoft", lambda: Fejlende(MismatchingStateError()))
+    assert "login-sessionen" in klient.get("/auth/callback").json()["detail"]
+    koder = db_session.scalars(select(AuditLog.detaljer).where(AuditLog.handling == "login_fejl")).all()
+    assert len(koder) == 2 and "hemmelig" not in str(koder)

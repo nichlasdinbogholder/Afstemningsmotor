@@ -15,6 +15,8 @@ Medarbejdere oprettes med: python -m app.personale.bruger opret --email ... --na
 Intet her logger eller viser hemmeligheder (client secret, cookie-nøgle, Microsofts beviser).
 """
 
+import logging
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -27,6 +29,7 @@ from app.config import get_settings
 from app.db import ny_session
 from app.personale.models import Staff
 
+log = logging.getLogger(__name__)
 router = APIRouter()
 SESSION_NOEGLE = "medarbejder_id"
 _oauth = None
@@ -85,6 +88,33 @@ def find_medarbejder(session: Session, claims: dict) -> Staff:
     return medarbejder
 
 
+# Forklaringer på de almindeligste fejl fra Microsoft (koderne står i Microsofts dokumentation).
+KENDTE_KODER = {
+    "AADSTS7000215": "forkert client secret – brug 'Value', ikke 'Secret ID'",
+    "AADSTS7000222": "client secret er udløbet",
+    "AADSTS50011": "redirect-adressen i Entra passer ikke",
+    "AADSTS65001": "appen mangler samtykke",
+    "AADSTS700016": "appen findes ikke i jeres Microsoft 365 (forkert client ID eller tenant)",
+    "AADSTS50020": "kontoen hører ikke til jeres Microsoft 365",
+}
+
+
+def fejlkode(fejl: Exception, request: Request) -> str:
+    """En kort, ufarlig fejlkode: OAuth-fejlen og evt. Microsofts AADSTS-nummer – aldrig selve beviserne."""
+    if type(fejl).__name__ == "MismatchingStateError":
+        return "login-sessionen passede ikke (cookie mistet eller for gammel)"
+    tekst = " ".join(str(x) for x in (getattr(fejl, "error", None), getattr(fejl, "description", None),
+                                      request.query_params.get("error"),
+                                      request.query_params.get("error_description")) if x)
+    aadsts = re.search(r"AADSTS\d+", tekst)
+    oauth = re.search(r"\b(invalid_client|invalid_grant|access_denied|consent_required|"
+                      r"interaction_required|invalid_request|unauthorized_client)\b", tekst)
+    dele = [d for d in (oauth and oauth.group(1), aadsts and aadsts.group(0)) if d]
+    if aadsts and aadsts.group(0) in KENDTE_KODER:
+        dele.append(KENDTE_KODER[aadsts.group(0)])
+    return ", ".join(dele) or type(fejl).__name__
+
+
 def nuvaerende_medarbejder(request: Request, session: Session = Depends(db)) -> Staff:
     staff_id = request.session.get(SESSION_NOEGLE) if "session" in request.scope else None
     medarbejder = session.get(Staff, staff_id) if staff_id else None
@@ -115,8 +145,12 @@ async def callback(request: Request, session: Session = Depends(db)):
         raise HTTPException(status_code=503, detail="Microsoft-login er ikke sat op endnu")
     try:
         svar = await _microsoft().authorize_access_token(request)  # tjekker underskrift, udsteder, nonce
-    except Exception:  # noqa: BLE001 – detaljerne kan indeholde beviser fra Microsoft; vises ikke
-        raise HTTPException(status_code=400, detail="Login mislykkedes – prøv igen") from None
+    except Exception as fejl:  # noqa: BLE001 – kun fejlkoden vises; aldrig beviser eller nøgler
+        kode = fejlkode(fejl, request)
+        log.warning("Microsoft-login mislykkedes: %s", kode)
+        session.add(AuditLog(handling="login_fejl", detaljer={"kode": kode}))
+        session.commit()
+        raise HTTPException(status_code=400, detail=f"Login mislykkedes ({kode}) – prøv igen fra /login") from None
     claims = dict(svar.get("userinfo") or {})
     try:
         medarbejder = find_medarbejder(session, claims)
