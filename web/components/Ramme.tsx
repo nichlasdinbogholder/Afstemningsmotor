@@ -42,6 +42,9 @@ export default function Ramme({ children }: { children: React.ReactNode }) {
             <nav className="flex gap-1 text-sm">
               <Link href="/" className="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900">Afstemning</Link>
               <Link href="/debitorstyring/" className="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900">Debitorstyring</Link>
+              {mig?.rolle === "admin" && (
+                <Link href="/medarbejdere/" className="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900">Medarbejdere</Link>
+              )}
             </nav>
           </div>
           <div className="flex items-center gap-4 text-sm text-slate-600">

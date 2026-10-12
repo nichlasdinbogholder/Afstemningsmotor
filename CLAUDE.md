@@ -218,6 +218,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   ændringer (Next.js 16 adskiller sig fra ældre versioner).
 - Kapacitet (målt, DEPLOY.md): 500 kunder / 20 samtidige medarbejdere; 4 workers, 3 API-processer.
 - `app/personale/bruger.py` – `python -m app.personale.bruger vis|opret|rolle|deaktiver|aktiver`.
+- `app/api/medarbejdere.py` + siden `web/app/medarbejdere/` – det samme fra websiden (KUN admin, menupunktet ses kun af
+  admins): `GET/POST /api/medarbejdere`, `POST /api/medarbejdere/{id}` (navn/rolle/aktiv). Ingen sletning, e-mail kan
+  ikke ændres, man kan ikke fjerne sin egen admin-adgang, altid mindst én aktiv admin. audit_log `medarbejder_*`.
 - `app/opkraevning/` – OPKRÆVNING (erstatter FarPay). Debitor betaler KUNDENS konto; Din Bogholder fakturerer
   kunden månedligt for indbetalte gebyrer/renter. Vi modtager ALDRIG selv en betaling fra en debitor.
   - `models.py` (trin 1): debtors, invoices (kind invoice|credit_note – kreditnota = negativt beløb), invoice_payments,

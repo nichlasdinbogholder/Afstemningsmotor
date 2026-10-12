@@ -229,6 +229,9 @@ docker compose -f docker-compose.prod.yml exec -T api python -m app.personale.br
 oprettet (og aktive) med `app.personale.bruger`, kommer ind – også selvom andre har en
 Microsoft-konto hos jer. Når login virker, kan den fælles adgangskode i Caddy fjernes.
 
+Når du er logget ind som administrator, kan medarbejdere også tilføjes, skifte rolle og få lukket
+adgangen fra websiden under **Medarbejdere** – uden Terminal. Kommandoerne herunder virker stadig.
+
 | Medarbejdere | Kommando (`docker compose -f docker-compose.prod.yml exec -T api python -m app.personale.bruger …`) |
 |---|---|
 | Se alle | `vis` |
