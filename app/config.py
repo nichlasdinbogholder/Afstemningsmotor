@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     inbox_retention_days: int = 90
     inbox_max_attachment_mb: int = 25
     inbox_poll_seconds: int = 120
+    inbox_due_date_fallback_days: int = 8
+    inbox_min_image_px: int = 1000
+    inbox_block_incomplete_representation: bool = False
     graph_tenant_id: str | None = None
     graph_client_id: str | None = None
     graph_client_secret: SecretStr | None = None

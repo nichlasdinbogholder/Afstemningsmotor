@@ -221,10 +221,13 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/api/medarbejdere.py` + siden `web/app/medarbejdere/` – det samme fra websiden (KUN admin, menupunktet ses kun af
   admins): `GET/POST /api/medarbejdere`, `POST /api/medarbejdere/{id}` (navn/rolle/aktiv). Ingen sletning, e-mail kan
   ikke ændres, man kan ikke fjerne sin egen admin-adgang, altid mindst én aktiv admin. audit_log `medarbejder_*`.
-- `app/bilag/` – BILAGSINDBAKKEN (trin 1 bygget, se RESUME.md): tabeller `inbox_*` (`models.py`; adresser med små
-  bogstaver, beløb NUMERIC(15,2), dublet = delvist unikt indeks på (client_id, sha256), `leveringsnoegle()` =
-  sha256("<dokument>:<destination>") og unik på inbox_deliveries). `python -m app.bilag.opret --kunde <id>
-  [--destination <mail> --type economic|dinero|email] | --vis`. Skriver ALDRIG via API til e-conomic/Dinero.
+- `app/bilag/` – BILAGSINDBAKKEN (spec v3; trin 1 bygget, se RESUME.md): mail + upload → én pipeline. Tabeller
+  `inbox_*` + `supplier_account_map` (`models.py`). DATABASEN håndhæver: levering af faktura/kreditnota/kontoudtog
+  til Corpay kræver godkendelse af præcis den fil (trigger `inbox_require_approval`; rykker undtaget);
+  `inbox_approvals` er uforanderlig; leverings-/konteringsnøgler unikke (`leveringsnoegle()`); dublet pr. kunde
+  (client_id, sha256); `note_complete` er beregnet. `python -m app.bilag.opret --kunde <id> [--corpay <mail>]
+  [--kassekladde <nr>] | --vis`. Kvitteringer → kassekladde må ALDRIG bogføres (trin 16 kræver beslutning om
+  skrivning til e-conomic: dry-run + ALLOW_BOOKING).
 - `app/opkraevning/` – OPKRÆVNING (erstatter FarPay). Debitor betaler KUNDENS konto; Din Bogholder fakturerer
   kunden månedligt for indbetalte gebyrer/renter. Vi modtager ALDRIG selv en betaling fra en debitor.
   - `models.py` (trin 1): debtors, invoices (kind invoice|credit_note – kreditnota = negativt beløb), invoice_payments,

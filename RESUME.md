@@ -340,34 +340,40 @@ Skabelon:
 
 # Bilagsindbakken (app/bilag) – status
 
-Kundens fakturamail → kundens egen videresendelsesregel → `kunde-<id>@bilag.dinbogholder.dk` (én delt
-M365-postkasse) → hentning → klassificering → dublettjek → levering som mail til kundens ERP-indbakke.
-Vi skriver ALDRIG via API til e-conomic/Dinero fra dette modul, og intet kasseres stiltiende.
+Specifikation v3 (15.10.2026): tre indgange (videresendt mail til `kunde-<id>@bilag.dinbogholder.dk`, upload
+fra appen) → én pipeline → rykker til Corpay; kvittering som bilag i kundens kassekladde (ALDRIG bogført);
+faktura/kreditnota/kontoudtog → kundens godkendelse → Corpay.
 
 ## Bygget
 - **Trin 0 (15.10.2026):** orientering. Genbruges: jobkøen (`app/jobs`, `@jobtype`), `sync_state` (til
-  delta-token), APScheduler i `app/natkoersel/scheduler.py`, findings (`app/rules`) til hjerteslaget,
+  delta-token), APScheduler i `app/natkoersel/scheduler.py`, findings (`app/rules`) til hjerteslag og flag,
   PDF-udtrækning (`app/kontoudtog/pdf.py`), log-filteret for hemmeligheder og webdelens login/roller.
-- **Trin 1 (15.10.2026):** tabellerne `inbox_addresses`, `inbox_destinations`, `inbox_messages`,
-  `inbox_documents`, `inbox_deliveries`, `inbox_health` (migrering 520ef646b60c) + kommandoen
-  `python -m app.bilag.opret --kunde <id> [--destination <mail> --type economic|dinero|email] | --vis`.
-  Afvigelser fra specifikationen, så projektets egne regler holdes:
-  - Adresser er tekst med CHECK på små bogstaver (som `staff.email`) i stedet for CITEXT.
-  - `clients.id` er INTEGER, så `client_id` er INTEGER.
-  - `reviewed_by` peger på `staff` (fremmednøgle) i stedet for fri tekst.
-  - Nye felter: `inbox_documents.reason` (begrundelsen, der vises i back office) og
-    `inbox_messages.ignored_attachments` (frasorterede vedhæftninger logges her).
-  - `ignore_reason` er låst til faste koder: loop, ukendt_modtager, link_only, ingen_bilag,
-    ukendt_filtype, for_stor.
-  - Ekstra regler i databasen: dublet kræver `duplicate_of`; 'human' kræver `reviewed_by` + `reviewed_at`;
-    'sent' kræver `sent_at`; samme destination kun én gang pr. kunde.
+- **Trin 1 (15.10.2026, v3):** tabellerne `inbox_addresses`, `inbox_destinations` (corpay | economic_journal),
+  `inbox_messages`, `inbox_documents` (source email|upload, note/deltagere/anledning, `note_complete` beregnet
+  af databasen), `inbox_approvals` (uforanderlig), `inbox_deliveries`, `inbox_postings`, `supplier_account_map`,
+  `inbox_health`. Migrering a2273058bf2c (sletter v2-tabellerne fra 520ef646b60c – kun hvis de er tomme).
+  Kommando: `python -m app.bilag.opret --kunde <id> [--corpay <mail>] [--kassekladde <nr>] | --vis`.
+  - **Godkendelsesgaten i databasen** (`inbox_require_approval`): levering af faktura/kreditnota/kontoudtog til
+    Corpay kræver en 'approved'-godkendelse af PRÆCIS den fil (sha256). Rykkere går uden. Strammet i forhold
+    til specifikationen: kun Corpay er leveringsdestination, og kvittering/andet sendes aldrig til Corpay.
+  - `inbox_approvals`: trigger afviser UPDATE og DELETE; højst én afgørelse pr. dokument; afvisning kræver grund.
+  Afvigelser fra specifikationen, så projektets regler holdes:
+  - Adresser er tekst med CHECK på små bogstaver (som `staff.email`) i stedet for CITEXT; `client_id` er INTEGER.
+  - Ekstra felter: `inbox_documents.reason` (begrundelse), `reviewed_by`/`reviewed_at` (medarbejder i back office),
+    `inbox_messages.ignored_attachments` (frasorterede vedhæftninger logges).
+  - Faste koder (CHECK) for `ignore_reason`, `category` og `reason_code`.
+  - Højst én aktiv destination af hver slags pr. kunde; dublet kræver `duplicate_of`; 'sent' kræver `sent_at`;
+    'created' kræver `external_voucher_id`; forfaldsdato kræver `due_date_source`.
 
-## Mangler / åbne spørgsmål
-- **Adgangsbegrænsning i Microsoft (trin 2):** `Mail.Read` som *application*-tilladelse giver adgang til
-  ALLE postkasser i tenanten. Den skal begrænses til bilag@ med RBAC for Applications (afløseren for
-  Application Access Policy) – IT oplyste 12.10, at det ikke kunne lade sig gøre. Trin 2 bygges ikke
-  i drift, før begrænsningen er bevist med `Test-ServicePrincipalAuthorization` (InScope True/False).
-- **Filopbevaring (trin 3):** projektet har ingen fælles "object storage" endnu. Forslag: en lille
-  lager-modul med lokal mappe på serveren (krypteret backup følger med) nu, Hetzner Object Storage senere.
-- **LLM (trin 6):** fakturaernes indhold sendes til Claude – kræver databehandleraftale og EU-afklaring.
-- Trin 2–11 er ikke bygget.
+## Skal afklares (før de berørte trin)
+- **Trin 2 – adgang til postkassen:** `Mail.Read` som *application*-tilladelse giver adgang til ALLE
+  postkasser i tenanten. Skal begrænses til bilag@ med RBAC for Applications; bevises med
+  `Test-ServicePrincipalAuthorization` (InScope True/False), før noget kører i drift.
+- **Fase 2–3 – kundens login i appen:** upload, godkendelse ("Bekræft modtaget"), push og `decided_by`/
+  `uploaded_by` forudsætter, at KUNDERNE kan logge ind. I dag logger kun medarbejdere ind (Microsoft).
+  Felterne er derfor tekst indtil videre.
+- **Trin 16 – skriver til e-conomic:** at oprette bilag i kundens kassekladde via API'et er en SKRIVNING.
+  Det strider mod den faste regel "Kun GET mod e-conomic" og kræver efter CLAUDE.md dry-run først og
+  `ALLOW_BOOKING=true` + eksplicit bekræftelse. Kræver en udtrykkelig beslutning, før trin 16 bygges.
+- **Trin 3 – filopbevaring:** projektet har ingen fælles "object storage" endnu.
+- **Trin 6 – LLM:** fakturaers indhold sendes til Claude – databehandleraftale og EU-afklaring.

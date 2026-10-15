@@ -4,11 +4,14 @@ from app.afstemning.models import AabenPostFund
 from app.audit.models import AuditLog
 from app.bilag.models import (
     InboxAddress,
+    InboxApproval,
     InboxDelivery,
     InboxDestination,
     InboxDocument,
     InboxHealth,
     InboxMessage,
+    InboxPosting,
+    SupplierAccountMap,
 )
 from app.crm.models import Document, Handover, Note, Task, TimeEntry
 from app.jobs.models import Job
@@ -36,11 +39,14 @@ from app.synk.models import SyncState
 
 __all__ = [
     "InboxAddress",
+    "InboxApproval",
     "InboxDelivery",
     "InboxDestination",
     "InboxDocument",
     "InboxHealth",
     "InboxMessage",
+    "InboxPosting",
+    "SupplierAccountMap",
     "BillingPeriod",
     "CollectionCase",
     "Debtor",
