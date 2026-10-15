@@ -221,6 +221,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/api/medarbejdere.py` + siden `web/app/medarbejdere/` – det samme fra websiden (KUN admin, menupunktet ses kun af
   admins): `GET/POST /api/medarbejdere`, `POST /api/medarbejdere/{id}` (navn/rolle/aktiv). Ingen sletning, e-mail kan
   ikke ændres, man kan ikke fjerne sin egen admin-adgang, altid mindst én aktiv admin. audit_log `medarbejder_*`.
+- `app/bilag/` – BILAGSINDBAKKEN (trin 1 bygget, se RESUME.md): tabeller `inbox_*` (`models.py`; adresser med små
+  bogstaver, beløb NUMERIC(15,2), dublet = delvist unikt indeks på (client_id, sha256), `leveringsnoegle()` =
+  sha256("<dokument>:<destination>") og unik på inbox_deliveries). `python -m app.bilag.opret --kunde <id>
+  [--destination <mail> --type economic|dinero|email] | --vis`. Skriver ALDRIG via API til e-conomic/Dinero.
 - `app/opkraevning/` – OPKRÆVNING (erstatter FarPay). Debitor betaler KUNDENS konto; Din Bogholder fakturerer
   kunden månedligt for indbetalte gebyrer/renter. Vi modtager ALDRIG selv en betaling fra en debitor.
   - `models.py` (trin 1): debtors, invoices (kind invoice|credit_note – kreditnota = negativt beløb), invoice_payments,

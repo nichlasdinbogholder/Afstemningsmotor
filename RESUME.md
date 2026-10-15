@@ -336,3 +336,38 @@ Skabelon:
 - Inkasso: Inkasso Mægleren for ALLE kunder (manuel overdragelse ud fra en liste).
 - Karensperioden før inkasso er fast 10 dage for alle kunder (besluttet 07.10.2026).
 
+
+
+# Bilagsindbakken (app/bilag) – status
+
+Kundens fakturamail → kundens egen videresendelsesregel → `kunde-<id>@bilag.dinbogholder.dk` (én delt
+M365-postkasse) → hentning → klassificering → dublettjek → levering som mail til kundens ERP-indbakke.
+Vi skriver ALDRIG via API til e-conomic/Dinero fra dette modul, og intet kasseres stiltiende.
+
+## Bygget
+- **Trin 0 (15.10.2026):** orientering. Genbruges: jobkøen (`app/jobs`, `@jobtype`), `sync_state` (til
+  delta-token), APScheduler i `app/natkoersel/scheduler.py`, findings (`app/rules`) til hjerteslaget,
+  PDF-udtrækning (`app/kontoudtog/pdf.py`), log-filteret for hemmeligheder og webdelens login/roller.
+- **Trin 1 (15.10.2026):** tabellerne `inbox_addresses`, `inbox_destinations`, `inbox_messages`,
+  `inbox_documents`, `inbox_deliveries`, `inbox_health` (migrering 520ef646b60c) + kommandoen
+  `python -m app.bilag.opret --kunde <id> [--destination <mail> --type economic|dinero|email] | --vis`.
+  Afvigelser fra specifikationen, så projektets egne regler holdes:
+  - Adresser er tekst med CHECK på små bogstaver (som `staff.email`) i stedet for CITEXT.
+  - `clients.id` er INTEGER, så `client_id` er INTEGER.
+  - `reviewed_by` peger på `staff` (fremmednøgle) i stedet for fri tekst.
+  - Nye felter: `inbox_documents.reason` (begrundelsen, der vises i back office) og
+    `inbox_messages.ignored_attachments` (frasorterede vedhæftninger logges her).
+  - `ignore_reason` er låst til faste koder: loop, ukendt_modtager, link_only, ingen_bilag,
+    ukendt_filtype, for_stor.
+  - Ekstra regler i databasen: dublet kræver `duplicate_of`; 'human' kræver `reviewed_by` + `reviewed_at`;
+    'sent' kræver `sent_at`; samme destination kun én gang pr. kunde.
+
+## Mangler / åbne spørgsmål
+- **Adgangsbegrænsning i Microsoft (trin 2):** `Mail.Read` som *application*-tilladelse giver adgang til
+  ALLE postkasser i tenanten. Den skal begrænses til bilag@ med RBAC for Applications (afløseren for
+  Application Access Policy) – IT oplyste 12.10, at det ikke kunne lade sig gøre. Trin 2 bygges ikke
+  i drift, før begrænsningen er bevist med `Test-ServicePrincipalAuthorization` (InScope True/False).
+- **Filopbevaring (trin 3):** projektet har ingen fælles "object storage" endnu. Forslag: en lille
+  lager-modul med lokal mappe på serveren (krypteret backup følger med) nu, Hetzner Object Storage senere.
+- **LLM (trin 6):** fakturaernes indhold sendes til Claude – kræver databehandleraftale og EU-afklaring.
+- Trin 2–11 er ikke bygget.

@@ -2,6 +2,14 @@
 
 from app.afstemning.models import AabenPostFund
 from app.audit.models import AuditLog
+from app.bilag.models import (
+    InboxAddress,
+    InboxDelivery,
+    InboxDestination,
+    InboxDocument,
+    InboxHealth,
+    InboxMessage,
+)
 from app.crm.models import Document, Handover, Note, Task, TimeEntry
 from app.jobs.models import Job
 from app.kontoudtog.models import Statement, StatementLine
@@ -27,6 +35,12 @@ from app.regnskab.models import Account, CustomerCache, EntryCache, OpenEntryCac
 from app.synk.models import SyncState
 
 __all__ = [
+    "InboxAddress",
+    "InboxDelivery",
+    "InboxDestination",
+    "InboxDocument",
+    "InboxHealth",
+    "InboxMessage",
     "BillingPeriod",
     "CollectionCase",
     "Debtor",

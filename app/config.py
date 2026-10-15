@@ -28,6 +28,17 @@ class Settings(BaseSettings):
 
     allow_booking: bool = False
 
+    # Bilagsindbakken (app/bilag). Hemmeligheden til Microsoft Graph ligger her som alle fælles nøgler.
+    inbox_mailbox: str = "bilag@dinbogholder.dk"
+    inbox_domain: str = "bilag.dinbogholder.dk"
+    inbox_confidence_threshold: float = 0.85
+    inbox_retention_days: int = 90
+    inbox_max_attachment_mb: int = 25
+    inbox_poll_seconds: int = 120
+    graph_tenant_id: str | None = None
+    graph_client_id: str | None = None
+    graph_client_secret: SecretStr | None = None
+
     # Referencesatsen (Nationalbankens udlånsrente) hentes automatisk fra Danmarks Statistiks
     # Statistikbank (offentlig, ingen nøgle). VALG er kun nødvendig, hvis tabellen har flere mulige
     # serier – fx "INSTRUMENT=ODKNAA" (kør `python -m app.opkraevning.referencesats hent` for at se dem).

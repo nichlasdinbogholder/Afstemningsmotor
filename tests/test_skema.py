@@ -73,6 +73,7 @@ def test_alle_staff_kolonner_peger_paa_staff(inspektor):
         "installment_plans": {"created_by"},
         "collection_cases": {"requested_by"},
         "billing_periods": {"released_by"},
+        "inbox_documents": {"reviewed_by"},
     }
     for tabel, kolonner in forventet.items():
         til_staff = {
