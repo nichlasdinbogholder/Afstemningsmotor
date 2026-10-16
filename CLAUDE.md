@@ -228,7 +228,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/rules/visning.py` – aktuelle fund (`NOT EXISTS` nyere regelkørsel – bruger indekset), regelnavne.
 - `web/` – WEBDELEN (Next.js 16, TypeScript, Tailwind). Bygges til statiske filer (`output: "export"`), som
   Caddy udleverer (`deploy/Dockerfile.caddy`); intet Node-program i drift. Henter kun fra `/api`
-  (`web/lib/api.ts`, `send()` sætter X-Afstemning). Sider: `/` kundeoversigt, `/kunde/?id=` (fund med
+  (`web/lib/api.ts`, `send()` sætter X-Afstemning). Sider: `/` dashboard (første side efter login; indhold
+  ikke besluttet endnu), `/afstemning/` kundeoversigt, `/kunde/?id=` (fund med
   statusskift + historik, kontoudtog med linjer, "Opdater nu"), `/debitorstyring/` (kunder med opkrævning) og
   `/debitorstyring/kunde/?id=&fane=&filter=&q=&faktura=` (som FarPay: Kunder, Opkrævninger, Rykkere,
   Afbetaling, Indstillinger; `faktura=` viser fakturaen som en side med linjer og log; komponenter i
