@@ -52,10 +52,12 @@ def klient(db_session, medarbejder, monkeypatch):
     app.dependency_overrides.clear()
 
 
-def _falsk_model(monkeypatch, stykker, fejl=None, kontrol=None):
-    async def stream_svar(beskeder, svar):
+def _falsk_model(monkeypatch, stykker, fejl=None, kontrol=None, system_ud=None):
+    async def stream_svar(beskeder, svar, system=None):
         if kontrol:
             kontrol(beskeder)
+        if system_ud is not None:
+            system_ud.append(system)
         for s in stykker:
             svar.tekst += s
             yield s
@@ -280,3 +282,100 @@ def test_hyppigste_ord_viser_aldrig_tal_eller_smaaord(db_session, klient, medarb
     assert {"kunden", "konto", "moms"} <= set(ord_)
     assert not any(any(t.isdigit() for t in o) for o in ord_)
     assert "har" not in ord_ and "til" not in ord_
+
+
+# Fase 2, trin 8–9: opslag i videnbasen og kilder
+def _dok(db_session, **felter):
+    from app.assistent.models import KbDocument
+
+    d = KbDocument(**{"category": "skat", "status": "active", **felter})
+    db_session.add(d)
+    db_session.flush()
+    return d
+
+
+def test_19_soegning_finder_boejede_ord(db_session):
+    d = _dok(db_session, title="Arbejdstøj og sikkerhedsudstyr",
+             body="Fradraget for arbejdstøjet afhænger af, om tøjet kan bruges privat.")
+    assert d.id in [x.id for x in sm.find_materiale(db_session, "Kan en tømrer få fradrag for arbejdstøj?")]
+
+
+def test_20_og_21_udloebne_og_ikke_aktive_kommer_ikke_med(db_session):
+    from datetime import date
+
+    udloebet = _dok(db_session, title="Skurvognsfradrag 2024", body="Skurvognsfradrag gammel regel",
+                    valid_from=date(2024, 1, 1), valid_to=date(2024, 12, 31))
+    kladde = _dok(db_session, title="Skurvognsfradrag kladde", body="Skurvognsfradrag ny regel", status="draft")
+    afloest = _dok(db_session, title="Skurvognsfradrag afløst", body="Skurvognsfradrag", status="superseded")
+    fremtid = _dok(db_session, title="Skurvognsfradrag 2030", body="Skurvognsfradrag", valid_from=date(2030, 1, 1))
+    gyldig = _dok(db_session, title="Skurvognsfradrag", body="Skurvognsfradrag gældende regel",
+                  valid_from=date(2026, 1, 1), valid_to=date(2026, 12, 31))
+    fundne = [d.id for d in sm.find_materiale(db_session, "skurvognsfradrag", dag=date(2026, 10, 16))]
+    assert fundne == [gyldig.id]
+    assert not {udloebet.id, kladde.id, afloest.id, fremtid.id} & set(fundne)
+
+
+def test_15_sats_sendes_med_vaerdi_og_bekraeftelsesdato(db_session):
+    from datetime import datetime, timezone
+    from decimal import Decimal
+
+    # Opdigtet tal – testen handler om, at tallet og datoen kommer med, ikke om den rigtige sats.
+    d = _dok(db_session, title="Kilometersats", category="satser", body="Sats for kørsel i egen bil.",
+             value=Decimal("1.2300"), unit="kr/km", last_verified_at=datetime(2026, 1, 12, tzinfo=timezone.utc))
+    tekst = sm.systemtekst(sm.find_materiale(db_session, "Hvad er kilometersatsen?"))
+    assert "Kilometersats" in tekst and "Værdi: 1,23 kr/km. Senest bekræftet: 12.01.2026." in tekst
+    assert sm.INTET_MATERIALE not in tekst
+    assert d.id in [k["kb_id"] for k in sm.kilder(sm.find_materiale(db_session, "kilometersats"))]
+
+
+def test_14_uden_materiale_faar_modellen_besked(db_session):
+    assert sm.INTET_MATERIALE in sm.systemtekst(sm.find_materiale(db_session, "Hvad er momssatsen xyzzy?"))
+
+
+def test_22_kilder_vises_og_gemmes(db_session, klient, monkeypatch):
+    d = _dok(db_session, title="Gulpladebiler og privat kørsel", body="Regler for gulpladebiler og dagsbeviser.")
+    sid = _ny(klient)
+    system = []
+    _falsk_model(monkeypatch, ["Svar om gulpladebiler"], system_ud=system)
+    h = _haendelser(klient.post(f"/api/v1/assistant/conversations/{sid}/messages", headers=H,
+                                json={"tekst": "Må en tømrer køre privat i en gulpladebil?"}))
+    assert h[0]["kilder"] == [{"kb_id": d.id, "title": "Gulpladebiler og privat kørsel"}]
+    assert "Gulpladebiler og privat kørsel" in system[0]
+    gemt = db_session.get(AssistantMessage, h[-1]["besked_id"])
+    assert gemt.sources == [{"kb_id": d.id, "title": "Gulpladebiler og privat kørsel"}]
+    assert klient.get(f"/api/v1/assistant/conversations/{sid}/messages").json()[-1]["kilder"] == gemt.sources
+
+
+def test_27_kladde_naar_aldrig_modellen(db_session, klient, monkeypatch):
+    from decimal import Decimal
+
+    _dok(db_session, title="Kilometersats NY (ikke godkendt)", category="satser", body="Kilometersats",
+         value=Decimal("9.9900"), unit="kr/km", status="draft")
+    sid = _ny(klient)
+    system = []
+    _falsk_model(monkeypatch, ["x"], system_ud=system)
+    h = _haendelser(klient.post(f"/api/v1/assistant/conversations/{sid}/messages", headers=H,
+                                json={"tekst": "Hvad er kilometersatsen?"}))
+    assert "9,99" not in system[0] and "ikke godkendt" not in system[0]
+    assert h[0]["kilder"] == []
+
+
+@pytest.mark.parametrize("spoergsmaal, titel", [
+    ("Hvad er kilometersatsen?", "Kilometersats"),
+    ("Hvilke satser gælder?", "Satser for kørsel og kost"),
+    ("momssatsen ved byggeri", "Momssats ved byggeri for egen regning"),
+    ("Hvordan bogføres acontofakturaer?", "Acontofakturering og momstidspunkt"),
+])
+def test_19_boejninger_finder_hinanden(db_session, spoergsmaal, titel):
+    d = _dok(db_session, title=titel, body="Tekst.")
+    assert d.id in [x.id for x in sm.find_materiale(db_session, spoergsmaal)]
+
+
+def test_korte_ord_rammer_ikke_for_bredt(db_session):
+    bilag = _dok(db_session, title="Bilag skal gemmes i fem år", body="Opbevaring af bilag.")
+    assert bilag.id not in [x.id for x in sm.find_materiale(db_session, "bil")]
+
+
+def test_spoergsmaal_kun_med_smaaord_giver_intet(db_session):
+    _dok(db_session, title="Det er en test", body="og eller men")
+    assert sm.find_materiale(db_session, "og det er") == []

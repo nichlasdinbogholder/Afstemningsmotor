@@ -9,6 +9,7 @@ import { hent, send } from "@/lib/api";
 
 export type Besked = {
   id: number | null; rolle: "user" | "assistant"; tekst: string; status: string; min_vurdering?: string | null;
+  kilder?: { kb_id: number; title: string }[];
 };
 type Samtale = { id: number; titel: string | null };
 
@@ -129,7 +130,9 @@ export function AssistentProvider({ children }: { children: React.ReactNode }) {
         for (const del of dele) {
           if (!del.startsWith("data: ")) continue;
           const h = JSON.parse(del.slice(6));
-          if (h.type === "tekst") tilfoej(h.tekst);
+          if (h.type === "start") {
+            setBeskeder((b) => [...b.slice(0, -1), { ...b[b.length - 1], kilder: h.kilder ?? [] }]);
+          } else if (h.type === "tekst") tilfoej(h.tekst);
           else if (h.type === "slut") {
             slutStatus = h.status;
             setBeskeder((b) => [...b.slice(0, -1), { ...b[b.length - 1], id: h.besked_id, status: h.status }]);

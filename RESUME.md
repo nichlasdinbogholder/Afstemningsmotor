@@ -442,6 +442,15 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
   audit_log (`kb_oprettet` / `kb_aendret` med fra/til). Værdier skrives med dansk komma; "1.5" afvises (tvetydigt).
   Tests: `tests/test_videnbase_api.py` (14) + browser 10/10. Indholdet lægger bygherren/medarbejderne selv ind –
   Claude skriver ALDRIG satser, frister eller regler i videnbasen.
+- **Fase 2, trin 8 + 9 (16.10.2026):** før hvert svar slår Svend spørgsmålet op i videnbasen
+  (`samtale.find_materiale`): KUN `active` og gyldige på dagen, højst ASSISTANT_KB_TOP_K, sorteret med ts_rank.
+  Ét ord er nok ("eller"); ord på ≥ 6 tegn matcher også med anden endelse (ordbogen bøjer "sats"→"sat", men
+  "satsen"→"sats"); korte ord skal passe præcist. BEGRÆNSNING: sammensatte ord deles ikke – "satser" finder ikke
+  "Satsoversigt". Skriv derfor de ord, folk spørger med, i titel/tekst. Materialet lægges i systemteksten; satser
+  med værdi og "senest bekræftet". Intet fundet → "intet materiale". Kilderne vises under svaret som links til
+  dokumentet (`/fagassistent/?fane=videnbase&dok=<id>`) og gemmes i `assistant_messages.sources`.
+  Tests: spec-test 14, 15, 19, 20, 21, 22, 27 i `tests/test_assistent_api.py`; browser 5/5.
+  `python -m app.assistent.proeve` har nu også test 15 (kræver en aktiv kilometersats i videnbasen).
 
 ## Beslutninger
 - 16.10.2026: Kun administratorer må rette i videnbasen (bygherren valgte A); alle kan læse.
