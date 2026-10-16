@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { hent } from "@/lib/api";
 import { tidspunkt } from "@/lib/format";
+import Videnbase from "@/components/assistent/Videnbase";
 
 // Loggen over spørgsmål til fagassistenten. Administratorer ser alle; en medarbejder ser kun sine egne.
 // Listen viser, hvor fagligheden halter – gennemgå den ugentligt den første måned.
@@ -15,6 +16,26 @@ type Log = { alle: boolean; spoergsmaal: Raekke[]; afkortet: boolean };
 type Emne = { ord: string; antal: number };
 
 export default function Side() {
+  const [fane, setFane] = useState<"spoergsmaal" | "videnbase">("spoergsmaal");
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold">Svend</h1>
+        <div className="mt-3 flex gap-1 border-b border-slate-200">
+          {[{ id: "spoergsmaal" as const, t: "Spørgsmål" }, { id: "videnbase" as const, t: "Videnbase" }].map((f) => (
+            <button key={f.id} type="button" onClick={() => setFane(f.id)}
+                    className={`-mb-px border-b-2 px-4 py-2 text-sm ${fane === f.id ? "border-brand-600 font-medium text-slate-900" : "border-transparent text-slate-600 hover:text-slate-900"}`}>
+              {f.t}
+            </button>
+          ))}
+        </div>
+      </div>
+      {fane === "spoergsmaal" ? <Spoergsmaal /> : <Videnbase />}
+    </div>
+  );
+}
+
+function Spoergsmaal() {
   const [kunNed, setKunNed] = useState(false);
   const [log, setLog] = useState<Log | null>(null);
   const [emner, setEmner] = useState<Emne[]>([]);
@@ -30,8 +51,7 @@ export default function Side() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Svend</h1>
-        <p className="mt-1 max-w-3xl text-sm text-slate-600">
+        <p className="max-w-3xl text-sm text-slate-600">
           {log?.alle ? "Alle spørgsmål til Svend, vores fagassistent, nyeste først." : "Dine spørgsmål til Svend, vores fagassistent, nyeste først."}{" "}
           Svar med tommel ned viser, hvor Svend – eller vores materiale – skal forbedres.
         </p>
