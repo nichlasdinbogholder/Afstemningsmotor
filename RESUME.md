@@ -410,6 +410,17 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
   kunne læses af root, og programmet i containeren (almindelig bruger) kunne ikke indlæse app/models.py →
   migrate fejlede. Rettet: umask 022 i scriptet + `chmod -R a+rX` i Dockerfile. Ingen data tabt.
 
+- **Fase 1, trin 2 (16.10.2026):** chatknappen nederst til højre på alle sider (`web/components/assistent/`:
+  `Provider.tsx` med tilstanden over hele hub'en, `Fagassistent.tsx` med knap og panel). Lagt i `Ramme`, som
+  ligger i rodlayoutet, så den overlever navigation. Åben/lukket huskes i browseren; Esc, fokus og fokusfælde.
+  Afsendelse er slået fra, indtil trin 3. Afprøvet i browser: widget-test 1, 2, 4 og 5 (14 kontroller) bestået;
+  test 3 (genindlæsning henter samtalen fra serveren) kræver trin 3.
+
+## Beslutninger
+- 16.10.2026: Administratorer ser loggen over ALLE spørgsmål (trin 6); en medarbejder ser kun sine egne.
+- 16.10.2026: Bygherren har godkendt Anthropics officielle Python-bibliotek `anthropic` til kaldet til modellen
+  (trin 3) – begrundelse: streaming, genforsøg og fejltyper følger med; Anthropics anbefalede vej.
+
 ## Afvigelser fra spec'ens SQL (bevidste)
 - `user_id TEXT` er i stedet `staff_id` → `staff.id` (rigtig relation med indeks, som alle andre tabeller).
 - `assistant_messages.status` (complete/interrupted/failed): spec'en kræver, at en afbrudt stream gemmes
@@ -423,5 +434,4 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
 - Fase 4: "kunder brugeren er tilknyttet" = `clients.ansvarlig_medarbejder_id` / `daglig_medarbejder_id`?
   Og må administratorer slå op i alle kunder?
 - Fase 3: fund for satser hører ikke til én kunde – `findings` kræver i dag en kunde.
-- Trin 6/15: back office-siderne – kun for administratorer?
 - `ANTHROPIC_API_KEY` skal oprettes og lægges i serverens .env (aldrig i chatten).
