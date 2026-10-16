@@ -365,6 +365,14 @@ faktura/kreditnota/kontoudtog → kundens godkendelse → Corpay.
   - Højst én aktiv destination af hver slags pr. kunde; dublet kræver `duplicate_of`; 'sent' kræver `sent_at`;
     'created' kræver `external_voucher_id`; forfaldsdato kræver `due_date_source`.
 
+## Beslutninger (16.10.2026)
+- **Trin 16 godkendt:** motoren må OPRETTE bilag i kundens kassekladde i e-conomic – aldrig bogføre. Som alle
+  skrivninger: dry-run som standard, rigtig oprettelse kun med `ALLOW_BOOKING=true` og en eksplicit bekræftelse.
+- **LLM (trin 6):** databehandleraftale/EU er kontrolleret og i orden.
+- **Kontovalg:** når en finanskonto vælges automatisk ud fra et scannet bilag, skal den vælges ud fra, at kunderne
+  er HÅNDVÆRKERE (fx materialer/værktøj til arbejdet på vareforbrug – ikke "kontorhold"). Fællesreglerne i
+  `supplier_account_map` og LLM-forslaget skal bygges med det udgangspunkt.
+
 ## Skal afklares (før de berørte trin)
 - **Trin 2 – adgang til postkassen:** `Mail.Read` som *application*-tilladelse giver adgang til ALLE
   postkasser i tenanten. Skal begrænses til bilag@ med RBAC for Applications; bevises med
@@ -372,8 +380,5 @@ faktura/kreditnota/kontoudtog → kundens godkendelse → Corpay.
 - **Fase 2–3 – kundens login i appen:** upload, godkendelse ("Bekræft modtaget"), push og `decided_by`/
   `uploaded_by` forudsætter, at KUNDERNE kan logge ind. I dag logger kun medarbejdere ind (Microsoft).
   Felterne er derfor tekst indtil videre.
-- **Trin 16 – skriver til e-conomic:** at oprette bilag i kundens kassekladde via API'et er en SKRIVNING.
-  Det strider mod den faste regel "Kun GET mod e-conomic" og kræver efter CLAUDE.md dry-run først og
-  `ALLOW_BOOKING=true` + eksplicit bekræftelse. Kræver en udtrykkelig beslutning, før trin 16 bygges.
 - **Trin 3 – filopbevaring:** projektet har ingen fælles "object storage" endnu.
-- **Trin 6 – LLM:** fakturaers indhold sendes til Claude – databehandleraftale og EU-afklaring.
+- **Trin 6 – bibliotek:** kaldet til Claude laves med httpx (findes allerede) – intet nyt bibliotek uden at spørge.
