@@ -226,7 +226,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   `{kunde}/eksport/fakturaer.csv` og `debitorer.csv` (Excel: `;`, BOM, komma-decimaler, tekst der starter med
   = + - @ får `'` foran). HVER eksport logges i audit_log (`eksport`, hvad/antal/filter).
 - `app/rules/visning.py` – aktuelle fund (`NOT EXISTS` nyere regelkørsel – bruger indekset), regelnavne.
-- `web/` – WEBDELEN (Next.js 16, TypeScript, Tailwind). Bygges til statiske filer (`output: "export"`), som
+- `web/` – WEBDELEN (Next.js 16, TypeScript, Tailwind). KUN TIL PC (bygherren 16.10.2026) – byg ikke til telefon. Bygges til statiske filer (`output: "export"`), som
   Caddy udleverer (`deploy/Dockerfile.caddy`); intet Node-program i drift. Henter kun fra `/api`
   (`web/lib/api.ts`, `send()` sætter X-Afstemning). Sider: `/` dashboard (første side efter login; indhold
   ikke besluttet endnu), `/afstemning/` kundeoversigt, `/kunde/?id=` (fund med

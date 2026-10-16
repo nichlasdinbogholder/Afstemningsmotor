@@ -469,6 +469,8 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
   `Tallet efter 'Op til 20.000 km'`. Står teksten flere steder, eller er der intet citat, læser Svend siden.
 
 ## Beslutninger
+- 16.10.2026: Hub'en bruges KUN på PC – ikke på telefon. Nye sider bygges ikke til mobil. (Spec'ens widget-test 5
+  – "under 640 px fylder panelet hele skærmen" – er derfor ikke længere et krav; det eksisterende er ladt urørt.)
 - 16.10.2026: Satskontrollens fund gemmes i kb_rate_checks (med afgørelse), ikke i `findings`, fordi en sats ikke
   hører til en kunde. Den nye sats' "gælder fra" vælges af den, der godkender (ingen standarddato – gættes ikke).
 - 16.10.2026: Kun administratorer må rette i videnbasen (bygherren valgte A); alle kan læse.

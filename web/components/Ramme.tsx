@@ -22,7 +22,7 @@ function Menupunkt({ href, aktiv, children }: { href: string; aktiv: boolean; ch
 }
 
 // INDSTILLINGER nederst i venstre hjørne: menuer om selve hub'en. Flere punkter kommer senere.
-// På computerskærme ligger den i sin egen smalle kolonne (så den aldrig dækker tabeller); på mobil nederst på siden.
+// Den ligger i sin egen smalle kolonne, så den aldrig dækker tabeller. (Hub'en bruges kun på PC – ikke telefon.)
 function Indstillinger({ sti, className }: { sti: string; className: string }) {
   const punkter = [{ href: "/fagassistent/", tekst: "Svend", aktiv: sti.startsWith("/fagassistent") }];
   return (
@@ -97,14 +97,13 @@ export default function Ramme({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       <AssistentProvider>
-        <div className="lg:flex">
+        <div className="flex">
           {/* Tom kolonne, som INDSTILLINGER-boksen står i (den er fastgjort i hjørnet). */}
-          <div aria-hidden="true" className="hidden w-52 shrink-0 lg:block" />
+          <div aria-hidden="true" className="w-52 shrink-0" />
           {/* pb-28: så det nederste på siden ikke skjules bag Svends knap */}
           <main className="mx-auto min-w-0 max-w-7xl flex-1 px-4 pb-28 pt-6">{children}</main>
         </div>
-        <Indstillinger sti={sti} className="fixed bottom-6 left-4 z-[900] hidden w-44 lg:block" />
-        <div className="px-4 pb-28 lg:hidden"><Indstillinger sti={sti} className="w-full" /></div>
+        <Indstillinger sti={sti} className="fixed bottom-6 left-4 z-[900] w-44" />
         {/* Fagassistenten ligger her (i rodlayoutet) – så overlever den navigation mellem siderne. */}
         <Fagassistent />
       </AssistentProvider>
