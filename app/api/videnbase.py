@@ -20,7 +20,8 @@ from sqlalchemy.orm import Session
 
 from app.api.data import kraev_header
 from app.api.login import db, kraev_admin, nuvaerende_medarbejder
-from app.assistent.models import KATEGORIER, KbDocument
+from app.assistent import satskontrol as sk
+from app.assistent.models import KATEGORIER, KbDocument, KbRateCheck
 from app.audit.models import AuditLog
 from app.personale.models import Staff
 
@@ -151,3 +152,87 @@ def ret(dok_id: int, data: Dokument, af: Staff = Depends(kraev_admin), session: 
                              detaljer={"dokument_id": d.id, "aendringer": aendret, "udfoert_af": af.email}))
     session.commit()
     return _json(d)
+
+
+# --- Satskontrollen (fase 3): fund, godkendelse og afvisning – KUN administratorer ---------------------------
+
+def _kontrol_json(session: Session, k: KbRateCheck) -> dict:
+    dok = session.get(KbDocument, k.kb_id)
+    udkast = session.get(KbDocument, k.draft_id) if k.draft_id else None
+    afgjort_af = session.get(Staff, k.reviewed_by) if k.reviewed_by else None
+    return {"id": k.id, "tidspunkt": k.checked_at.isoformat(), "udfald": k.outcome, "metode": k.method,
+            "dokument": {"id": dok.id, "titel": dok.title, "enhed": dok.unit, "status": dok.status,
+                         "kontrol_kilde": dok.verify_source_url, "kontrol_hint": dok.verify_hint,
+                         "gyldig_fra": dok.valid_from.isoformat() if dok.valid_from else None},
+            "gammel_vaerdi": _som_tekst(k.previous_value), "ny_vaerdi": _som_tekst(k.fetched_value),
+            "uddrag": k.raw_excerpt, "fejl": k.error, "udkast_id": udkast.id if udkast else None,
+            "afgoerelse": k.decision, "afgjort_af": afgjort_af.navn if afgjort_af else None,
+            "afgjort": k.reviewed_at.isoformat() if k.reviewed_at else None, "note": k.review_note}
+
+
+@router.get("/kontroller", dependencies=[Depends(kraev_admin)])
+def kontroller(aabne: bool = True, session: Session = Depends(db)) -> list[dict]:
+    q = select(KbRateCheck).order_by(KbRateCheck.checked_at.desc(), KbRateCheck.id.desc()).limit(200)
+    if aabne:
+        q = q.where(KbRateCheck.outcome.in_(("changed", "failed")), KbRateCheck.decision.is_(None))
+    return [_kontrol_json(session, k) for k in session.scalars(q)]
+
+
+@router.post("/kontroller/koer", dependencies=[Depends(kraev_header)])
+def koer_nu(af: Staff = Depends(kraev_admin), session: Session = Depends(db)) -> dict:
+    """Læg satskontrollen forrest i køen nu (ud over den faste kørsel om mandagen)."""
+    from app.assistent.jobs import SATSKONTROL
+    from app.jobs.koe import laeg_i_koe
+
+    nu = datetime.now(timezone.utc)
+    r = laeg_i_koe(session, SATSKONTROL, payload={"dag": nu.date().isoformat(), "manuel": True},
+                   idempotens_noegle=f"{SATSKONTROL}:manuel:{nu.strftime('%Y-%m-%dT%H:%M')}", prioritet=5)
+    session.add(AuditLog(staff_id=af.id, handling="satskontrol_startet", detaljer={"udfoert_af": af.email}))
+    session.commit()
+    return {"job_id": r.job_id}
+
+
+class Godkendelse(BaseModel):
+    gyldig_fra: date
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class Afvisning(BaseModel):
+    note: str = Field(min_length=1, max_length=2000)
+
+
+def _hent_kontrol(session: Session, kontrol_id: int) -> KbRateCheck:
+    k = session.get(KbRateCheck, kontrol_id)
+    if k is None:
+        raise HTTPException(status_code=404, detail="Kontrollen findes ikke")
+    return k
+
+
+@router.post("/kontroller/{kontrol_id}/godkend", dependencies=[Depends(kraev_header)])
+def godkend_ny_sats(kontrol_id: int, data: Godkendelse, af: Staff = Depends(kraev_admin),
+                    session: Session = Depends(db)) -> dict:
+    k = _hent_kontrol(session, kontrol_id)
+    try:
+        ny = sk.godkend(session, k, af.id, data.gyldig_fra, data.note)
+    except sk.AfgoerelsesFejl as fejl:
+        raise HTTPException(status_code=409, detail=str(fejl))
+    session.add(AuditLog(staff_id=af.id, handling="kb_sats_godkendt", detaljer={
+        "kontrol_id": k.id, "gammelt_dokument": k.kb_id, "nyt_dokument": ny.id, "fra": _som_tekst(k.previous_value),
+        "til": _som_tekst(k.fetched_value), "gyldig_fra": data.gyldig_fra.isoformat(), "udfoert_af": af.email}))
+    session.commit()
+    return _kontrol_json(session, k)
+
+
+@router.post("/kontroller/{kontrol_id}/afvis", dependencies=[Depends(kraev_header)])
+def afvis_kontrol(kontrol_id: int, data: Afvisning, af: Staff = Depends(kraev_admin),
+                  session: Session = Depends(db)) -> dict:
+    k = _hent_kontrol(session, kontrol_id)
+    try:
+        sk.afvis(session, k, af.id, data.note)
+    except sk.AfgoerelsesFejl as fejl:
+        raise HTTPException(status_code=409, detail=str(fejl))
+    session.add(AuditLog(staff_id=af.id, handling="kb_sats_afvist" if k.outcome == "changed" else "kb_satsfejl_kvitteret",
+                         detaljer={"kontrol_id": k.id, "dokument": k.kb_id, "note": data.note.strip(),
+                                   "udfoert_af": af.email}))
+    session.commit()
+    return _kontrol_json(session, k)

@@ -42,6 +42,10 @@ VURDERINGER = ("up", "down")
 KATEGORIER = ("moms", "skat", "bogfoering", "intern", "kontoplan", "satser")
 DOKUMENT_STATUSSER = ("active", "draft", "superseded")
 KONTROL_UDFALD = ("unchanged", "changed", "failed")
+# Menneskets afgørelse af et fund fra satskontrollen: approved = ny sats godkendt (kun ved 'changed');
+# rejected = ny værdi afvist; noted = fejlen er set og håndteret (kun ved 'failed').
+AFGOERELSER = ("approved", "rejected", "noted")
+METODER = ("regel", "model")  # hvordan værdien blev fundet på kildesiden
 
 
 def _tidspunkt() -> Mapped[datetime]:
@@ -138,9 +142,22 @@ class KbDocument(Base):
 
 
 class KbRateCheck(Base):
+    """Én kontrol af én sats. Udfaldet 'changed' eller 'failed' er et FUND, indtil et menneske har afgjort det.
+
+    Databasens regel (trigger `kb_kraev_godkendelse`): et udkast, der skal afløse en sats (replaces_id), kan
+    kun blive 'active', hvis en kontrol med decision='approved' peger på netop det udkast.
+    """
+
     __tablename__ = "kb_rate_checks"
     __table_args__ = (
         kun_vaerdier("outcome", KONTROL_UDFALD),
+        kun_vaerdier("decision", AFGOERELSER),
+        kun_vaerdier("method", METODER),
+        CheckConstraint("(decision IS NULL) = (reviewed_at IS NULL) AND (decision IS NULL) = (reviewed_by IS NULL)",
+                        name="afgoerelse_hele"),
+        CheckConstraint("decision IS NULL OR (decision IN ('approved', 'rejected') AND outcome = 'changed') "
+                        "OR (decision = 'noted' AND outcome = 'failed')", name="afgoerelse_passer_udfald"),
+        CheckConstraint("draft_id IS NULL OR outcome = 'changed'", name="udkast_kun_ved_aendring"),
         Index("ix_kb_rate_checks_dokument_tid", "kb_id", text("checked_at DESC")),
     )
 
@@ -152,3 +169,9 @@ class KbRateCheck(Base):
     fetched_value: Mapped[Decimal | None] = mapped_column(Numeric(15, 4))
     raw_excerpt: Mapped[str | None] = mapped_column(Text)  # tekststykket værdien blev læst ud af
     error: Mapped[str | None] = mapped_column(Text)
+    method: Mapped[str | None] = mapped_column(Text)  # 'regel' eller 'model' – hvordan værdien blev fundet
+    draft_id: Mapped[int | None] = mapped_column(ForeignKey("kb_documents.id", ondelete="RESTRICT"), index=True)
+    decision: Mapped[str | None] = mapped_column(Text)
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("staff.id", ondelete="RESTRICT"), index=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_note: Mapped[str | None] = mapped_column(Text)

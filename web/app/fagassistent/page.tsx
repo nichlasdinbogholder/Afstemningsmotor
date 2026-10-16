@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { hent } from "@/lib/api";
 import { tidspunkt } from "@/lib/format";
+import Satskontrol from "@/components/assistent/Satskontrol";
 import Videnbase from "@/components/assistent/Videnbase";
+import { useMig } from "@/components/Ramme";
 
 // Loggen over spørgsmål til fagassistenten. Administratorer ser alle; en medarbejder ser kun sine egne.
 // Listen viser, hvor fagligheden halter – gennemgå den ugentligt den første måned.
@@ -17,9 +19,11 @@ type Emne = { ord: string; antal: number };
 
 export default function Side() {
   // ?fane=videnbase&dok=<id> åbner et dokument direkte (bruges af kilderne under Svends svar).
-  const [fane, setFane] = useState<"spoergsmaal" | "videnbase">(() =>
-    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("fane") === "videnbase"
-      ? "videnbase" : "spoergsmaal");
+  const mig = useMig();
+  const [fane, setFane] = useState<"spoergsmaal" | "videnbase" | "satskontrol">(() => {
+    const f = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("fane") : null;
+    return f === "videnbase" || f === "satskontrol" ? f : "spoergsmaal";
+  });
   const [dokId] = useState<number | null>(() => {
     const v = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("dok") : null;
     return v && /^\d+$/.test(v) ? Number(v) : null;
@@ -29,7 +33,8 @@ export default function Side() {
       <div>
         <h1 className="text-2xl font-semibold">Svend</h1>
         <div className="mt-3 flex gap-1 border-b border-slate-200">
-          {[{ id: "spoergsmaal" as const, t: "Spørgsmål" }, { id: "videnbase" as const, t: "Videnbase" }].map((f) => (
+          {[{ id: "spoergsmaal" as const, t: "Spørgsmål" }, { id: "videnbase" as const, t: "Videnbase" },
+            ...(mig?.rolle === "admin" ? [{ id: "satskontrol" as const, t: "Satskontrol" }] : [])].map((f) => (
             <button key={f.id} type="button" onClick={() => setFane(f.id)}
                     className={`-mb-px border-b-2 px-4 py-2 text-sm ${fane === f.id ? "border-brand-600 font-medium text-slate-900" : "border-transparent text-slate-600 hover:text-slate-900"}`}>
               {f.t}
@@ -37,7 +42,8 @@ export default function Side() {
           ))}
         </div>
       </div>
-      {fane === "spoergsmaal" ? <Spoergsmaal /> : <Videnbase start={dokId} />}
+      {fane === "spoergsmaal" ? <Spoergsmaal /> : fane === "videnbase" ? <Videnbase start={dokId} />
+        : mig?.rolle === "admin" ? <Satskontrol /> : null}
     </div>
   );
 }

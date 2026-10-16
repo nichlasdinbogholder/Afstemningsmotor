@@ -322,6 +322,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     (`/api/v1/assistant/log`, `/emner`). Advarsel om personoplysninger: `web/lib/personoplysninger.ts`.
   - `app/api/videnbase.py`: `/api/v1/kb/documents` – alle læser, KUN admin opretter/retter (audit `kb_oprettet`/
     `kb_aendret`), intet slettes, 'superseded' kun via satsgodkendelse. Fanen "Videnbase" på siden Svend.
+  - `satskontrol.py` + `jobs.py` (job `assistent_satskontrol`, mandag 06.00): kontrolsiden hentes, tallet findes med
+    regel (citat i hintet) eller model (tallet SKAL stå på siden); uændret → bekræftet; ændret → udkast + fund; fejl →
+    fund. Afgøres KUN af admin (`/api/v1/kb/kontroller…`, fanen Satskontrol). Databasen: en ny sats kan ikke blive
+    aktiv uden 'approved' (trigger `kb_kraev_godkendelse`); kb_rate_checks kan ikke slettes/ændres.
 - `app/fejlrapport.py` – Sentry (`init_fejlrapport("api"|"worker"|"scheduler")`). Slået fra uden
   `SENTRY_DSN`. environment = production (APP_ENV=production) ellers development. API'et bruger
   FastAPI-integrationen. Ingen lokale variabler, ingen personoplysninger; `before_send` fjerner
