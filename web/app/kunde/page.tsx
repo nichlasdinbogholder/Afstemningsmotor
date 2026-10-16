@@ -36,7 +36,7 @@ function KundeSide() {
   const opdateret = kunde.sidst_opdateret;
   return (
     <>
-      <Link href="/" className="text-sm text-slate-500 hover:text-slate-900">← Alle kunder</Link>
+      <Link href="/afstemning/" className="text-sm text-slate-500 hover:text-slate-900">← Alle kunder</Link>
       <div className="mt-2 mb-5 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{kunde.navn}</h1>

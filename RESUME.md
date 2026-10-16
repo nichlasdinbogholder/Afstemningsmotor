@@ -365,6 +365,28 @@ faktura/kreditnota/kontoudtog → kundens godkendelse → Corpay.
   - Højst én aktiv destination af hver slags pr. kunde; dublet kræver `duplicate_of`; 'sent' kræver `sent_at`;
     'created' kræver `external_voucher_id`; forfaldsdato kræver `due_date_source`.
 
+## Beslutninger (16.10.2026)
+- **Trin 16 godkendt:** motoren må OPRETTE bilag i kundens kassekladde i e-conomic – aldrig bogføre. Som alle
+  skrivninger: dry-run som standard, rigtig oprettelse kun med `ALLOW_BOOKING=true` og en eksplicit bekræftelse.
+- **LLM (trin 6):** databehandleraftale/EU er kontrolleret og i orden.
+- **Kontovalg:** når en finanskonto vælges automatisk ud fra et scannet bilag, skal den vælges ud fra, at kunderne
+  er HÅNDVÆRKERE (fx materialer/værktøj til arbejdet på vareforbrug – ikke "kontorhold"). Fællesreglerne i
+  `supplier_account_map` og LLM-forslaget skal bygges med det udgangspunkt.
+
+## FAST REGEL (16.10.2026): et bilag må ALDRIG ende hos en forkert kunde
+Nichlas: "Det må IKKE ske. En leverandørfaktura hos en forkert kunde er et dødsstempel."
+Derfor (skal bygges ind, før noget vises for en kunde – gælder alle trin):
+1. Et bilag fra mail må kun nå kunden (godkendelseskø, kvittering til kassekladde, levering), hvis TO
+   uafhængige ting peger på samme kunde: modtageradressen OG selve bilaget (købers CVR/navn på fakturaen,
+   eller leverandøren findes i netop den kundes kreditorliste fra e-conomic). Uploads: den indloggede kunde.
+2. Peger bilaget på en ANDEN af vores kunder (fx købers CVR) → stop, høj prioritet hos en medarbejder.
+3. Mangler den anden ting, eller er der tvivl → medarbejderen afgør. Systemet gætter aldrig.
+4. Håndhæves i DATABASEN (som godkendelsesgaten): status pending_approval/auto_route og levering/kontering
+   kræver en registreret kundekontrol (metode + hvem/hvad), ellers afvises det.
+5. Et alias er først aktivt, når en prøvemail fra kundens videresendelse er kommet ind på den rigtige kunde.
+6. I appen ser en kunde kun egne bilag (testes).
+7. Indkøring: alle bilag for en NY kunde går forbi en medarbejder de første 30 dage (aftalt 16.10.2026).
+
 ## Skal afklares (før de berørte trin)
 - **Trin 2 – adgang til postkassen:** `Mail.Read` som *application*-tilladelse giver adgang til ALLE
   postkasser i tenanten. Skal begrænses til bilag@ med RBAC for Applications; bevises med
@@ -372,8 +394,34 @@ faktura/kreditnota/kontoudtog → kundens godkendelse → Corpay.
 - **Fase 2–3 – kundens login i appen:** upload, godkendelse ("Bekræft modtaget"), push og `decided_by`/
   `uploaded_by` forudsætter, at KUNDERNE kan logge ind. I dag logger kun medarbejdere ind (Microsoft).
   Felterne er derfor tekst indtil videre.
-- **Trin 16 – skriver til e-conomic:** at oprette bilag i kundens kassekladde via API'et er en SKRIVNING.
-  Det strider mod den faste regel "Kun GET mod e-conomic" og kræver efter CLAUDE.md dry-run først og
-  `ALLOW_BOOKING=true` + eksplicit bekræftelse. Kræver en udtrykkelig beslutning, før trin 16 bygges.
 - **Trin 3 – filopbevaring:** projektet har ingen fælles "object storage" endnu.
-- **Trin 6 – LLM:** fakturaers indhold sendes til Claude – databehandleraftale og EU-afklaring.
+- **Trin 6 – bibliotek:** kaldet til Claude laves med httpx (findes allerede) – intet nyt bibliotek uden at spørge.
+
+# Fagassistenten (app/assistent) – status
+
+Spec: "Prompt til Claude Code — Fagassistent i hub.dinbogholder.dk" (16.10.2026). Fire faser; ét trin ad gangen,
+PR og merge efter hvert trin; næste fase først når den foregående er merged og har kørt et par dage.
+
+## Bygget
+- **Fase 1, trin 1 (16.10.2026):** tabellerne `assistant_conversations`, `assistant_messages`,
+  `assistant_feedback`, `kb_documents` (dansk fritekstsøgning, GIN-indeks), `kb_rate_checks`
+  (migrering 4380b1e2b9d6). Tests: `tests/test_assistent_datamodel.py`. Kører på serveren (16.10.2026 10:41).
+- **Hændelse 16.10.2026 10:29–10:41:** siden var nede. auto_opdater.sh brugte umask 077, så de nye filer kun
+  kunne læses af root, og programmet i containeren (almindelig bruger) kunne ikke indlæse app/models.py →
+  migrate fejlede. Rettet: umask 022 i scriptet + `chmod -R a+rX` i Dockerfile. Ingen data tabt.
+
+## Afvigelser fra spec'ens SQL (bevidste)
+- `user_id TEXT` er i stedet `staff_id` → `staff.id` (rigtig relation med indeks, som alle andre tabeller).
+- `assistant_messages.status` (complete/interrupted/failed): spec'en kræver, at en afbrudt stream gemmes
+  "med en markering" – det er markeringen.
+- `kb_documents.replaces_id`: et udkast fra satskontrollen peger på det dokument, det skal afløse, så
+  godkendelsen ved, hvilket der skal sættes til `superseded`.
+- CHECK: en sats skal have `value` og `unit`; `valid_to` >= `valid_from`.
+- Samtaler/kunder slettes ikke (RESTRICT); beskeder følger samtalen (CASCADE som i spec'en).
+
+## Skal afklares (før de berørte trin)
+- Fase 4: "kunder brugeren er tilknyttet" = `clients.ansvarlig_medarbejder_id` / `daglig_medarbejder_id`?
+  Og må administratorer slå op i alle kunder?
+- Fase 3: fund for satser hører ikke til én kunde – `findings` kræver i dag en kunde.
+- Trin 6/15: back office-siderne – kun for administratorer?
+- `ANTHROPIC_API_KEY` skal oprettes og lægges i serverens .env (aldrig i chatten).

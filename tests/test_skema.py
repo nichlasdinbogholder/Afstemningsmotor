@@ -22,6 +22,7 @@ TABELLER = {
     "debtors", "invoices", "invoice_payments", "payment_allocations", "deliveries", "dunning_steps",
     "dunning_skips", "installment_plans", "installment_lines", "reference_rates", "collection_cases",
     "fee_revenue", "billing_periods",
+    "assistant_conversations", "assistant_messages", "assistant_feedback", "kb_documents", "kb_rate_checks",
 }
 
 
@@ -74,6 +75,8 @@ def test_alle_staff_kolonner_peger_paa_staff(inspektor):
         "collection_cases": {"requested_by"},
         "billing_periods": {"released_by"},
         "inbox_documents": {"reviewed_by"},
+        "assistant_conversations": {"staff_id"},
+        "assistant_feedback": {"staff_id"},
     }
     for tabel, kolonner in forventet.items():
         til_staff = {
@@ -131,6 +134,12 @@ def test_alle_staff_kolonner_peger_paa_staff(inspektor):
         ("fee_revenue", "fee_type"),
         ("fee_revenue", "written_off_reason"),
         ("billing_periods", "status"),
+        ("assistant_messages", "role"),
+        ("assistant_messages", "status"),
+        ("assistant_feedback", "rating"),
+        ("kb_documents", "category"),
+        ("kb_documents", "status"),
+        ("kb_rate_checks", "outcome"),
     ],
 )
 def test_statusfelter_er_laast_til_faste_vaerdier(inspektor, tabel, kolonne):

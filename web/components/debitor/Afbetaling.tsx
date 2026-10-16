@@ -22,7 +22,7 @@ export default function Afbetaling({ kundeId }: { kundeId: number }) {
 
   const knap = (id: string, tekst: string, farve?: string) => (
     <button onClick={() => setFilter(id)}
-            className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm ${filter === id ? "bg-slate-200 font-medium text-slate-900" : "text-sky-700 hover:bg-slate-100"}`}>
+            className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm ${filter === id ? "bg-slate-200 font-medium text-slate-900" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}>
       {farve && <span className={`rounded-full px-2 text-xs font-semibold text-white ${farve}`}>{svar?.antal[id] ?? 0}</span>}{tekst}
     </button>
   );
@@ -34,7 +34,7 @@ export default function Afbetaling({ kundeId }: { kundeId: number }) {
           <form onSubmit={(e) => { e.preventDefault(); setAktivSoeg(soeg); }} className="flex">
             <input value={soeg} onChange={(e) => setSoeg(e.target.value)} placeholder="Søg fakturanr. eller kunde"
                    className="w-64 rounded-l-md border border-slate-300 bg-white px-3 py-1.5 text-sm" />
-            <button className="rounded-r-md bg-sky-700 px-3 text-sm text-white hover:bg-sky-800">Søg</button>
+            <button className="rounded-r-md bg-brand-600 px-3 text-sm text-white hover:bg-brand-700">Søg</button>
           </form>
           {knap("aktive", "Aktive", "bg-emerald-600")}
           {knap("misligholdt", "Misligholdt", "bg-red-600")}

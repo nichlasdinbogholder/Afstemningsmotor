@@ -1,6 +1,13 @@
 """Samler alle tabeller, så Alembic og testene kender dem alle."""
 
 from app.afstemning.models import AabenPostFund
+from app.assistent.models import (
+    AssistantConversation,
+    AssistantFeedback,
+    AssistantMessage,
+    KbDocument,
+    KbRateCheck,
+)
 from app.audit.models import AuditLog
 from app.bilag.models import (
     InboxAddress,
@@ -38,6 +45,11 @@ from app.regnskab.models import Account, CustomerCache, EntryCache, OpenEntryCac
 from app.synk.models import SyncState
 
 __all__ = [
+    "AssistantConversation",
+    "AssistantFeedback",
+    "AssistantMessage",
+    "KbDocument",
+    "KbRateCheck",
     "InboxAddress",
     "InboxApproval",
     "InboxDelivery",

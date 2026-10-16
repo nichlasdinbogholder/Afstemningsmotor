@@ -17,6 +17,9 @@ COPY migrations ./migrations
 COPY app ./app
 COPY scripts ./scripts
 
+# Programmets filer skal kunne læses af brugeren nedenfor, uanset hvilke rettigheder de har på serveren.
+RUN chmod -R a+rX /app/alembic.ini /app/migrations /app/app /app/scripts
+
 # Kør aldrig som root i containeren.
 RUN useradd --create-home --uid 1000 afstemning && mkdir -p /app/logs && chown afstemning /app/logs
 USER afstemning

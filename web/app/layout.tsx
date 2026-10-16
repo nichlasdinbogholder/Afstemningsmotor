@@ -3,8 +3,8 @@ import Ramme from "@/components/Ramme";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Afstemningsmotor",
-  description: "Afstemning for Din Bogholder",
+  title: "Din Bogholder – Hub",
+  description: "Afstemning og debitorstyring for Din Bogholder",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

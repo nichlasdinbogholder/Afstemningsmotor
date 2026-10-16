@@ -112,7 +112,7 @@ function NyMedarbejder({ gem }: { gem: (d: { email: string; navn: string; rolle:
           <option value="admin">Administrator</option>
         </select>
       </label>
-      <button className="rounded-md bg-slate-900 px-4 py-1.5 text-white hover:bg-slate-700">Tilføj medarbejder</button>
+      <button className="rounded-md bg-brand-600 px-4 py-1.5 text-white hover:bg-brand-700">Tilføj medarbejder</button>
     </form>
   );
 }

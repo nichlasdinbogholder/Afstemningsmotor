@@ -228,7 +228,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/rules/visning.py` – aktuelle fund (`NOT EXISTS` nyere regelkørsel – bruger indekset), regelnavne.
 - `web/` – WEBDELEN (Next.js 16, TypeScript, Tailwind). Bygges til statiske filer (`output: "export"`), som
   Caddy udleverer (`deploy/Dockerfile.caddy`); intet Node-program i drift. Henter kun fra `/api`
-  (`web/lib/api.ts`, `send()` sætter X-Afstemning). Sider: `/` kundeoversigt, `/kunde/?id=` (fund med
+  (`web/lib/api.ts`, `send()` sætter X-Afstemning). Sider: `/` dashboard (første side efter login; indhold
+  ikke besluttet endnu), `/afstemning/` kundeoversigt, `/kunde/?id=` (fund med
   statusskift + historik, kontoudtog med linjer, "Opdater nu"), `/debitorstyring/` (kunder med opkrævning) og
   `/debitorstyring/kunde/?id=&fane=&filter=&q=&faktura=` (som FarPay: Kunder, Opkrævninger, Rykkere,
   Afbetaling, Indstillinger; `faktura=` viser fakturaen som en side med linjer og log; komponenter i
@@ -247,6 +248,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   (client_id, sha256); `note_complete` er beregnet. `python -m app.bilag.opret --kunde <id> [--corpay <mail>]
   [--kassekladde <nr>] | --vis`. Kvitteringer → kassekladde må ALDRIG bogføres (trin 16 kræver beslutning om
   skrivning til e-conomic: dry-run + ALLOW_BOOKING).
+  FAST REGEL: et bilag må ALDRIG ende hos en forkert kunde – mailbilag kræver, at modtageradressen OG bilagets
+  indhold (købers CVR/navn eller kendt kreditor hos netop den kunde) peger på samme kunde; ellers medarbejder.
+  Håndhæves i databasen. Se RESUME.md.
 - `app/opkraevning/` – OPKRÆVNING (erstatter FarPay). Debitor betaler KUNDENS konto; Din Bogholder fakturerer
   kunden månedligt for indbetalte gebyrer/renter. Vi modtager ALDRIG selv en betaling fra en debitor.
   - `models.py` (trin 1): debtors, invoices (kind invoice|credit_note – kreditnota = negativt beløb), invoice_payments,
@@ -301,6 +305,12 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   - Indbetalinger: e-conomic udligner selv (remainder). Bankafstemningen laver i kassekladden 3 ben (bank,
     debitor, gebyr-/rentekonto) – kontrolleres FØR bogføring. FIK: betalings-id = fakturanr. + to kontrolcifre
     (`fik.py`); FI-kreditornummeret = kunden.
+- `app/assistent/` – FAGASSISTENTEN (spec 16.10.2026, se RESUME.md): `models.py` = assistant_conversations
+  (staff_id, client_id NULL = generelt), assistant_messages (status complete/interrupted/failed, sources, lookups),
+  assistant_feedback (én pr. medarbejder pr. svar), kb_documents (videnbase; dansk fritekstsøgning `search`; kun
+  `active` inden for valid_from/valid_to må nå modellen; satser kræver value+unit; udkast peger på `replaces_id`)
+  og kb_rate_checks. Satser bliver ALDRIG aktive uden menneskelig godkendelse; assistenten skriver aldrig til
+  e-conomic/Dinero og afgør aldrig en kundesag.
 - `app/fejlrapport.py` – Sentry (`init_fejlrapport("api"|"worker"|"scheduler")`). Slået fra uden
   `SENTRY_DSN`. environment = production (APP_ENV=production) ellers development. API'et bruger
   FastAPI-integrationen. Ingen lokale variabler, ingen personoplysninger; `before_send` fjerner
@@ -309,6 +319,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   job_type, og en jobfejl sendes med `capture_exception` (UdskydJob sendes ikke).
 - `app/sikkerhed/tjek_tokens.py` – kan alle tokens læses med `CREDENTIALS_KEY`? (kun antal).
   Bruger `kan_dekrypteres()` i kryptering.py, som genbruger det ENE dekrypteringssted.
+- `scripts/auto_opdater.sh` – serveren opdaterer sig selv fra GitHub hvert 20. sekund (systemd-timer; kun webdelen ændret = kun caddy bygges; backup før
+  databaseændringer; går tilbage ved fejl på /health). `installer`/`status`/`afinstaller`. Se DEPLOY.md.
 - Server: `Dockerfile`, `docker-compose.prod.yml` (db uden åben port og indstillet til 16 GB, migrate, api ×3
   processer, worker ×4, scheduler = `app.natkoersel.scheduler`, caddy bygget af `deploy/Dockerfile.caddy`
   med webdelen), `deploy/Caddyfile` (HTTPS; /api, /login, /logout, /auth → api, resten = statiske sider;
