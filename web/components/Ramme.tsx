@@ -21,6 +21,27 @@ function Menupunkt({ href, aktiv, children }: { href: string; aktiv: boolean; ch
   );
 }
 
+// INDSTILLINGER nederst i venstre hjørne: menuer om selve hub'en. Flere punkter kommer senere.
+// Den ligger i sin egen smalle kolonne, så den aldrig dækker tabeller. (Hub'en bruges kun på PC – ikke telefon.)
+function Indstillinger({ sti, className }: { sti: string; className: string }) {
+  const punkter = [{ href: "/fagassistent/", tekst: "Svend", aktiv: sti.startsWith("/fagassistent") }];
+  return (
+    <nav aria-label="Indstillinger" className={`rounded-lg border border-slate-200 bg-white p-3 text-sm ${className}`}>
+      <p className="mb-1 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Indstillinger</p>
+      <ul>
+        {punkter.map((p) => (
+          <li key={p.href}>
+            <Link href={p.href}
+                  className={`block rounded-md border-l-2 px-2 py-1.5 ${p.aktiv ? "border-brand-600 bg-slate-50 font-medium text-slate-900" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}>
+              {p.tekst}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
 export default function Ramme({ children }: { children: React.ReactNode }) {
   const [mig, setMig] = useState<Medarbejder | null>(null);
   const [tilstand, setTilstand] = useState<"henter" | "ude" | "inde" | "fejl">("henter");
@@ -64,7 +85,6 @@ export default function Ramme({ children }: { children: React.ReactNode }) {
               <Menupunkt href="/" aktiv={sti === "/"}>Dashboard</Menupunkt>
               <Menupunkt href="/afstemning/" aktiv={sti.startsWith("/afstemning") || sti.startsWith("/kunde")}>Afstemning</Menupunkt>
               <Menupunkt href="/debitorstyring/" aktiv={sti.startsWith("/debitorstyring")}>Debitorstyring</Menupunkt>
-              <Menupunkt href="/fagassistent/" aktiv={sti.startsWith("/fagassistent")}>Svend</Menupunkt>
               {mig?.rolle === "admin" && (
                 <Menupunkt href="/medarbejdere/" aktiv={sti.startsWith("/medarbejdere")}>Medarbejdere</Menupunkt>
               )}
@@ -77,7 +97,13 @@ export default function Ramme({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       <AssistentProvider>
-        <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+        <div className="flex">
+          {/* Tom kolonne, som INDSTILLINGER-boksen står i (den er fastgjort i hjørnet). */}
+          <div aria-hidden="true" className="w-52 shrink-0" />
+          {/* pb-28: så det nederste på siden ikke skjules bag Svends knap */}
+          <main className="mx-auto min-w-0 max-w-7xl flex-1 px-4 pb-28 pt-6">{children}</main>
+        </div>
+        <Indstillinger sti={sti} className="fixed bottom-6 left-4 z-[900] w-44" />
         {/* Fagassistenten ligger her (i rodlayoutet) – så overlever den navigation mellem siderne. */}
         <Fagassistent />
       </AssistentProvider>

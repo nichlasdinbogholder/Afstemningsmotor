@@ -451,8 +451,28 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
   dokumentet (`/fagassistent/?fane=videnbase&dok=<id>`) og gemmes i `assistant_messages.sources`.
   Tests: spec-test 14, 15, 19, 20, 21, 22, 27 i `tests/test_assistent_api.py`; browser 5/5.
   `python -m app.assistent.proeve` har nu også test 15 (kræver en aktiv kilometersats i videnbasen).
+- **Fase 3, trin 10 (16.10.2026):** satskontrollen (`app/assistent/satskontrol.py`, job `assistent_satskontrol`
+  i `app/assistent/jobs.py`, mandag kl. 06.00 i natkørslens scheduler + knappen "Kør kontrol nu"). Henter
+  kontrolsiden (kun GET, HTML → tekst med Pythons egen HTMLParser – intet nyt bibliotek), finder tallet: først
+  REGEL (ankeret = citatet i hintet, fx 'Op til 20.000 km', skal stå præcis ét sted, tallet lige efter), ellers
+  MODEL (struktureret svar; tallet SKAL stå ordret på siden, ellers fejl – modellen må aldrig finde på et tal).
+  Uændret → last_verified_at = nu. Ændret → udkast (draft, replaces_id) + fund; den gamle forbliver aktiv; samme
+  værdi igen genbruger udkastet. Fejl → fund; last_verified_at uændret. Fund = kb_rate_checks med changed/failed
+  og ingen afgørelse; ingen kunde, derfor ikke i `findings`. Afgørelse på siden Svend → fanen Satskontrol (KUN
+  admin): godkend (vælg "gælder fra"; den gamle → superseded med valid_to dagen før), afvis (note krævet) eller
+  kvittér for fejl. audit_log: satskontrol, satskontrol_startet, kb_sats_godkendt, kb_sats_afvist,
+  kb_satsfejl_kvitteret. DATABASEN: trigger `kb_kraev_godkendelse` (et udkast med replaces_id kan kun blive aktivt
+  med en 'approved' kontrol), `kb_kontrol_uforanderlig` (kontroller kan ikke slettes/ændres – kun afgøres én gang),
+  CHECK-regler for afgørelsen (migrering 4ba5848646a7). Tests: `tests/test_satskontrol.py` (spec 23–28 m.fl.);
+  browser 12/12.
+  **Sådan skrives hintet:** sæt den tekst, tallet står LIGE EFTER på siden, i citationstegn – fx
+  `Tallet efter 'Op til 20.000 km'`. Står teksten flere steder, eller er der intet citat, læser Svend siden.
 
 ## Beslutninger
+- 16.10.2026: Hub'en bruges KUN på PC – ikke på telefon. Nye sider bygges ikke til mobil. (Spec'ens widget-test 5
+  – "under 640 px fylder panelet hele skærmen" – er derfor ikke længere et krav; det eksisterende er ladt urørt.)
+- 16.10.2026: Satskontrollens fund gemmes i kb_rate_checks (med afgørelse), ikke i `findings`, fordi en sats ikke
+  hører til en kunde. Den nye sats' "gælder fra" vælges af den, der godkender (ingen standarddato – gættes ikke).
 - 16.10.2026: Kun administratorer må rette i videnbasen (bygherren valgte A); alle kan læse.
 - 16.10.2026: Bygherren besluttede at starte fase 2 med det samme (uden at vente "et par dage").
 - 16.10.2026: Assistenten hedder **Svend** (bygherren). Navnet står i panelet, menuen, logsiden og grundinstruksens

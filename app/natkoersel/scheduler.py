@@ -107,6 +107,15 @@ def koer_referencesatsplanlaegning() -> int:
     return nye
 
 
+def koer_satskontrolplanlaegning() -> int:
+    from app.assistent.jobs import planlaeg_satskontrol
+
+    with ny_session() as session:
+        nye = planlaeg_satskontrol(session, datetime.now(TIDSZONE))
+        session.commit()
+    return nye
+
+
 def lav_scheduler() -> BlockingScheduler:
     from app.opkraevning.jobs import KOE, KONTROL
 
@@ -122,6 +131,10 @@ def lav_scheduler() -> BlockingScheduler:
     # Referencesatsen: hentes automatisk fra Nationalbanken – før rykkerne kl. 16 den 1.1/1.7.
     scheduler.add_job(koer_referencesatsplanlaegning, CronTrigger(hour=6, minute=10, timezone=TIDSZONE),
                       id="referencesats", name="Referencesats", misfire_grace_time=6 * 3600,
+                      coalesce=True, max_instances=1, replace_existing=True)
+    # Svends satskontrol: alle aktive satser efterses mod kildesiden hver mandag kl. 06.00.
+    scheduler.add_job(koer_satskontrolplanlaegning, CronTrigger(day_of_week="mon", hour=6, minute=0, timezone=TIDSZONE),
+                      id="satskontrol", name="Satskontrol", misfire_grace_time=6 * 3600,
                       coalesce=True, max_instances=1, replace_existing=True)
     return scheduler
 

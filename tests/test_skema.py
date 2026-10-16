@@ -77,6 +77,7 @@ def test_alle_staff_kolonner_peger_paa_staff(inspektor):
         "inbox_documents": {"reviewed_by"},
         "assistant_conversations": {"staff_id"},
         "assistant_feedback": {"staff_id"},
+        "kb_rate_checks": {"reviewed_by"},
     }
     for tabel, kolonner in forventet.items():
         til_staff = {
@@ -140,6 +141,8 @@ def test_alle_staff_kolonner_peger_paa_staff(inspektor):
         ("kb_documents", "category"),
         ("kb_documents", "status"),
         ("kb_rate_checks", "outcome"),
+        ("kb_rate_checks", "decision"),
+        ("kb_rate_checks", "method"),
     ],
 )
 def test_statusfelter_er_laast_til_faste_vaerdier(inspektor, tabel, kolonne):
