@@ -318,7 +318,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     (SSE; spørgsmål gemmes før kaldet; afbrudt = 'interrupted'), feedback (én pr. svar). POST kræver X-Afstemning.
   - `proeve.py`: `python -m app.assistent.proeve` – faste prøvespørgsmål mod den rigtige model (kode 0/1/2).
   - Webdelen: `web/components/assistent/` (Provider + panel i Ramme, dvs. rodlayoutet). Assistenten hedder **Svend**.
-    Siden `/fagassistent/` (menupunkt "Svend"): loggen – admin ser alle spørgsmål, medarbejdere kun egne
+    Siden `/fagassistent/` (punktet "Svend" under INDSTILLINGER nederst til venstre – `Indstillinger` i Ramme.tsx): loggen – admin ser alle spørgsmål, medarbejdere kun egne
     (`/api/v1/assistant/log`, `/emner`). Advarsel om personoplysninger: `web/lib/personoplysninger.ts`.
   - `app/api/videnbase.py`: `/api/v1/kb/documents` – alle læser, KUN admin opretter/retter (audit `kb_oprettet`/
     `kb_aendret`), intet slettes, 'superseded' kun via satsgodkendelse. Fanen "Videnbase" på siden Svend.
