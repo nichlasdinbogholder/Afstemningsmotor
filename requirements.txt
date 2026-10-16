@@ -13,3 +13,4 @@ apscheduler>=3.10,<4
 pdfplumber>=0.11
 authlib>=1.3
 itsdangerous>=2.1
+anthropic>=1.15,<2
