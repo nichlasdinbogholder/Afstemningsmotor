@@ -50,8 +50,12 @@ function Venstremenu({ sti }: { sti: string }) {
 
 // INDSTILLINGER nederst i venstre hjørne: menuer om selve hub'en. Flere punkter kommer senere.
 // Den ligger i sin egen smalle kolonne, så den aldrig dækker tabeller. (Hub'en bruges kun på PC – ikke telefon.)
-function Indstillinger({ sti, className }: { sti: string; className: string }) {
-  const punkter = [{ href: "/fagassistent/", tekst: "Svend", aktiv: sti.startsWith("/fagassistent") }];
+function Indstillinger({ sti, admin, className }: { sti: string; admin: boolean; className: string }) {
+  const punkter = [
+    { href: "/fagassistent/", tekst: "Svend", aktiv: sti.startsWith("/fagassistent") },
+    // Medarbejdere ses kun af administratorer (siden og API'et kræver også admin).
+    ...(admin ? [{ href: "/medarbejdere/", tekst: "Medarbejdere", aktiv: sti.startsWith("/medarbejdere") }] : []),
+  ];
   return (
     <nav aria-label="Indstillinger" className={`rounded-lg border border-slate-200 bg-white p-3 text-sm ${className}`}>
       <p className="mb-1 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Indstillinger</p>
@@ -113,9 +117,6 @@ export default function Ramme({ children }: { children: React.ReactNode }) {
               <Menupunkt href="/timeregistrering/" aktiv={sti.startsWith("/timeregistrering")}>Timeregistrering</Menupunkt>
               <Menupunkt href="/afstemning/" aktiv={sti.startsWith("/afstemning") || sti.startsWith("/kunde")}>Afstemning</Menupunkt>
               <Menupunkt href="/debitorstyring/" aktiv={sti.startsWith("/debitorstyring")}>Debitorstyring</Menupunkt>
-              {mig?.rolle === "admin" && (
-                <Menupunkt href="/medarbejdere/" aktiv={sti.startsWith("/medarbejdere")}>Medarbejdere</Menupunkt>
-              )}
             </nav>
           </div>
           <div className="flex items-center gap-4 text-sm text-slate-600">
@@ -131,7 +132,7 @@ export default function Ramme({ children }: { children: React.ReactNode }) {
           {/* pb-28: så det nederste på siden ikke skjules bag Svends knap */}
           <main className="mx-auto min-w-0 max-w-7xl flex-1 px-4 pb-28 pt-6">{children}</main>
         </div>
-        <Indstillinger sti={sti} className="fixed bottom-6 left-4 z-[900] w-44" />
+        <Indstillinger sti={sti} admin={mig?.rolle === "admin"} className="fixed bottom-6 left-4 z-[900] w-44" />
         {/* Fagassistenten ligger her (i rodlayoutet) – så overlever den navigation mellem siderne. */}
         <Fagassistent />
       </AssistentProvider>
