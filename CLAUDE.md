@@ -312,6 +312,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   job_type, og en jobfejl sendes med `capture_exception` (UdskydJob sendes ikke).
 - `app/sikkerhed/tjek_tokens.py` – kan alle tokens læses med `CREDENTIALS_KEY`? (kun antal).
   Bruger `kan_dekrypteres()` i kryptering.py, som genbruger det ENE dekrypteringssted.
+- `scripts/auto_opdater.sh` – serveren opdaterer sig selv fra GitHub hvert 2. minut (systemd-timer; backup før
+  databaseændringer; går tilbage ved fejl på /health). `installer`/`status`/`afinstaller`. Se DEPLOY.md.
 - Server: `Dockerfile`, `docker-compose.prod.yml` (db uden åben port og indstillet til 16 GB, migrate, api ×3
   processer, worker ×4, scheduler = `app.natkoersel.scheduler`, caddy bygget af `deploy/Dockerfile.caddy`
   med webdelen), `deploy/Caddyfile` (HTTPS; /api, /login, /logout, /auth → api, resten = statiske sider;

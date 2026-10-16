@@ -268,10 +268,25 @@ Derfor:
 |---|---|
 | **Gik nattens kørsel godt?** | `docker compose -f docker-compose.prod.yml exec -T api python -m app.natkoersel.status` |
 | Kør natkørslen nu (fx efter en fejl) | `docker compose -f docker-compose.prod.yml exec -T scheduler python -m app.natkoersel.scheduler --koer-nu` |
-| Opdatér til nyeste kode | `git pull && docker compose -f docker-compose.prod.yml up -d --build` |
+| Opdatér til nyeste kode | sker automatisk (se nedenfor) – i hånden: `git pull && docker compose -f docker-compose.prod.yml up -d --build` |
+| Automatisk opdatering: til / status / fra | `scripts/auto_opdater.sh installer` / `status` / `afinstaller` |
 | Webdelen | bygges automatisk ind i `caddy` ved `up -d --build` (første gang tager det et par minutter) |
 | Se status | `docker compose -f docker-compose.prod.yml ps` |
 | Se log (fx worker) | `docker compose -f docker-compose.prod.yml logs --tail 100 worker` |
 | Kør en kommando | `docker compose -f docker-compose.prod.yml exec api python -m app.cli findings <id>` |
 | Læg et token ind | `docker compose -f docker-compose.prod.yml exec api python -m app.kunder.gem_token --kundenummer <nr> --system economic` |
 | Flere workers | `docker compose -f docker-compose.prod.yml up -d --scale worker=2` |
+
+## Automatisk opdatering
+
+Slås til ÉN gang: `scripts/auto_opdater.sh installer`. Derefter kontrollerer serveren GitHub hvert
+2. minut (kun læsning) og opdaterer selv, når der er ny kode på grenen, serveren står på:
+1. Ændres databasens opbygning (`migrations/`), tages der først en backup (`scripts/backup.sh`).
+   Mislykkes den, opdateres der IKKE.
+2. Ny kode hentes, bygges og startes (`up -d --build`; tjenesten `migrate` opdaterer databasen).
+3. `/health` skal svare "ok" inden for 3 minutter. Ellers går serveren selv tilbage til den forrige
+   kode og springer den nye over, indtil der kommer nyere kode. Er databasen ændret, går den ikke
+   tilbage, men skriver **KRÆVER HANDLING** i loggen.
+
+Log: `/var/log/afstemning-opdatering.log` – kort udgave: `scripts/auto_opdater.sh status`.
+`.env` og andre filer, der ikke ligger i git, røres aldrig.
