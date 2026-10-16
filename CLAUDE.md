@@ -311,7 +311,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   `active` inden for valid_from/valid_to må nå modellen; satser kræver value+unit; udkast peger på `replaces_id`)
   og kb_rate_checks. Satser bliver ALDRIG aktive uden menneskelig godkendelse; assistenten skriver aldrig til
   e-conomic/Dinero og afgør aldrig en kundesag.
-  - `samtale.py`: historik, gemning og kaldet til modellen (biblioteket `anthropic`, godkendt 16.10.2026) – KUN på
+  - `samtale.py`: `find_materiale()` (videnbasen før hvert svar – kun aktive og gyldige; kilder gemmes i `sources`),
+    historik, gemning og kaldet til modellen (biblioteket `anthropic`, godkendt 16.10.2026) – KUN på
     serveren; nøglen `ANTHROPIC_API_KEY` registreres i logfilteret. Grundinstruksen i `system_prompt.md`.
   - `app/api/assistent.py`: `/api/v1/assistant` – status, conversations (kun egne; andres = 404), messages
     (SSE; spørgsmål gemmes før kaldet; afbrudt = 'interrupted'), feedback (én pr. svar). POST kræver X-Afstemning.

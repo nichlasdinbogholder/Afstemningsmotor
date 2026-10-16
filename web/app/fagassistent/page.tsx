@@ -16,7 +16,14 @@ type Log = { alle: boolean; spoergsmaal: Raekke[]; afkortet: boolean };
 type Emne = { ord: string; antal: number };
 
 export default function Side() {
-  const [fane, setFane] = useState<"spoergsmaal" | "videnbase">("spoergsmaal");
+  // ?fane=videnbase&dok=<id> åbner et dokument direkte (bruges af kilderne under Svends svar).
+  const [fane, setFane] = useState<"spoergsmaal" | "videnbase">(() =>
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("fane") === "videnbase"
+      ? "videnbase" : "spoergsmaal");
+  const [dokId] = useState<number | null>(() => {
+    const v = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("dok") : null;
+    return v && /^\d+$/.test(v) ? Number(v) : null;
+  });
   return (
     <div className="space-y-6">
       <div>
@@ -30,7 +37,7 @@ export default function Side() {
           ))}
         </div>
       </div>
-      {fane === "spoergsmaal" ? <Spoergsmaal /> : <Videnbase />}
+      {fane === "spoergsmaal" ? <Spoergsmaal /> : <Videnbase start={dokId} />}
     </div>
   );
 }

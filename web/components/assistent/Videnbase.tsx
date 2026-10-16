@@ -59,7 +59,7 @@ function Besked({ tekst, fejl }: { tekst: string; fejl?: boolean }) {
 
 const INPUT = "w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-brand-600 focus:outline-none";
 
-export default function Videnbase() {
+export default function Videnbase({ start = null }: { start?: number | null }) {
   const mig = useMig();
   const admin = mig?.rolle === "admin";
   const [kategori, setKategori] = useState("");
@@ -72,6 +72,10 @@ export default function Videnbase() {
     hent<Dok[]>(`/api/v1/kb/documents${kategori ? `?kategori=${kategori}` : ""}`).then(setListe);
   }, [kategori]);
   useEffect(() => { hentListe(); }, [hentListe]);
+  // Åbn et bestemt dokument, når siden er åbnet fra en kilde under et svar.
+  useEffect(() => {
+    if (start !== null) hent<Dok>(`/api/v1/kb/documents/${start}`).then(setValgt).catch(() => {});
+  }, [start]);
 
   async function aabn(id: number) {
     const d = await hent<Dok>(`/api/v1/kb/documents/${id}`);

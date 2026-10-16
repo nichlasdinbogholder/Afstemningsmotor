@@ -3,19 +3,22 @@
 - Kaldet sker KUN her på serveren. API-nøglen sendes aldrig til browseren, logges aldrig og står aldrig
   i en fejlbesked (nøglen registreres, så logfilteret skjuler den, hvis den alligevel dukker op).
 - Grundinstruksen ligger i `system_prompt.md`, så den kan rettes uden at røre koden.
-- Indtil videnbasen er bygget (fase 2), får modellen altid besked om, at der ikke er materiale – så den
-  aldrig oplyser satser, beløbsgrænser eller frister (fast regel 1).
+- Før hvert kald slås spørgsmålet op i videnbasen (Postgres' danske fritekstsøgning). KUN aktive dokumenter,
+  hvor dagens dato ligger i gyldighedsperioden, kommer med – en udløbet eller ikke-godkendt sats når ALDRIG
+  modellen. Satser sendes med datoen, de senest er bekræftet. Findes intet, får modellen besked om det, så den
+  ikke oplyser satser, beløbsgrænser eller frister (fast regel 1).
 """
 
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from dataclasses import dataclass, field
+from datetime import date, datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from app.assistent.models import AssistantConversation, AssistantMessage
+from app.assistent.models import AssistantConversation, AssistantMessage, KbDocument
 from app.config import get_settings
 from app.sikkerhed.hemmeligheder import registrer_hemmelighed
 
@@ -36,8 +39,77 @@ def slaaet_til() -> bool:
     return get_settings().anthropic_api_key is not None
 
 
-def systemtekst() -> str:
-    return GRUNDINSTRUKS.read_text(encoding="utf-8").strip() + "\n\n" + INTET_MATERIALE
+# Søgningen: ordene i spørgsmålet, bøjet af Postgres' danske ordbog. Ét ord er nok til et match ("eller"),
+# og der sorteres efter, hvor godt dokumentet passer. Ordbogen bøjer ikke altid ens ("sats" → "sat", men
+# "satsen" → "sats"), så ord på mindst 6 tegn matcher også, når kun endelsen er anderledes (sidste tegn
+# fjernes, og alt der begynder sådan, passer). Korte ord skal passe præcist – så "bil" ikke rammer "bilag".
+SOEG_SQL = text("""
+WITH q AS (
+    SELECT to_tsquery('simple', string_agg(
+               CASE WHEN length(lex) >= 6 THEN format('%L:*', left(lex, length(lex) - 1)) ELSE format('%L', lex) END,
+               ' | ')) AS tq
+    FROM unnest(tsvector_to_array(to_tsvector('danish', :q))) AS lex
+)
+SELECT d.id FROM kb_documents d, q
+WHERE d.status = 'active'
+  AND (d.valid_from IS NULL OR d.valid_from <= :dag)
+  AND (d.valid_to IS NULL OR d.valid_to >= :dag)
+  AND d.search @@ q.tq
+ORDER BY ts_rank(d.search, q.tq) DESC, d.id
+LIMIT :antal
+""")
+
+
+def find_materiale(session: Session, spoergsmaal: str, dag: date | None = None) -> list[KbDocument]:
+    """De bedst passende, gyldige dokumenter til spørgsmålet (højst ASSISTANT_KB_TOP_K)."""
+    dag = dag or datetime.now(timezone.utc).date()
+    if not spoergsmaal.strip():
+        return []
+    ider = session.scalars(SOEG_SQL, {"q": spoergsmaal, "dag": dag,
+                                      "antal": get_settings().assistant_kb_top_k}).all()
+    efter_id = {d.id: d for d in session.scalars(select(KbDocument).where(KbDocument.id.in_(ider)))}
+    return [efter_id[i] for i in ider if i in efter_id]
+
+
+def _dk_dato(d: date | datetime | None) -> str:
+    return d.strftime("%d.%m.%Y") if d else "aldrig"
+
+
+def dk_tal(v: Decimal) -> str:
+    tekst = f"{v.normalize():f}"
+    return tekst.replace(".", ",")
+
+
+def materialetekst(materiale: list[KbDocument]) -> str:
+    if not materiale:
+        return INTET_MATERIALE
+    dele = [
+        "MATERIALE FRA VIDENBASEN\n"
+        "Nedenfor står de dokumenter fra vores egen videnbase, der passer bedst til spørgsmålet. Satser, "
+        "beløbsgrænser og frister må KUN komme herfra. Når du bruger en sats, så sig, hvornår den senest er "
+        "bekræftet. Står det, du skal bruge, ikke her, så sig det."
+    ]
+    for nr, d in enumerate(materiale, start=1):
+        hoved = f"[{nr}] {d.title} (kategori: {d.category})"
+        if d.valid_from or d.valid_to:
+            hoved += f" – gyldig {('fra ' + _dk_dato(d.valid_from)) if d.valid_from else ''}" \
+                     f"{(' til ' + _dk_dato(d.valid_to)) if d.valid_to else ''}"
+        linjer = [hoved]
+        if d.category == "satser" and d.value is not None:
+            linjer.append(f"Værdi: {dk_tal(d.value)} {d.unit}. Senest bekræftet: {_dk_dato(d.last_verified_at)}.")
+        linjer.append(d.body.strip())
+        if d.source_url:
+            linjer.append(f"Kilde: {d.source_url}")
+        dele.append("\n".join(linjer))
+    return "\n\n".join(dele)
+
+
+def systemtekst(materiale: list[KbDocument] | None = None) -> str:
+    return GRUNDINSTRUKS.read_text(encoding="utf-8").strip() + "\n\n" + materialetekst(materiale or [])
+
+
+def kilder(materiale: list[KbDocument]) -> list[dict]:
+    return [{"kb_id": d.id, "title": d.title} for d in materiale]
 
 
 def egen_samtale(session: Session, samtale_id: int, staff_id: int) -> AssistantConversation | None:
@@ -76,7 +148,7 @@ def gem_spoergsmaal(session: Session, samtale: AssistantConversation, tekst: str
 
 def gem_svar(session: Session, samtale_id: int, svar: "Svar", status: str) -> AssistantMessage:
     besked = AssistantMessage(conversation_id=samtale_id, role="assistant", content=svar.tekst, status=status,
-                              sources=[], lookups=[], model=svar.model, tokens_in=svar.tokens_ind,
+                              sources=svar.kilder, lookups=[], model=svar.model, tokens_in=svar.tokens_ind,
                               tokens_out=svar.tokens_ud, latency_ms=svar.millisekunder)
     session.add(besked)
     samtale = session.get(AssistantConversation, samtale_id)
@@ -97,6 +169,7 @@ class Svar:
     millisekunder: int | None = None
     afkortet: bool = False
     afvist: bool = False
+    kilder: list = field(default_factory=list)  # [{kb_id, title}] – dokumenterne, der blev sendt med
 
 
 def _klient():
@@ -110,7 +183,7 @@ def _klient():
     return anthropic.AsyncAnthropic(api_key=noegle.get_secret_value(), max_retries=2, timeout=120.0)
 
 
-async def stream_svar(beskeder: list[dict], svar: Svar) -> AsyncIterator[str]:
+async def stream_svar(beskeder: list[dict], svar: Svar, system: str | None = None) -> AsyncIterator[str]:
     """Kald modellen og giv tekststykkerne videre, efterhånden som de kommer. `svar` udfyldes undervejs."""
     s = get_settings()
     klient = _klient()
@@ -119,7 +192,7 @@ async def stream_svar(beskeder: list[dict], svar: Svar) -> AsyncIterator[str]:
     async with klient.beta.messages.stream(
         model=s.assistant_model,
         max_tokens=s.assistant_max_tokens,
-        system=systemtekst(),
+        system=system or systemtekst(),
         messages=beskeder,
         output_config={"effort": s.assistant_effort},
         betas=["server-side-fallback-2026-07-01"],

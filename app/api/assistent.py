@@ -116,17 +116,20 @@ async def spoerg(samtale_id: int, data: Spoergsmaal, m: Staff = Depends(nuvaeren
     spoergsmaal = sm.gem_spoergsmaal(session, samtale, tekst)
     session.commit()
     beskeder_til_model = sm.historik(session, samtale_id)
-    return StreamingResponse(_stream(samtale_id, spoergsmaal.id, beskeder_til_model),
+    materiale = sm.find_materiale(session, tekst)
+    return StreamingResponse(_stream(samtale_id, spoergsmaal.id, beskeder_til_model,
+                                     sm.systemtekst(materiale), sm.kilder(materiale)),
                              media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-async def _stream(samtale_id: int, spoergsmaal_id: int, beskeder_til_model: list[dict]):
-    svar = sm.Svar()
+async def _stream(samtale_id: int, spoergsmaal_id: int, beskeder_til_model: list[dict], system: str,
+                  kilder: list[dict]):
+    svar = sm.Svar(kilder=kilder)
     gemt = False
-    yield _haendelse({"type": "start", "spoergsmaal_id": spoergsmaal_id})
+    yield _haendelse({"type": "start", "spoergsmaal_id": spoergsmaal_id, "kilder": kilder})
     try:
-        async for stykke in sm.stream_svar(beskeder_til_model, svar):
+        async for stykke in sm.stream_svar(beskeder_til_model, svar, system):
             yield _haendelse({"type": "tekst", "tekst": stykke})
         if svar.afvist and not svar.tekst.strip():
             svar.tekst = AFVIST_TEKST

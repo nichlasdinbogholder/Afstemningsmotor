@@ -154,6 +154,16 @@ export default function Fagassistent() {
           <div key={i} className="mr-4 rounded-lg border border-slate-200 bg-white px-3 py-2 leading-relaxed text-slate-800">
             {b.tekst ? <Svartekst tekst={b.tekst} /> : <span className="text-slate-400">Tænker …</span>}
             {b.status === "interrupted" && <p className="mt-1 text-xs text-slate-400">(Svaret blev afbrudt)</p>}
+            {b.kilder && b.kilder.length > 0 && (
+              <div className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-500">
+                Kilder fra videnbasen:{" "}
+                {b.kilder.map((k, j) => (
+                  <span key={k.kb_id}>{j > 0 && " · "}
+                    <a href={`/fagassistent/?fane=videnbase&dok=${k.kb_id}`} className="text-brand-600 hover:underline">{k.title}</a>
+                  </span>
+                ))}
+              </div>
+            )}
             {b.id !== null && b.status !== "streaming" && <Vurdering beskedId={b.id} givet={b.min_vurdering} />}
           </div>
         ))}
