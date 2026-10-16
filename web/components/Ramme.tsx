@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
 import { hent, IkkeLoggetInd, type Medarbejder } from "@/lib/api";
+import Fagassistent from "@/components/assistent/Fagassistent";
+import { AssistentProvider } from "@/components/assistent/Provider";
 
 const MigKontekst = createContext<Medarbejder | null>(null);
 export const useMig = () => useContext(MigKontekst);
@@ -73,7 +75,11 @@ export default function Ramme({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+      <AssistentProvider>
+        <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+        {/* Fagassistenten ligger her (i rodlayoutet) – så overlever den navigation mellem siderne. */}
+        <Fagassistent />
+      </AssistentProvider>
     </MigKontekst.Provider>
   );
 }
