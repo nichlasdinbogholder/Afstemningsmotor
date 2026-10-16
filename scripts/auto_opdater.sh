@@ -16,7 +16,9 @@
 #    ikke blev ændret – ellers skrives KRÆVER HANDLING i loggen).
 # Log: /var/log/afstemning-opdatering.log
 set -uo pipefail
-umask 077
+# Filer fra git skal kunne læses af programmet i containeren (der kører som almindelig bruger, ikke
+# root). Backup-scriptet sætter selv umask 077 for sine krypterede filer.
+umask 022
 ROD="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROD" || exit 1
 LOG=/var/log/afstemning-opdatering.log
