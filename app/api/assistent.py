@@ -15,7 +15,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -30,9 +30,9 @@ router = APIRouter(prefix="/api/v1/assistant", dependencies=[Depends(nuvaerende_
 log = logging.getLogger(__name__)
 
 MAKS_SAMTALER = 50
-FEJL_TEKST = "Assistenten kunne ikke svare lige nu. Prøv igen om lidt – sker det igen, så sig det til Nichlas."
+FEJL_TEKST = "Svend kunne ikke svare lige nu. Prøv igen om lidt – sker det igen, så sig det til Nichlas."
 AFKORTET_TEKST = "\n\n(Svaret blev afkortet, fordi det blev for langt. Spørg gerne mere præcist.)"
-AFVIST_TEKST = "Det spørgsmål kan assistenten ikke svare på. Spørg den kundeansvarlige."
+AFVIST_TEKST = "Det spørgsmål kan Svend ikke svare på. Spørg den kundeansvarlige."
 
 
 def _samtale_json(s: AssistantConversation) -> dict:
@@ -40,9 +40,9 @@ def _samtale_json(s: AssistantConversation) -> dict:
             "oprettet": s.created_at.isoformat(), "opdateret": s.updated_at.isoformat()}
 
 
-def _besked_json(b: AssistantMessage) -> dict:
+def _besked_json(b: AssistantMessage, vurdering: str | None = None) -> dict:
     return {"id": b.id, "rolle": b.role, "tekst": b.content, "status": b.status,
-            "kilder": b.sources or [], "tidspunkt": b.created_at.isoformat()}
+            "kilder": b.sources or [], "tidspunkt": b.created_at.isoformat(), "min_vurdering": vurdering}
 
 
 def _hent_egen(session: Session, samtale_id: int, m: Staff) -> AssistantConversation:
@@ -87,8 +87,12 @@ def beskeder(samtale_id: int, m: Staff = Depends(nuvaerende_medarbejder), sessio
     raekker = session.scalars(
         select(AssistantMessage).where(AssistantMessage.conversation_id == samtale_id)
         .order_by(AssistantMessage.created_at, AssistantMessage.id)
-    )
-    return [_besked_json(b) for b in raekker]
+    ).all()
+    vurderinger = dict(session.execute(
+        select(AssistantFeedback.message_id, AssistantFeedback.rating)
+        .where(AssistantFeedback.staff_id == m.id, AssistantFeedback.message_id.in_([b.id for b in raekker]))
+    ).all())
+    return [_besked_json(b, vurderinger.get(b.id)) for b in raekker]
 
 
 class Spoergsmaal(BaseModel):
@@ -179,3 +183,68 @@ def feedback(besked_id: int, data: Vurdering, m: Staff = Depends(nuvaerende_meda
         session.rollback()
         raise HTTPException(status_code=409, detail="Du har allerede vurderet dette svar")
     return {"ok": True}
+
+
+# --- Loggen (back office-siden "Fagassistent") ----------------------------------------------------------
+# Administratorer ser ALLE spørgsmål; en medarbejder ser kun sine egne (beslutning 16.10.2026).
+
+MAKS_LOG = 200
+
+LOG_SQL = text("""
+SELECT q.id, q.created_at, q.content AS spoergsmaal, c.id AS samtale_id, st.navn, st.email,
+       a.content AS svar, a.status AS svar_status, f.rating, f.comment
+FROM assistant_messages q
+JOIN assistant_conversations c ON c.id = q.conversation_id
+JOIN staff st ON st.id = c.staff_id
+LEFT JOIN LATERAL (
+    SELECT id, content, status FROM assistant_messages
+    WHERE conversation_id = q.conversation_id AND role = 'assistant' AND id > q.id
+    ORDER BY id LIMIT 1
+) a ON TRUE
+LEFT JOIN assistant_feedback f ON f.message_id = a.id AND f.staff_id = c.staff_id
+WHERE q.role = 'user'
+  AND (CAST(:staff_id AS integer) IS NULL OR c.staff_id = :staff_id)
+  AND (NOT :kun_ned OR f.rating = 'down')
+ORDER BY q.created_at DESC, q.id DESC
+LIMIT :graense
+""")
+
+# De hyppigste ord i spørgsmålene. Kun ord af bogstaver (aldrig tal – så et CPR- eller kontonummer, nogen har
+# skrevet, aldrig vises her), mindst 4 bogstaver, og danske småord ("og", "det" …) springes over via
+# Postgres' danske ordbog. Ordene vises, som de er skrevet.
+EMNER_SQL = text("""
+SELECT ord, count(DISTINCT q.id) AS antal
+FROM assistant_messages q
+JOIN assistant_conversations c ON c.id = q.conversation_id
+CROSS JOIN LATERAL regexp_split_to_table(lower(q.content), '[^a-zæøåéü]+') AS ord
+WHERE q.role = 'user' AND q.created_at > now() - interval '30 days'
+  AND (CAST(:staff_id AS integer) IS NULL OR c.staff_id = :staff_id)
+  AND length(ord) >= 4
+  AND numnode(plainto_tsquery('danish', ord)) > 0
+GROUP BY ord
+ORDER BY antal DESC, ord
+LIMIT 15
+""")
+
+
+def _hvis_ikke_admin(m: Staff) -> int | None:
+    return None if m.rolle == "admin" else m.id
+
+
+@router.get("/log")
+def log_over_spoergsmaal(kun_ned: bool = False, m: Staff = Depends(nuvaerende_medarbejder),
+                         session: Session = Depends(db)) -> dict:
+    raekker = session.execute(LOG_SQL, {"staff_id": _hvis_ikke_admin(m), "kun_ned": kun_ned,
+                                        "graense": MAKS_LOG}).all()
+    return {"alle": m.rolle == "admin",
+            "spoergsmaal": [{"id": r.id, "tidspunkt": r.created_at.isoformat(), "samtale_id": r.samtale_id,
+                             "medarbejder": r.navn, "email": r.email, "spoergsmaal": r.spoergsmaal,
+                             "svar": r.svar, "svar_status": r.svar_status, "vurdering": r.rating,
+                             "kommentar": r.comment} for r in raekker],
+            "afkortet": len(raekker) == MAKS_LOG}
+
+
+@router.get("/emner")
+def hyppigste_emner(m: Staff = Depends(nuvaerende_medarbejder), session: Session = Depends(db)) -> list[dict]:
+    raekker = session.execute(EMNER_SQL, {"staff_id": _hvis_ikke_admin(m)}).all()
+    return [{"ord": r.ord, "antal": r.antal} for r in raekker]

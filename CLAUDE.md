@@ -316,7 +316,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   - `app/api/assistent.py`: `/api/v1/assistant` – status, conversations (kun egne; andres = 404), messages
     (SSE; spørgsmål gemmes før kaldet; afbrudt = 'interrupted'), feedback (én pr. svar). POST kræver X-Afstemning.
   - `proeve.py`: `python -m app.assistent.proeve` – faste prøvespørgsmål mod den rigtige model (kode 0/1/2).
-  - Webdelen: `web/components/assistent/` (Provider + panel i Ramme, dvs. rodlayoutet).
+  - Webdelen: `web/components/assistent/` (Provider + panel i Ramme, dvs. rodlayoutet). Assistenten hedder **Svend**.
+    Siden `/fagassistent/` (menupunkt "Svend"): loggen – admin ser alle spørgsmål, medarbejdere kun egne
+    (`/api/v1/assistant/log`, `/emner`). Advarsel om personoplysninger: `web/lib/personoplysninger.ts`.
 - `app/fejlrapport.py` – Sentry (`init_fejlrapport("api"|"worker"|"scheduler")`). Slået fra uden
   `SENTRY_DSN`. environment = production (APP_ENV=production) ellers development. API'et bruger
   FastAPI-integrationen. Ingen lokale variabler, ingen personoplysninger; `before_send` fjerner

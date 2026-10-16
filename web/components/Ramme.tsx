@@ -64,6 +64,7 @@ export default function Ramme({ children }: { children: React.ReactNode }) {
               <Menupunkt href="/" aktiv={sti === "/"}>Dashboard</Menupunkt>
               <Menupunkt href="/afstemning/" aktiv={sti.startsWith("/afstemning") || sti.startsWith("/kunde")}>Afstemning</Menupunkt>
               <Menupunkt href="/debitorstyring/" aktiv={sti.startsWith("/debitorstyring")}>Debitorstyring</Menupunkt>
+              <Menupunkt href="/fagassistent/" aktiv={sti.startsWith("/fagassistent")}>Svend</Menupunkt>
               {mig?.rolle === "admin" && (
                 <Menupunkt href="/medarbejdere/" aktiv={sti.startsWith("/medarbejdere")}>Medarbejdere</Menupunkt>
               )}

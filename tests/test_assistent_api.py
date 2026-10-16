@@ -218,3 +218,65 @@ def test_grundinstruksen():
     assert "Hvert svar slutter med, hvem der giver det endelige svar" in tekst
     # Indtil videnbasen findes, får modellen altid besked om, at der intet materiale er.
     assert sm.INTET_MATERIALE in tekst
+
+
+# Trin 6: loggen – administratorer ser alt, medarbejdere kun deres eget
+def _samtale_med(db_session, staff, spoergsmaal, svar, vurdering=None, kommentar=None):
+    from app.assistent.models import AssistantFeedback
+
+    s = AssistantConversation(staff_id=staff.id, title=spoergsmaal)
+    db_session.add(s)
+    db_session.flush()
+    db_session.add(AssistantMessage(conversation_id=s.id, role="user", content=spoergsmaal))
+    db_session.flush()
+    a = AssistantMessage(conversation_id=s.id, role="assistant", content=svar)
+    db_session.add(a)
+    db_session.flush()
+    if vurdering:
+        db_session.add(AssistantFeedback(message_id=a.id, staff_id=staff.id, rating=vurdering, comment=kommentar))
+        db_session.flush()
+    return a
+
+
+def test_medarbejder_ser_kun_egne_spoergsmaal_i_loggen(db_session, klient, medarbejder, anden):
+    _samtale_med(db_session, medarbejder, "Mit spørgsmål om arbejdstøj", "Svar A")
+    _samtale_med(db_session, anden, "Andens spørgsmål om skurvogn", "Svar B")
+    log = klient.get("/api/v1/assistant/log").json()
+    tekster = [r["spoergsmaal"] for r in log["spoergsmaal"]]
+    assert log["alle"] is False
+    assert "Mit spørgsmål om arbejdstøj" in tekster and "Andens spørgsmål om skurvogn" not in tekster
+    assert log["spoergsmaal"][0]["svar"] == "Svar A"
+    ord_ = [e["ord"] for e in klient.get("/api/v1/assistant/emner").json()]
+    assert "arbejdstøj" in ord_ and "skurvogn" not in ord_
+
+
+def test_admin_ser_alle_og_kan_filtrere_paa_tommel_ned(db_session, klient, medarbejder, anden):
+    chef = Staff(navn="Chef", email="chef-ass@dinbogholder.dk", rolle="admin", aktiv=True)
+    db_session.add(chef)
+    db_session.flush()
+    app.dependency_overrides[login.nuvaerende_medarbejder] = lambda: chef
+    _samtale_med(db_session, medarbejder, "Spørgsmål om moms ved byggeri", "Svar A", "up")
+    _samtale_med(db_session, anden, "Spørgsmål om gule plader", "Svar B", "down", "Forkert regel")
+    log = klient.get("/api/v1/assistant/log").json()
+    tekster = [r["spoergsmaal"] for r in log["spoergsmaal"]]
+    assert log["alle"] is True
+    assert {"Spørgsmål om moms ved byggeri", "Spørgsmål om gule plader"} <= set(tekster)
+    ned = klient.get("/api/v1/assistant/log?kun_ned=true").json()["spoergsmaal"]
+    assert [(r["spoergsmaal"], r["kommentar"], r["medarbejder"]) for r in ned] == [
+        ("Spørgsmål om gule plader", "Forkert regel", "Anden")]
+    ord_ = [e["ord"] for e in klient.get("/api/v1/assistant/emner").json()]
+    assert {"spørgsmål", "moms", "byggeri", "plader"} <= set(ord_)
+
+
+def test_egen_vurdering_vises_paa_svaret(db_session, klient, medarbejder):
+    a = _samtale_med(db_session, medarbejder, "Hej", "Svar", "down")
+    beskeder = klient.get(f"/api/v1/assistant/conversations/{a.conversation_id}/messages").json()
+    assert [b["min_vurdering"] for b in beskeder] == [None, "down"]
+
+
+def test_hyppigste_ord_viser_aldrig_tal_eller_smaaord(db_session, klient, medarbejder):
+    _samtale_med(db_session, medarbejder, "Kunden har CPR 010190-1234 og konto 1234 5678901234 til moms", "Svar")
+    ord_ = [e["ord"] for e in klient.get("/api/v1/assistant/emner").json()]
+    assert {"kunden", "konto", "moms"} <= set(ord_)
+    assert not any(any(t.isdigit() for t in o) for o in ord_)
+    assert "har" not in ord_ and "til" not in ord_

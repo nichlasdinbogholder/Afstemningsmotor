@@ -427,8 +427,17 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
   (`web/lib/personoplysninger.ts`: CPR `\d{6}-?\d{4}`, reg.nr. + kontonr., talrækker på 11+ cifre). "Ret
   beskeden" eller "Send alligevel" – bremser, blokerer ikke. Afprøvet i browser (spec-test 18 + almindelige tal
   som beløb, kontoplan-konti og datoer, der IKKE må udløse den): 12/12.
+- **Fase 1, trin 6 (16.10.2026):** tommel op/ned under hvert svar (kommentarfelt ved tommel ned; én gang pr. svar;
+  huskes efter genindlæsning). Siden **Svend** (`web/app/fagassistent/`, menupunkt for alle): spørgsmål nyeste først
+  med medarbejder og tidspunkt, klik viser svaret, filter "Kun tommel ned", hyppigste ord seneste 30 dage (kun ord af
+  bogstaver – aldrig tal, så CPR/kontonumre aldrig vises; danske småord fjernes). API: `/api/v1/assistant/log`,
+  `/emner`. Esc lukker panelet overalt på siden. **Gennemgå listen ugentligt den første måned.**
+- Rettelse 16.10.2026: advarslen om personoplysninger brugte "lookbehind" i mønstrene, som ældre Safari ikke
+  forstår – skrevet om; mellemrum i CPR-nummer genkendes nu også.
 
 ## Beslutninger
+- 16.10.2026: Assistenten hedder **Svend** (bygherren). Navnet står i panelet, menuen, logsiden og grundinstruksens
+  første linje ("Du hedder Svend og er fagassistent …").
 - 16.10.2026: Administratorer ser loggen over ALLE spørgsmål (trin 6); en medarbejder ser kun sine egne.
 - 16.10.2026: Bygherren har godkendt Anthropics officielle Python-bibliotek `anthropic` til kaldet til modellen
   (trin 3) – begrundelse: streaming, genforsøg og fejltyper følger med; Anthropics anbefalede vej.

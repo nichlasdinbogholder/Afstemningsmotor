@@ -7,7 +7,9 @@ import { hent, send } from "@/lib/api";
 // Derfor overlever samtalen navigation mellem siderne, og den hentes fra serveren ved indlæsning, så den
 // også overlever en genindlæsning. Al logik (gemning, historik, kaldet til modellen) ligger på serveren.
 
-export type Besked = { id: number | null; rolle: "user" | "assistant"; tekst: string; status: string };
+export type Besked = {
+  id: number | null; rolle: "user" | "assistant"; tekst: string; status: string; min_vurdering?: string | null;
+};
 type Samtale = { id: number; titel: string | null };
 
 type Tilstand = {
@@ -20,6 +22,7 @@ type Tilstand = {
   fejl: string | null;
   spoerg: (tekst: string) => Promise<void>;
   nySamtale: () => void;
+  vurder: (beskedId: number, vurdering: "up" | "down", kommentar?: string) => Promise<void>;
 };
 
 const NOEGLE = "fagassistent.aaben";
@@ -76,6 +79,12 @@ export function AssistentProvider({ children }: { children: React.ReactNode }) {
     setFejl(null);
   }
 
+  // Tommel op/ned på et svar (gemmes på serveren – én gang pr. svar).
+  async function vurder(beskedId: number, vurdering: "up" | "down", kommentar?: string) {
+    await send(`/api/v1/assistant/messages/${beskedId}/feedback`, { vurdering, kommentar: kommentar || null });
+    setBeskeder((b) => b.map((x) => (x.id === beskedId ? { ...x, min_vurdering: vurdering } : x)));
+  }
+
   // Tilføj tekst til det svar, der er ved at blive skrevet (det sidste i listen).
   function tilfoej(tekst: string) {
     setBeskeder((b) => [...b.slice(0, -1), { ...b[b.length - 1], tekst: b[b.length - 1].tekst + tekst }]);
@@ -99,7 +108,7 @@ export function AssistentProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ tekst }),
       });
       if (!r.ok || !r.body) {
-        let besked = "Assistenten kunne ikke svare lige nu. Prøv igen om lidt.";
+        let besked = "Svend kunne ikke svare lige nu. Prøv igen om lidt.";
         try {
           const d = await r.json();
           if (typeof d.detail === "string") besked = d.detail;
@@ -132,7 +141,7 @@ export function AssistentProvider({ children }: { children: React.ReactNode }) {
       if (!aabenNu()) setUlaest(true);
     } catch (e) {
       setBeskeder((b) => (b[b.length - 1]?.rolle === "assistant" && !b[b.length - 1].tekst ? b.slice(0, -1) : b));
-      setFejl(e instanceof Error ? e.message : "Assistenten kunne ikke svare lige nu.");
+      setFejl(e instanceof Error ? e.message : "Svend kunne ikke svare lige nu.");
     } finally {
       setSvarer(false);
     }
@@ -148,7 +157,7 @@ export function AssistentProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AssistentKontekst.Provider value={{ aaben, saetAaben, ulaest, slaaetTil, beskeder, svarer, fejl, spoerg, nySamtale }}>
+    <AssistentKontekst.Provider value={{ aaben, saetAaben, ulaest, slaaetTil, beskeder, svarer, fejl, spoerg, nySamtale, vurder }}>
       {children}
     </AssistentKontekst.Provider>
   );
