@@ -418,6 +418,8 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
 
 ## Beslutninger
 - 16.10.2026: Administratorer ser loggen over ALLE spørgsmål (trin 6); en medarbejder ser kun sine egne.
+- 16.10.2026: Bygherren har godkendt Anthropics officielle Python-bibliotek `anthropic` til kaldet til modellen
+  (trin 3) – begrundelse: streaming, genforsøg og fejltyper følger med; Anthropics anbefalede vej.
 
 ## Afvigelser fra spec'ens SQL (bevidste)
 - `user_id TEXT` er i stedet `staff_id` → `staff.id` (rigtig relation med indeks, som alle andre tabeller).
@@ -432,6 +434,4 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
 - Fase 4: "kunder brugeren er tilknyttet" = `clients.ansvarlig_medarbejder_id` / `daglig_medarbejder_id`?
   Og må administratorer slå op i alle kunder?
 - Fase 3: fund for satser hører ikke til én kunde – `findings` kræver i dag en kunde.
-- Trin 3: kaldet til modellen bør ske med Anthropics officielle Python-bibliotek (`anthropic`) – det er et NYT
-  bibliotek og kræver bygherrens ja (projektregel). Alternativet er at kalde API'et direkte med httpx.
 - `ANTHROPIC_API_KEY` skal oprettes og lægges i serverens .env (aldrig i chatten).
