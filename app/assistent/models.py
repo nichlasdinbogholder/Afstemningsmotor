@@ -41,9 +41,10 @@ BESKED_STATUSSER = ("complete", "interrupted", "failed")
 VURDERINGER = ("up", "down")
 KATEGORIER = ("moms", "skat", "bogfoering", "intern", "kontoplan", "satser")
 DOKUMENT_STATUSSER = ("active", "draft", "superseded")
-KONTROL_UDFALD = ("unchanged", "changed", "failed")
+# stale = satsen er ikke bekræftet i over 2 × ASSISTANT_RATE_STALE_DAYS dage (trin 11 – sikkerhedsnettet).
+KONTROL_UDFALD = ("unchanged", "changed", "failed", "stale")
 # Menneskets afgørelse af et fund fra satskontrollen: approved = ny sats godkendt (kun ved 'changed');
-# rejected = ny værdi afvist; noted = fejlen er set og håndteret (kun ved 'failed').
+# rejected = ny værdi afvist; noted = fejlen er set og håndteret (ved 'failed' og 'stale').
 AFGOERELSER = ("approved", "rejected", "noted")
 METODER = ("regel", "model")  # hvordan værdien blev fundet på kildesiden
 
@@ -156,7 +157,7 @@ class KbRateCheck(Base):
         CheckConstraint("(decision IS NULL) = (reviewed_at IS NULL) AND (decision IS NULL) = (reviewed_by IS NULL)",
                         name="afgoerelse_hele"),
         CheckConstraint("decision IS NULL OR (decision IN ('approved', 'rejected') AND outcome = 'changed') "
-                        "OR (decision = 'noted' AND outcome = 'failed')", name="afgoerelse_passer_udfald"),
+                        "OR (decision = 'noted' AND outcome IN ('failed', 'stale'))", name="afgoerelse_passer_udfald"),
         CheckConstraint("draft_id IS NULL OR outcome = 'changed'", name="udkast_kun_ved_aendring"),
         Index("ix_kb_rate_checks_dokument_tid", "kb_id", text("checked_at DESC")),
     )

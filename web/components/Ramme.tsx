@@ -21,10 +21,41 @@ function Menupunkt({ href, aktiv, children }: { href: string; aktiv: boolean; ch
   );
 }
 
+// Hub'ens dele i venstre side – én boks pr. del. Siderne er pladsholdere, indtil indholdet er aftalt.
+const DELE = [
+  { href: "/kunder/", tekst: "Kunde" },
+  { href: "/ai-planlaegning/", tekst: "AI Planlægning" },
+  { href: "/opgavestyring/", tekst: "Opgavestyring" },
+  { href: "/controlling/", tekst: "Controlling" },
+  { href: "/loenadministration/", tekst: "Lønadministration" },
+  { href: "/salg/", tekst: "Salg" },
+  { href: "/tickets/", tekst: "Tickets" },
+];
+
+function Venstremenu({ sti }: { sti: string }) {
+  return (
+    <nav aria-label="Hub'ens dele" className="sticky top-4 space-y-2 px-4 pt-6">
+      {DELE.map((d) => {
+        const aktiv = sti.startsWith(d.href.replace(/\/$/, ""));
+        return (
+          <Link key={d.href} href={d.href}
+                className={`block rounded-lg border bg-white px-3 py-2.5 text-sm ${aktiv ? "border-brand-600 font-medium text-slate-900 shadow-sm" : "border-slate-200 text-slate-700 hover:border-slate-300 hover:text-slate-900"}`}>
+            {d.tekst}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 // INDSTILLINGER nederst i venstre hjørne: menuer om selve hub'en. Flere punkter kommer senere.
 // Den ligger i sin egen smalle kolonne, så den aldrig dækker tabeller. (Hub'en bruges kun på PC – ikke telefon.)
-function Indstillinger({ sti, className }: { sti: string; className: string }) {
-  const punkter = [{ href: "/fagassistent/", tekst: "Svend", aktiv: sti.startsWith("/fagassistent") }];
+function Indstillinger({ sti, admin, className }: { sti: string; admin: boolean; className: string }) {
+  const punkter = [
+    { href: "/fagassistent/", tekst: "Svend", aktiv: sti.startsWith("/fagassistent") },
+    // Medarbejdere ses kun af administratorer (siden og API'et kræver også admin).
+    ...(admin ? [{ href: "/medarbejdere/", tekst: "Medarbejdere", aktiv: sti.startsWith("/medarbejdere") }] : []),
+  ];
   return (
     <nav aria-label="Indstillinger" className={`rounded-lg border border-slate-200 bg-white p-3 text-sm ${className}`}>
       <p className="mb-1 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Indstillinger</p>
@@ -83,11 +114,9 @@ export default function Ramme({ children }: { children: React.ReactNode }) {
             </Link>
             <nav className="flex gap-1 text-sm">
               <Menupunkt href="/" aktiv={sti === "/"}>Dashboard</Menupunkt>
+              <Menupunkt href="/timeregistrering/" aktiv={sti.startsWith("/timeregistrering")}>Timeregistrering</Menupunkt>
               <Menupunkt href="/afstemning/" aktiv={sti.startsWith("/afstemning") || sti.startsWith("/kunde")}>Afstemning</Menupunkt>
               <Menupunkt href="/debitorstyring/" aktiv={sti.startsWith("/debitorstyring")}>Debitorstyring</Menupunkt>
-              {mig?.rolle === "admin" && (
-                <Menupunkt href="/medarbejdere/" aktiv={sti.startsWith("/medarbejdere")}>Medarbejdere</Menupunkt>
-              )}
             </nav>
           </div>
           <div className="flex items-center gap-4 text-sm text-slate-600">
@@ -98,12 +127,12 @@ export default function Ramme({ children }: { children: React.ReactNode }) {
       </header>
       <AssistentProvider>
         <div className="flex">
-          {/* Tom kolonne, som INDSTILLINGER-boksen står i (den er fastgjort i hjørnet). */}
-          <div aria-hidden="true" className="w-52 shrink-0" />
+          {/* Venstre kolonne: hub'ens dele øverst; INDSTILLINGER-boksen er fastgjort i hjørnet nederst. */}
+          <div className="w-52 shrink-0"><Venstremenu sti={sti} /></div>
           {/* pb-28: så det nederste på siden ikke skjules bag Svends knap */}
           <main className="mx-auto min-w-0 max-w-7xl flex-1 px-4 pb-28 pt-6">{children}</main>
         </div>
-        <Indstillinger sti={sti} className="fixed bottom-6 left-4 z-[900] w-44" />
+        <Indstillinger sti={sti} admin={mig?.rolle === "admin"} className="fixed bottom-6 left-4 z-[900] w-44" />
         {/* Fagassistenten ligger her (i rodlayoutet) – så overlever den navigation mellem siderne. */}
         <Fagassistent />
       </AssistentProvider>

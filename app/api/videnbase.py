@@ -40,7 +40,8 @@ def _json(d: KbDocument, med_tekst: bool = True) -> dict:
             "gyldig_til": d.valid_to.isoformat() if d.valid_to else None,
             "senest_bekraeftet": d.last_verified_at.isoformat() if d.last_verified_at else None,
             "kontrol_kilde": d.verify_source_url, "kontrol_hint": d.verify_hint,
-            "afloeser": d.replaces_id, "rettet_af": d.updated_by, "rettet": d.updated_at.isoformat()}
+            "afloeser": d.replaces_id, "rettet_af": d.updated_by, "rettet": d.updated_at.isoformat(),
+            "foraeldet": d.status == "active" and sk.er_foraeldet(d)}
     if med_tekst:
         data["tekst"] = d.body
     return data
@@ -174,7 +175,7 @@ def _kontrol_json(session: Session, k: KbRateCheck) -> dict:
 def kontroller(aabne: bool = True, session: Session = Depends(db)) -> list[dict]:
     q = select(KbRateCheck).order_by(KbRateCheck.checked_at.desc(), KbRateCheck.id.desc()).limit(200)
     if aabne:
-        q = q.where(KbRateCheck.outcome.in_(("changed", "failed")), KbRateCheck.decision.is_(None))
+        q = q.where(KbRateCheck.outcome.in_(("changed", "failed", "stale")), KbRateCheck.decision.is_(None))
     return [_kontrol_json(session, k) for k in session.scalars(q)]
 
 
@@ -231,7 +232,8 @@ def afvis_kontrol(kontrol_id: int, data: Afvisning, af: Staff = Depends(kraev_ad
         sk.afvis(session, k, af.id, data.note)
     except sk.AfgoerelsesFejl as fejl:
         raise HTTPException(status_code=409, detail=str(fejl))
-    session.add(AuditLog(staff_id=af.id, handling="kb_sats_afvist" if k.outcome == "changed" else "kb_satsfejl_kvitteret",
+    session.add(AuditLog(staff_id=af.id, handling={"changed": "kb_sats_afvist", "failed": "kb_satsfejl_kvitteret",
+                                   "stale": "kb_satsforaeldelse_kvitteret"}[k.outcome],
                          detaljer={"kontrol_id": k.id, "dokument": k.kb_id, "note": data.note.strip(),
                                    "udfoert_af": af.email}))
     session.commit()

@@ -226,7 +226,11 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   `{kunde}/eksport/fakturaer.csv` og `debitorer.csv` (Excel: `;`, BOM, komma-decimaler, tekst der starter med
   = + - @ får `'` foran). HVER eksport logges i audit_log (`eksport`, hvad/antal/filter).
 - `app/rules/visning.py` – aktuelle fund (`NOT EXISTS` nyere regelkørsel – bruger indekset), regelnavne.
-- `web/` – WEBDELEN (Next.js 16, TypeScript, Tailwind). KUN TIL PC (bygherren 16.10.2026) – byg ikke til telefon. Bygges til statiske filer (`output: "export"`), som
+- `web/` – WEBDELEN (Next.js 16, TypeScript, Tailwind). KUN TIL PC (bygherren 16.10.2026) – byg ikke til telefon.
+  Opbygning (`components/Ramme.tsx`): topmenu Dashboard · Timeregistrering · Afstemning · Debitorstyring;
+  venstre kolonne med bokse Kunde · AI Planlægning · Opgavestyring · Controlling · Lønadministration · Salg · Tickets
+  (`DELE`); INDSTILLINGER nederst til venstre (Svend; Medarbejdere – kun admin). Timeregistrering og de 7 bokse er PLADSHOLDERE
+  (`components/Pladsholder.tsx`) – indholdet aftales senere. Bygges til statiske filer (`output: "export"`), som
   Caddy udleverer (`deploy/Dockerfile.caddy`); intet Node-program i drift. Henter kun fra `/api`
   (`web/lib/api.ts`, `send()` sætter X-Afstemning). Sider: `/` dashboard (første side efter login; indhold
   ikke besluttet endnu), `/afstemning/` kundeoversigt, `/kunde/?id=` (fund med
@@ -240,7 +244,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/personale/bruger.py` – `python -m app.personale.bruger vis|opret|rolle|deaktiver|aktiver`.
 - `app/api/medarbejdere.py` + siden `web/app/medarbejdere/` – det samme fra websiden (KUN admin, menupunktet ses kun af
   admins): `GET/POST /api/medarbejdere`, `POST /api/medarbejdere/{id}` (navn/rolle/aktiv). Ingen sletning, e-mail kan
-  ikke ændres, man kan ikke fjerne sin egen admin-adgang, altid mindst én aktiv admin. audit_log `medarbejder_*`.
+  ikke ændres, man kan ikke fjerne sin egen admin-adgang, altid mindst én aktiv admin. audit_log `medarbejder_*`. Ligger under INDSTILLINGER.
 - `app/bilag/` – BILAGSINDBAKKEN (spec v3; trin 1 bygget, se RESUME.md): mail + upload → én pipeline. Tabeller
   `inbox_*` + `supplier_account_map` (`models.py`). DATABASEN håndhæver: levering af faktura/kreditnota/kontoudtog
   til Corpay kræver godkendelse af præcis den fil (trigger `inbox_require_approval`; rykker undtaget);
@@ -326,6 +330,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     regel (citat i hintet) eller model (tallet SKAL stå på siden); uændret → bekræftet; ændret → udkast + fund; fejl →
     fund. Afgøres KUN af admin (`/api/v1/kb/kontroller…`, fanen Satskontrol). Databasen: en ny sats kan ikke blive
     aktiv uden 'approved' (trigger `kb_kraev_godkendelse`); kb_rate_checks kan ikke slettes/ændres.
+    Forældelse: `er_foraeldet()` (> ASSISTANT_RATE_STALE_DAYS) → advarsel i Svends materiale; job
+    `assistent_foraeldelse` dagligt 06.30 → fund 'stale' efter det dobbelte.
 - `app/fejlrapport.py` – Sentry (`init_fejlrapport("api"|"worker"|"scheduler")`). Slået fra uden
   `SENTRY_DSN`. environment = production (APP_ENV=production) ellers development. API'et bruger
   FastAPI-integrationen. Ingen lokale variabler, ingen personoplysninger; `before_send` fjerner

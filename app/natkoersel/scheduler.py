@@ -107,11 +107,11 @@ def koer_referencesatsplanlaegning() -> int:
     return nye
 
 
-def koer_satskontrolplanlaegning() -> int:
-    from app.assistent.jobs import planlaeg_satskontrol
+def koer_assistentplanlaegning(type_: str) -> int:
+    from app.assistent.jobs import planlaeg
 
     with ny_session() as session:
-        nye = planlaeg_satskontrol(session, datetime.now(TIDSZONE))
+        nye = planlaeg(session, type_, datetime.now(TIDSZONE))
         session.commit()
     return nye
 
@@ -133,8 +133,14 @@ def lav_scheduler() -> BlockingScheduler:
                       id="referencesats", name="Referencesats", misfire_grace_time=6 * 3600,
                       coalesce=True, max_instances=1, replace_existing=True)
     # Svends satskontrol: alle aktive satser efterses mod kildesiden hver mandag kl. 06.00.
-    scheduler.add_job(koer_satskontrolplanlaegning, CronTrigger(day_of_week="mon", hour=6, minute=0, timezone=TIDSZONE),
-                      id="satskontrol", name="Satskontrol", misfire_grace_time=6 * 3600,
+    from app.assistent.jobs import FORAELDELSE, SATSKONTROL
+
+    scheduler.add_job(koer_assistentplanlaegning, CronTrigger(day_of_week="mon", hour=6, minute=0, timezone=TIDSZONE),
+                      args=[SATSKONTROL], id="satskontrol", name="Satskontrol", misfire_grace_time=6 * 3600,
+                      coalesce=True, max_instances=1, replace_existing=True)
+    # Forældede satser (sikkerhedsnettet): hver dag kl. 06.30 – efter mandagens kontrol.
+    scheduler.add_job(koer_assistentplanlaegning, CronTrigger(hour=6, minute=30, timezone=TIDSZONE),
+                      args=[FORAELDELSE], id="satsforaeldelse", name="Forældede satser", misfire_grace_time=6 * 3600,
                       coalesce=True, max_instances=1, replace_existing=True)
     return scheduler
 
