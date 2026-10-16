@@ -59,3 +59,11 @@ Thumbs.db
 
 # --- Lokale Claude-indstillinger ---
 .claude/settings.local.json
+
+# --- Kundedata: kontoudtog, skattekonto-filer, regneark og krypterede backups ---
+# (Rigtige udtog må ALDRIG i git – tests bruger opdigtede filer, der laves under testen.)
+*.pdf
+*.csv
+*.xlsx
+*.xls
+*.gpg

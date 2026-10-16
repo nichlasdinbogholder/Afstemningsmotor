@@ -1,0 +1,96 @@
+# Serveren (Hetzner). Start:  docker compose -f docker-compose.prod.yml up -d --build
+#
+#   db         PostgreSQL 16 – kan KUN nås inde fra serveren (ingen åben port)
+#   migrate    opdaterer databasens tabeller (alembic upgrade head) og stopper igen
+#   api        webdelen (FastAPI) – kun bag Caddy
+#   worker     kører job fra jobkøen – 4 ad gangen (natkørsel for 500 kunder + "Opdater nu")
+#   scheduler  APScheduler: kl. 05:00 mandag–fredag lægges ét natjob pr. aktiv kunde i kø
+#   caddy      HTTPS med automatisk certifikat; webdelens sider (Next.js) + videre til api
+#
+# Alle værdier læses fra .env på serveren (skabelon: .env.example, afsnittet "Server").
+name: afstemning
+
+x-app: &app
+  build: .
+  image: afstemning-app:latest
+  env_file: .env
+  restart: unless-stopped
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    # Indstillet til en server med 16 GB RAM (se DEPLOY.md, "Mange kunder og medarbejdere").
+    command: ["postgres", "-c", "shared_buffers=4GB", "-c", "effective_cache_size=10GB",
+              "-c", "work_mem=32MB", "-c", "maintenance_work_mem=512MB", "-c", "max_connections=150",
+              "-c", "random_page_cost=1.1"]
+    shm_size: 1gb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build: .
+    image: afstemning-app:latest
+    env_file: .env
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    command: ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers",
+              "--forwarded-allow-ips", "*", "--workers", "3"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "app.jobs.worker"]
+    deploy:
+      replicas: 4
+
+  scheduler:
+    <<: *app
+    command: ["python", "-m", "app.natkoersel.scheduler"]
+
+  caddy:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.caddy
+    image: afstemning-caddy:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER}
+      BASIC_AUTH_HASH: ${BASIC_AUTH_HASH}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

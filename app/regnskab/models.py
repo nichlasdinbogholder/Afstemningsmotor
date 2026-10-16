@@ -1,0 +1,211 @@
+"""Regnskabsdata hentet fra kundernes systemer (adskilt fra CRM-data)."""
+
+from datetime import date, datetime
+from decimal import Decimal
+
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    false,
+    func,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db import Base, kun_vaerdier
+from app.kunder.models import SYSTEMER
+
+from app.adaptere.regnskab.base import DEBET_KREDIT, KONTOTYPER  # noqa: E402  (vores eget format)
+
+
+class Account(Base):
+    """En konto i en kundes kontoplan – en kopi af det, der står i regnskabssystemet."""
+
+    __tablename__ = "accounts"
+    __table_args__ = (
+        kun_vaerdier("system", SYSTEMER),
+        kun_vaerdier("kontotype", KONTOTYPER),
+        kun_vaerdier("debet_kredit", DEBET_KREDIT),
+        UniqueConstraint("tenant_id", "system", "kontonummer", name="uq_accounts_tenant_konto"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # tenant = kunden, hvis kontoplan det er.
+    tenant_id: Mapped[int] = mapped_column(
+        ForeignKey("clients.id", ondelete="RESTRICT"), index=True
+    )
+    system: Mapped[str] = mapped_column(String(20))
+    kontonummer: Mapped[int] = mapped_column(Integer)
+    navn: Mapped[str] = mapped_column(String(125))
+    kontotype: Mapped[str | None] = mapped_column(String(20))
+    debet_kredit: Mapped[str | None] = mapped_column(String(10))
+    momskode: Mapped[str | None] = mapped_column(String(5))
+    # Tomme, hvis systemet ikke oplyser dem (vi gætter aldrig).
+    spaerret: Mapped[bool | None] = mapped_column(Boolean)
+    direkte_posteringer_blokeret: Mapped[bool | None] = mapped_column(Boolean)
+    # Saldi er et øjebliksbillede fra tidspunktet i `hentet`.
+    saldo: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    kladdesaldo: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    # Hele svaret fra systemet (fx sumintervaller). Indeholder ingen hemmeligheder.
+    raa_data: Mapped[dict] = mapped_column(JSONB)
+    hentet: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+# --- Cache af data fra kundernes regnskabssystemer --------------------------
+# Kopier af det, der står i e-conomic/Dinero. Skrives kun af synkroniseringen
+# (app/synk/ressourcer.py). `sidst_set` = sidste gang posten var med i en hentning.
+# Indeks på client_id: dækkes af den unikke regel, som starter med client_id.
+
+from app.adaptere.regnskab.base import ENTRY_TYPER  # noqa: E402
+
+AABEN_POST_TYPER = ("debitor", "kreditor")
+
+
+def _sidst_set() -> Mapped[datetime]:
+    return mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+def _kunde_id() -> Mapped[int]:
+    return mapped_column(ForeignKey("clients.id", ondelete="RESTRICT"))
+
+
+class CustomerCache(Base):
+    __tablename__ = "customers"
+    __table_args__ = (UniqueConstraint("client_id", "kundenummer", name="uq_customers_kunde_nummer"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    client_id: Mapped[int] = _kunde_id()
+    kundenummer: Mapped[int] = mapped_column(BigInteger)
+    navn: Mapped[str] = mapped_column(String(255))
+    cvr: Mapped[str | None] = mapped_column(String(40))
+    betalingsbetingelse: Mapped[int | None] = mapped_column(Integer)  # nummeret i systemet
+    spaerret: Mapped[bool | None] = mapped_column(Boolean)
+    saldo: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    sidst_set: Mapped[datetime] = _sidst_set()
+
+
+class SupplierCache(Base):
+    __tablename__ = "suppliers"
+    __table_args__ = (
+        UniqueConstraint("client_id", "leverandoernummer", name="uq_suppliers_kunde_nummer"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    client_id: Mapped[int] = _kunde_id()
+    leverandoernummer: Mapped[int] = mapped_column(BigInteger)
+    navn: Mapped[str] = mapped_column(String(255))
+    cvr: Mapped[str | None] = mapped_column(String(40))
+    betalingsbetingelse: Mapped[int | None] = mapped_column(Integer)
+    saldo: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))  # e-conomic: altid tom
+    gruppe: Mapped[int | None] = mapped_column(Integer)  # leverandørgruppe (20000 = grossister)
+    sidst_set: Mapped[datetime] = _sidst_set()
+
+
+class EntryCache(Base):
+    __tablename__ = "entries"
+    __table_args__ = (
+        UniqueConstraint("client_id", "bogfoert_id", name="uq_entries_kunde_post"),
+        kun_vaerdier("entry_type", ENTRY_TYPER),
+        Index("ix_entries_kunde_dato", "client_id", "dato"),
+        # Dubletreglen slår op på kunde + konto + beløb + dato-interval. Dækker også opslag
+        # på kunde + konto alene.
+        Index("ix_entries_kunde_konto_beloeb_dato", "client_id", "kontonummer", "beloeb", "dato"),
+        Index("ix_entries_kunde_beloeb", "client_id", "beloeb"),
+        # Dubletreglen: genkend periodiseringer (samme bilagsnummer på flere datoer).
+        Index("ix_entries_kunde_bilag_dato", "client_id", "bilagsnummer", "dato"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    client_id: Mapped[int] = _kunde_id()
+    bogfoert_id: Mapped[int] = mapped_column(BigInteger)  # e-conomic: entryNumber
+    bilagsnummer: Mapped[int | None] = mapped_column(BigInteger)
+    dato: Mapped[date | None] = mapped_column(Date)
+    kontonummer: Mapped[int | None] = mapped_column(Integer)
+    tekst: Mapped[str | None] = mapped_column(Text)
+    beloeb: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    modpart: Mapped[str | None] = mapped_column(String(30))  # "debitor:<nr>"/"kreditor:<nr>"
+    valuta: Mapped[str | None] = mapped_column(String(3))
+    entry_type: Mapped[str | None] = mapped_column(String(30))
+    beloeb_dkk: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))  # i grundvaluta
+    fakturanummer: Mapped[str | None] = mapped_column(String(100))  # leverandørens fakturanr. m.m.
+    # Hele det rå svar fra systemet (tom for poster hentet før kolonnen fandtes).
+    raa_data: Mapped[dict | None] = mapped_column(JSONB)
+    sidst_set: Mapped[datetime] = _sidst_set()
+
+
+class AccountingYearCache(Base):
+    """Kundens regnskabsår – og om de er afsluttet. Afsluttede år kan ikke rettes, så
+    reglerne kigger ikke i dem. Hentes fuldt hver gang."""
+
+    __tablename__ = "accounting_years"
+    __table_args__ = (UniqueConstraint("client_id", "navn", name="uq_accounting_years_kunde_aar"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    client_id: Mapped[int] = _kunde_id()
+    navn: Mapped[str] = mapped_column(String(20))
+    fra: Mapped[date | None] = mapped_column(Date)
+    til: Mapped[date | None] = mapped_column(Date)
+    lukket: Mapped[bool | None] = mapped_column(Boolean)
+    sidst_set: Mapped[datetime] = _sidst_set()
+
+
+class JournalEntryCache(Base):
+    """Linjer i kundens kassekladder – endnu IKKE bogført. Hentes fuldt hver gang (erstatter
+    alt for kunden), så bogførte/slettede linjer forsvinder. Bruges til at vise, at en manglende
+    faktura ligger klar i en kassekladde."""
+
+    __tablename__ = "journal_entries"
+    __table_args__ = (Index("ix_journal_entries_kunde", "client_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    client_id: Mapped[int] = _kunde_id()
+    kladde_nummer: Mapped[int] = mapped_column(Integer)
+    kladde_navn: Mapped[str | None] = mapped_column(String(255))
+    linje_id: Mapped[int | None] = mapped_column(BigInteger)
+    bilagsnummer: Mapped[int | None] = mapped_column(BigInteger)
+    dato: Mapped[date | None] = mapped_column(Date)
+    konto: Mapped[int | None] = mapped_column(Integer)
+    modkonto: Mapped[int | None] = mapped_column(Integer)
+    modpart: Mapped[str | None] = mapped_column(String(30))
+    fakturanummer: Mapped[str | None] = mapped_column(String(100))
+    tekst: Mapped[str | None] = mapped_column(Text)
+    beloeb: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    valuta: Mapped[str | None] = mapped_column(String(3))
+    entry_type: Mapped[str | None] = mapped_column(String(30))
+    sidst_set: Mapped[datetime] = _sidst_set()
+
+
+class OpenEntryCache(Base):
+    __tablename__ = "open_entries"
+    __table_args__ = (
+        UniqueConstraint("client_id", "bogfoert_id", name="uq_open_entries_kunde_post"),
+        kun_vaerdier("type", AABEN_POST_TYPER),
+        kun_vaerdier("entry_type", ENTRY_TYPER),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    client_id: Mapped[int] = _kunde_id()
+    bogfoert_id: Mapped[int] = mapped_column(BigInteger)  # e-conomic: entryNumber
+    type: Mapped[str] = mapped_column(String(10))
+    partnummer: Mapped[int] = mapped_column(BigInteger)
+    partnavn: Mapped[str | None] = mapped_column(String(255))
+    bilagsnummer: Mapped[int | None] = mapped_column(BigInteger)
+    fakturanummer: Mapped[str | None] = mapped_column(String(100))
+    dato: Mapped[date | None] = mapped_column(Date)
+    forfaldsdato: Mapped[date | None] = mapped_column(Date)
+    beloeb: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    restbeloeb: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    valuta: Mapped[str | None] = mapped_column(String(3))
+    entry_type: Mapped[str | None] = mapped_column(String(30))  # tom indtil næste synkronisering
+    sidst_set: Mapped[datetime] = _sidst_set()
