@@ -15,6 +15,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
+from app.api.assistent import router as assistent_router
 from app.api.data import router as data_router
 from app.api.opkraevning import router as opkraevning_router
 from app.api.login import db, nuvaerende_medarbejder
@@ -43,6 +44,7 @@ app.include_router(login_router)
 app.include_router(data_router)
 app.include_router(opkraevning_router)
 app.include_router(medarbejdere_router)
+app.include_router(assistent_router)
 
 
 @app.get("/", response_class=HTMLResponse)

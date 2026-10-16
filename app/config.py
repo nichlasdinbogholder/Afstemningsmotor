@@ -66,6 +66,17 @@ class Settings(BaseSettings):
     # Virker aldrig, når APP_ENV=production – uanset denne værdi.
     dev_login: bool = False
 
+    # Fagassistenten (app/assistent). Uden nøgle er assistenten slået fra. Nøglen findes KUN på serveren.
+    anthropic_api_key: SecretStr | None = None
+    assistant_model: str = "claude-opus-5-5"
+    assistant_max_tokens: int = 1500
+    assistant_effort: str = "low"  # low | medium | high – hvor grundigt modellen tænker før svaret
+    assistant_history_turns: int = 10
+    assistant_kb_top_k: int = 5
+    assistant_rate_stale_days: int = 45
+    assistant_max_rows: int = 200
+    assistant_max_tool_calls: int = 5
+
 
 @lru_cache
 def get_settings() -> Settings:

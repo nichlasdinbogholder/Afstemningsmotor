@@ -415,6 +415,14 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
   ligger i rodlayoutet, så den overlever navigation. Åben/lukket huskes i browseren; Esc, fokus og fokusfælde.
   Afsendelse er slået fra, indtil trin 3. Afprøvet i browser: widget-test 1, 2, 4 og 5 (14 kontroller) bestået;
   test 3 (genindlæsning henter samtalen fra serveren) kræver trin 3.
+- **Fase 1, trin 3 + 4 (16.10.2026):** `app/api/assistent.py` (/api/v1/assistant: status, conversations,
+  messages med SSE-stream, feedback), `app/assistent/samtale.py` (historik, gemning, kaldet med `anthropic`:
+  model ASSISTANT_MODEL = claude-opus-5-5, effort low, max 1500 tokens, server-side fallback ved afvisning),
+  `app/assistent/system_prompt.md` (grundinstruksen ordret fra spec'en + "intet materiale fra videnbasen", indtil
+  fase 2). Spørgsmålet gemmes før kaldet; afbrudt svar gemmes som 'interrupted'; fejl vises som kort dansk tekst.
+  Trin 4 er taget med i trin 3, så fast regel 1 gælder fra første svar. Tests: `tests/test_assistent_api.py`
+  (13; modellen er erstattet af en falsk). Kaldet er afprøvet mod en lokal prøveserver i Anthropics format, og
+  panelet i browser (7 kontroller). Prompttest 14/16/17 mod den rigtige model: `python -m app.assistent.proeve`.
 
 ## Beslutninger
 - 16.10.2026: Administratorer ser loggen over ALLE spørgsmål (trin 6); en medarbejder ser kun sine egne.
