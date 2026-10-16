@@ -305,6 +305,12 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   - Indbetalinger: e-conomic udligner selv (remainder). Bankafstemningen laver i kassekladden 3 ben (bank,
     debitor, gebyr-/rentekonto) – kontrolleres FØR bogføring. FIK: betalings-id = fakturanr. + to kontrolcifre
     (`fik.py`); FI-kreditornummeret = kunden.
+- `app/assistent/` – FAGASSISTENTEN (spec 16.10.2026, se RESUME.md): `models.py` = assistant_conversations
+  (staff_id, client_id NULL = generelt), assistant_messages (status complete/interrupted/failed, sources, lookups),
+  assistant_feedback (én pr. medarbejder pr. svar), kb_documents (videnbase; dansk fritekstsøgning `search`; kun
+  `active` inden for valid_from/valid_to må nå modellen; satser kræver value+unit; udkast peger på `replaces_id`)
+  og kb_rate_checks. Satser bliver ALDRIG aktive uden menneskelig godkendelse; assistenten skriver aldrig til
+  e-conomic/Dinero og afgør aldrig en kundesag.
 - `app/fejlrapport.py` – Sentry (`init_fejlrapport("api"|"worker"|"scheduler")`). Slået fra uden
   `SENTRY_DSN`. environment = production (APP_ENV=production) ellers development. API'et bruger
   FastAPI-integrationen. Ingen lokale variabler, ingen personoplysninger; `before_send` fjerner

@@ -396,3 +396,29 @@ Derfor (skal bygges ind, før noget vises for en kunde – gælder alle trin):
   Felterne er derfor tekst indtil videre.
 - **Trin 3 – filopbevaring:** projektet har ingen fælles "object storage" endnu.
 - **Trin 6 – bibliotek:** kaldet til Claude laves med httpx (findes allerede) – intet nyt bibliotek uden at spørge.
+
+# Fagassistenten (app/assistent) – status
+
+Spec: "Prompt til Claude Code — Fagassistent i hub.dinbogholder.dk" (16.10.2026). Fire faser; ét trin ad gangen,
+PR og merge efter hvert trin; næste fase først når den foregående er merged og har kørt et par dage.
+
+## Bygget
+- **Fase 1, trin 1 (16.10.2026):** tabellerne `assistant_conversations`, `assistant_messages`,
+  `assistant_feedback`, `kb_documents` (dansk fritekstsøgning, GIN-indeks), `kb_rate_checks`
+  (migrering 4380b1e2b9d6). Tests: `tests/test_assistent_datamodel.py`.
+
+## Afvigelser fra spec'ens SQL (bevidste)
+- `user_id TEXT` er i stedet `staff_id` → `staff.id` (rigtig relation med indeks, som alle andre tabeller).
+- `assistant_messages.status` (complete/interrupted/failed): spec'en kræver, at en afbrudt stream gemmes
+  "med en markering" – det er markeringen.
+- `kb_documents.replaces_id`: et udkast fra satskontrollen peger på det dokument, det skal afløse, så
+  godkendelsen ved, hvilket der skal sættes til `superseded`.
+- CHECK: en sats skal have `value` og `unit`; `valid_to` >= `valid_from`.
+- Samtaler/kunder slettes ikke (RESTRICT); beskeder følger samtalen (CASCADE som i spec'en).
+
+## Skal afklares (før de berørte trin)
+- Fase 4: "kunder brugeren er tilknyttet" = `clients.ansvarlig_medarbejder_id` / `daglig_medarbejder_id`?
+  Og må administratorer slå op i alle kunder?
+- Fase 3: fund for satser hører ikke til én kunde – `findings` kræver i dag en kunde.
+- Trin 6/15: back office-siderne – kun for administratorer?
+- `ANTHROPIC_API_KEY` skal oprettes og lægges i serverens .env (aldrig i chatten).
