@@ -59,7 +59,8 @@ export default function Ramme({ children }: { children: React.ReactNode }) {
               <Image src="/logo.png" alt="Din Bogholder – Håndværkernes foretrukne" width={768} height={192} priority className="h-10 w-auto" />
             </Link>
             <nav className="flex gap-1 text-sm">
-              <Menupunkt href="/" aktiv={sti === "/" || sti.startsWith("/kunde")}>Afstemning</Menupunkt>
+              <Menupunkt href="/" aktiv={sti === "/"}>Dashboard</Menupunkt>
+              <Menupunkt href="/afstemning/" aktiv={sti.startsWith("/afstemning") || sti.startsWith("/kunde")}>Afstemning</Menupunkt>
               <Menupunkt href="/debitorstyring/" aktiv={sti.startsWith("/debitorstyring")}>Debitorstyring</Menupunkt>
               {mig?.rolle === "admin" && (
                 <Menupunkt href="/medarbejdere/" aktiv={sti.startsWith("/medarbejdere")}>Medarbejdere</Menupunkt>
