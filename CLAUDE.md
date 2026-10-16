@@ -319,6 +319,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   - Webdelen: `web/components/assistent/` (Provider + panel i Ramme, dvs. rodlayoutet). Assistenten hedder **Svend**.
     Siden `/fagassistent/` (menupunkt "Svend"): loggen – admin ser alle spørgsmål, medarbejdere kun egne
     (`/api/v1/assistant/log`, `/emner`). Advarsel om personoplysninger: `web/lib/personoplysninger.ts`.
+  - `app/api/videnbase.py`: `/api/v1/kb/documents` – alle læser, KUN admin opretter/retter (audit `kb_oprettet`/
+    `kb_aendret`), intet slettes, 'superseded' kun via satsgodkendelse. Fanen "Videnbase" på siden Svend.
 - `app/fejlrapport.py` – Sentry (`init_fejlrapport("api"|"worker"|"scheduler")`). Slået fra uden
   `SENTRY_DSN`. environment = production (APP_ENV=production) ellers development. API'et bruger
   FastAPI-integrationen. Ingen lokale variabler, ingen personoplysninger; `before_send` fjerner

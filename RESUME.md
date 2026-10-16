@@ -434,8 +434,18 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
   `/emner`. Esc lukker panelet overalt på siden. **Gennemgå listen ugentligt den første måned.**
 - Rettelse 16.10.2026: advarslen om personoplysninger brugte "lookbehind" i mønstrene, som ældre Safari ikke
   forstår – skrevet om; mellemrum i CPR-nummer genkendes nu også.
+- **Fase 2, trin 7 (16.10.2026):** videnbasen redigeres på siden Svend → fanen "Videnbase"
+  (`web/components/assistent/Videnbase.tsx`, API `app/api/videnbase.py` = `/api/v1/kb/documents`). Alle kan læse;
+  KUN administratorer opretter og retter. Felter: titel, kategori, tekst, status (aktiv/kladde), kildelink,
+  gyldig fra/til; for satser værdi, enhed, kontrolside og hint. Intet slettes. En sats, en administrator selv
+  lægger ind eller ændrer værdien på, regnes som bekræftet nu (`last_verified_at`). Hver oprettelse/rettelse →
+  audit_log (`kb_oprettet` / `kb_aendret` med fra/til). Værdier skrives med dansk komma; "1.5" afvises (tvetydigt).
+  Tests: `tests/test_videnbase_api.py` (14) + browser 10/10. Indholdet lægger bygherren/medarbejderne selv ind –
+  Claude skriver ALDRIG satser, frister eller regler i videnbasen.
 
 ## Beslutninger
+- 16.10.2026: Kun administratorer må rette i videnbasen (bygherren valgte A); alle kan læse.
+- 16.10.2026: Bygherren besluttede at starte fase 2 med det samme (uden at vente "et par dage").
 - 16.10.2026: Assistenten hedder **Svend** (bygherren). Navnet står i panelet, menuen, logsiden og grundinstruksens
   første linje ("Du hedder Svend og er fagassistent …").
 - 16.10.2026: Administratorer ser loggen over ALLE spørgsmål (trin 6); en medarbejder ser kun sine egne.
