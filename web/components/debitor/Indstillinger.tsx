@@ -64,14 +64,14 @@ export default function Indstillinger({ kundeId, aendret }: { kundeId: number; a
               <th className="px-2 py-1">Kompensationsgebyr (kun erhverv)</th><th className="px-2 py-1 text-right">Gebyr</th></tr></thead>
             <tbody>
               {d.paamindelse_efter_dage !== null && (
-                <tr className="border-t border-sky-100">
+                <tr className="border-t border-slate-100">
                   <td className="px-2 py-1">Venlig påmindelse</td>
                   <td className="px-2 py-1">{d.paamindelse_efter_dage} efter forfald</td>
                   <td className="px-2 py-1" /><td className="px-2 py-1 text-right">uden gebyr</td>
                 </tr>
               )}
               {[1, 2, 3].map((n) => (
-                <tr key={n} className="border-t border-sky-100">
+                <tr key={n} className="border-t border-slate-100">
                   <td className="px-2 py-1">{n}</td>
                   <td className="px-2 py-1">{n > 1 ? `${d.dage_mellem_rykkere} efter forrige`
                     : d.paamindelse_efter_dage !== null ? `${d.dage_mellem_rykkere} efter påmindelsen`
@@ -130,7 +130,7 @@ function Kort({ titel, ok, neutral, felter, d, kundeId, admin, gemt, children }:
   gemt: (d: Data) => void; children: React.ReactNode;
 }) {
   const [redigerer, setRedigerer] = useState(false);
-  const farve = neutral ? "border-sky-200 bg-sky-50 text-sky-950" : ok ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-red-200 bg-red-50 text-red-900";
+  const farve = neutral ? "border-slate-200 bg-white text-slate-900" : ok ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-red-200 bg-red-50 text-red-900";
   return (
     <div className={`rounded-lg border p-4 ${farve}`}>
       <div className="mb-1 flex items-start justify-between gap-2">
@@ -187,7 +187,7 @@ function Formular({ felter, d, kundeId, luk, gemt }: { felter: Felt[]; d: Data; 
       ))}
       {fejl && <p className="text-red-700">{fejl}</p>}
       <div className="flex gap-2 pt-1">
-        <button onClick={gem} className="rounded bg-slate-900 px-3 py-1 text-white hover:bg-slate-700">Gem</button>
+        <button onClick={gem} className="rounded bg-brand-600 px-3 py-1 text-white hover:bg-brand-700">Gem</button>
         <button onClick={luk} className="rounded border border-slate-300 bg-white px-3 py-1 text-slate-700">Annullér</button>
       </div>
       <p className="text-xs opacity-75">Ændringen logges med dit navn.</p>

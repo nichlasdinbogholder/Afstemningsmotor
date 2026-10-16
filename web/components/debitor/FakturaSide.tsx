@@ -41,13 +41,13 @@ export default function FakturaSide({ fakturaId, tilbage }: { fakturaId: number;
       <div className="mb-4 flex items-center justify-between">
         <button onClick={tilbage} className="rounded-md border border-slate-300 bg-white px-4 py-1.5 text-sm hover:bg-slate-50">← Tilbage</button>
         <div className="flex gap-2">
-          <button disabled title="Kommer med udsendelsen (trin 4)" className="cursor-not-allowed rounded-md bg-sky-700/40 px-4 py-1.5 text-sm text-white">Send e-mail</button>
-          <button disabled title="Kommer med udsendelsen (trin 4)" className="cursor-not-allowed rounded-md bg-sky-700/40 px-4 py-1.5 text-sm text-white">PDF</button>
-          <button onClick={() => setVisLog((v) => !v)} className={`rounded-md px-4 py-1.5 text-sm text-white ${visLog ? "bg-sky-900" : "bg-sky-700 hover:bg-sky-800"}`}>☰ Log</button>
+          <button disabled title="Kommer med udsendelsen (trin 4)" className="cursor-not-allowed rounded-md bg-brand-600/40 px-4 py-1.5 text-sm text-white">Send e-mail</button>
+          <button disabled title="Kommer med udsendelsen (trin 4)" className="cursor-not-allowed rounded-md bg-brand-600/40 px-4 py-1.5 text-sm text-white">PDF</button>
+          <button onClick={() => setVisLog((v) => !v)} className={`rounded-md px-4 py-1.5 text-sm text-white ${visLog ? "bg-brand-800" : "bg-brand-600 hover:bg-brand-700"}`}>☰ Log</button>
         </div>
       </div>
 
-      <div className="mb-5 grid grid-cols-2 gap-4 rounded-lg border border-sky-200 bg-sky-50 px-6 py-4 text-center text-sm sm:grid-cols-5">
+      <div className="mb-5 grid grid-cols-2 gap-4 rounded-lg border border-slate-200 bg-white px-6 py-4 text-center text-sm sm:grid-cols-5">
         <Felt navn="Betalingsdag">{dato(f.forfald)}</Felt>
         <Felt navn="Beløb">{beloeb(f.beloeb)}</Felt>
         <Felt navn="Restbeløb">{beloeb(f.restbeloeb)}</Felt>
@@ -167,7 +167,7 @@ export default function FakturaSide({ fakturaId, tilbage }: { fakturaId: number;
 }
 
 function Felt({ navn, children }: { navn: string; children: React.ReactNode }) {
-  return <div><p className="font-semibold text-sky-800">{navn}</p><div className="mt-1 text-slate-700 tabular-nums">{children}</div></div>;
+  return <div><p className="font-semibold text-slate-500">{navn}</p><div className="mt-1 text-slate-700 tabular-nums">{children}</div></div>;
 }
 
 function Kort({ titel, children }: { titel: string; children: React.ReactNode }) {
