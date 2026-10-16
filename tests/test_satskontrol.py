@@ -245,3 +245,49 @@ def test_api_godkendelse_logges_og_kun_admin(db_session, klient, sats, side):
     log = db_session.scalars(select(AuditLog).where(AuditLog.handling == "kb_sats_godkendt")).one()
     assert (log.detaljer["fra"], log.detaljer["til"], log.detaljer["gyldig_fra"]) == ("1.2300", "1.3100", "2027-01-01")
     assert klient.get("/api/v1/kb/kontroller").json() == []
+
+
+# Trin 11: forældelse – sikkerhedsnettet under mandagsjobbet (standard 45 dage)
+def _sats_bekraeftet(db_session, dage_siden, titel="Kilometersats gammel (opdigtet)"):
+    d = KbDocument(title=titel, category="satser", body="Sats.", value=Decimal("1.2300"), unit="kr/km",
+                   status="active", last_verified_at=NU - timedelta(days=dage_siden))
+    db_session.add(d)
+    db_session.flush()
+    return d
+
+
+def test_29_foraeldet_sats_markeres_og_svend_advarer(db_session):
+    frisk = _sats_bekraeftet(db_session, 10, "Frisk sats")
+    gammel = _sats_bekraeftet(db_session, 46, "Gammel sats")
+    assert not sk.er_foraeldet(frisk, NU) and sk.er_foraeldet(gammel, NU)
+    # materialeteksten regner fra i dag – sæt datoen i forhold til nu
+    gammel.last_verified_at = datetime.now(timezone.utc) - timedelta(days=60)
+    tekst = sm.materialetekst([gammel])
+    dato_ = gammel.last_verified_at.strftime("%d.%m.%Y")
+    assert f"Satsen er senest bekræftet {dato_} — tjek den, før du bruger den til noget bindende." in tekst
+    frisk.last_verified_at = datetime.now(timezone.utc) - timedelta(days=3)
+    assert "FORÆLDET" not in sm.materialetekst([frisk])
+
+
+def test_fund_foerst_efter_det_dobbelte_og_kun_et_aabent(db_session):
+    _sats_bekraeftet(db_session, 80, "Over 45, under 90")
+    gammel = _sats_bekraeftet(db_session, 91, "Over 90")
+    nye = sk.tjek_foraeldelse(db_session, NU)
+    assert [k.kb_id for k in nye] == [gammel.id] and nye[0].outcome == "stale"
+    assert "ikke bekræftet siden" in nye[0].error
+    assert sk.tjek_foraeldelse(db_session, NU + timedelta(days=1)) == []  # allerede et åbent fund
+
+
+def test_kvittering_for_foraeldelse(db_session, admin):
+    _sats_bekraeftet(db_session, 100)
+    k = sk.tjek_foraeldelse(db_session, NU)[0]
+    sk.afvis(db_session, k, admin.id, "Satsen er tjekket på skat.dk")
+    assert k.decision == "noted"
+
+
+def test_foraeldelsesjobbet_er_planlagt_hver_dag():
+    from app.natkoersel.scheduler import lav_scheduler
+
+    job = {j.id: str(j.trigger) for j in lav_scheduler().get_jobs()}
+    assert "hour='6'" in job["satsforaeldelse"] and "minute='30'" in job["satsforaeldelse"]
+    assert "day_of_week" not in job["satsforaeldelse"]

@@ -326,6 +326,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     regel (citat i hintet) eller model (tallet SKAL stå på siden); uændret → bekræftet; ændret → udkast + fund; fejl →
     fund. Afgøres KUN af admin (`/api/v1/kb/kontroller…`, fanen Satskontrol). Databasen: en ny sats kan ikke blive
     aktiv uden 'approved' (trigger `kb_kraev_godkendelse`); kb_rate_checks kan ikke slettes/ændres.
+    Forældelse: `er_foraeldet()` (> ASSISTANT_RATE_STALE_DAYS) → advarsel i Svends materiale; job
+    `assistent_foraeldelse` dagligt 06.30 → fund 'stale' efter det dobbelte.
 - `app/fejlrapport.py` – Sentry (`init_fejlrapport("api"|"worker"|"scheduler")`). Slået fra uden
   `SENTRY_DSN`. environment = production (APP_ENV=production) ellers development. API'et bruger
   FastAPI-integrationen. Ingen lokale variabler, ingen personoplysninger; `before_send` fjerner

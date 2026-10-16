@@ -8,7 +8,7 @@ import { tidspunkt } from "@/lib/format";
 // INTET bliver aktivt, før en administrator har godkendt det her – databasen afviser det ellers.
 
 type Kontrol = {
-  id: number; tidspunkt: string; udfald: "changed" | "failed" | "unchanged"; metode: "regel" | "model" | null;
+  id: number; tidspunkt: string; udfald: "changed" | "failed" | "unchanged" | "stale"; metode: "regel" | "model" | null;
   dokument: { id: number; titel: string; enhed: string | null; kontrol_kilde: string | null; kontrol_hint: string | null;
               gyldig_fra: string | null };
   gammel_vaerdi: string | null; ny_vaerdi: string | null; uddrag: string | null; fejl: string | null;
@@ -41,7 +41,7 @@ function Kort({ k, opdater }: { k: Kontrol; opdater: () => void }) {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="font-semibold">{k.dokument.titel}</p>
-          <p className="text-xs text-slate-500">Kontrolleret {tidspunkt(k.tidspunkt)}</p>
+          <p className="text-xs text-slate-500">{k.udfald === "stale" ? "Opdaget" : "Kontrolleret"} {tidspunkt(k.tidspunkt)}</p>
         </div>
         {k.afgoerelse ? (
           <span className="rounded bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">
@@ -49,6 +49,8 @@ function Kort({ k, opdater }: { k: Kontrol; opdater: () => void }) {
           </span>
         ) : k.udfald === "changed" ? (
           <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">Ny værdi fundet</span>
+        ) : k.udfald === "stale" ? (
+          <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">Ikke bekræftet længe</span>
         ) : (
           <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">Kontrollen fejlede</span>
         )}

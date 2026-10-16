@@ -19,6 +19,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.assistent.models import AssistantConversation, AssistantMessage, KbDocument
+from app.assistent.satskontrol import er_foraeldet
 from app.config import get_settings
 from app.sikkerhed.hemmeligheder import registrer_hemmelighed
 
@@ -97,6 +98,11 @@ def materialetekst(materiale: list[KbDocument]) -> str:
         linjer = [hoved]
         if d.category == "satser" and d.value is not None:
             linjer.append(f"Værdi: {dk_tal(d.value)} {d.unit}. Senest bekræftet: {_dk_dato(d.last_verified_at)}.")
+            if er_foraeldet(d):
+                linjer.append(
+                    "ADVARSEL: Satsen er FORÆLDET (ikke bekræftet længe). Når du bruger den, skal du skrive ordret: "
+                    f"\"Satsen er senest bekræftet {_dk_dato(d.last_verified_at)} — tjek den, før du bruger den "
+                    "til noget bindende.\"")
         linjer.append(d.body.strip())
         if d.source_url:
             linjer.append(f"Kilde: {d.source_url}")
