@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Automatisk opdatering af serveren: henter nyeste kode fra GitHub og genstarter.
 #
-#     scripts/auto_opdater.sh             # én kontrol (køres hvert 2. minut af systemd)
-#     scripts/auto_opdater.sh installer   # slå den automatiske opdatering til (én gang)
-#     scripts/auto_opdater.sh status      # er den slået til, og hvad skete der sidst?
-#     scripts/auto_opdater.sh afinstaller # slå den fra igen
+#     bash scripts/auto_opdater.sh             # én kontrol (køres hvert 2. minut af systemd)
+#     bash scripts/auto_opdater.sh installer   # slå den automatiske opdatering til (én gang)
+#     bash scripts/auto_opdater.sh status      # er den slået til, og hvad skete der sidst?
+#     bash scripts/auto_opdater.sh afinstaller # slå den fra igen
 #
 # Én kontrol:
 # 1. Henter fra GitHub (kun læsning – serveren skriver aldrig til GitHub).
@@ -54,7 +54,7 @@ After=docker.service network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=$ROD/scripts/auto_opdater.sh
+ExecStart=/bin/bash $ROD/scripts/auto_opdater.sh
 EOF
 	cat > /etc/systemd/system/afstemning-opdater.timer <<'EOF'
 [Unit]
@@ -70,7 +70,7 @@ EOF
 	systemctl daemon-reload
 	systemctl enable --now afstemning-opdater.timer
 	echo "Automatisk opdatering er slået TIL. Serveren kontrollerer GitHub hvert 2. minut."
-	echo "Se hvad der sker:  $ROD/scripts/auto_opdater.sh status"
+	echo "Se hvad der sker:  bash $ROD/scripts/auto_opdater.sh status"
 }
 
 status() {
@@ -115,7 +115,7 @@ db_aendret=0
 if ! git diff --quiet "$gammel" "$ny" -- migrations/; then
 	db_aendret=1
 	log "Databasens opbygning ændres – tager backup først."
-	if ! "$ROD/scripts/backup.sh" >> "$LOG" 2>&1; then
+	if ! bash "$ROD/scripts/backup.sh" >> "$LOG" 2>&1; then
 		log "STOP: backup mislykkedes – opdaterer IKKE. Ret backup'en (DEPLOY.md trin 6)."
 		exit 1
 	fi
