@@ -373,6 +373,19 @@ faktura/kreditnota/kontoudtog → kundens godkendelse → Corpay.
   er HÅNDVÆRKERE (fx materialer/værktøj til arbejdet på vareforbrug – ikke "kontorhold"). Fællesreglerne i
   `supplier_account_map` og LLM-forslaget skal bygges med det udgangspunkt.
 
+## FAST REGEL (16.10.2026): et bilag må ALDRIG ende hos en forkert kunde
+Nichlas: "Det må IKKE ske. En leverandørfaktura hos en forkert kunde er et dødsstempel."
+Derfor (skal bygges ind, før noget vises for en kunde – gælder alle trin):
+1. Et bilag fra mail må kun nå kunden (godkendelseskø, kvittering til kassekladde, levering), hvis TO
+   uafhængige ting peger på samme kunde: modtageradressen OG selve bilaget (købers CVR/navn på fakturaen,
+   eller leverandøren findes i netop den kundes kreditorliste fra e-conomic). Uploads: den indloggede kunde.
+2. Peger bilaget på en ANDEN af vores kunder (fx købers CVR) → stop, høj prioritet hos en medarbejder.
+3. Mangler den anden ting, eller er der tvivl → medarbejderen afgør. Systemet gætter aldrig.
+4. Håndhæves i DATABASEN (som godkendelsesgaten): status pending_approval/auto_route og levering/kontering
+   kræver en registreret kundekontrol (metode + hvem/hvad), ellers afvises det.
+5. Et alias er først aktivt, når en prøvemail fra kundens videresendelse er kommet ind på den rigtige kunde.
+6. I appen ser en kunde kun egne bilag (testes).
+
 ## Skal afklares (før de berørte trin)
 - **Trin 2 – adgang til postkassen:** `Mail.Read` som *application*-tilladelse giver adgang til ALLE
   postkasser i tenanten. Skal begrænses til bilag@ med RBAC for Applications; bevises med

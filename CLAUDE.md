@@ -247,6 +247,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   (client_id, sha256); `note_complete` er beregnet. `python -m app.bilag.opret --kunde <id> [--corpay <mail>]
   [--kassekladde <nr>] | --vis`. Kvitteringer → kassekladde må ALDRIG bogføres (trin 16 kræver beslutning om
   skrivning til e-conomic: dry-run + ALLOW_BOOKING).
+  FAST REGEL: et bilag må ALDRIG ende hos en forkert kunde – mailbilag kræver, at modtageradressen OG bilagets
+  indhold (købers CVR/navn eller kendt kreditor hos netop den kunde) peger på samme kunde; ellers medarbejder.
+  Håndhæves i databasen. Se RESUME.md.
 - `app/opkraevning/` – OPKRÆVNING (erstatter FarPay). Debitor betaler KUNDENS konto; Din Bogholder fakturerer
   kunden månedligt for indbetalte gebyrer/renter. Vi modtager ALDRIG selv en betaling fra en debitor.
   - `models.py` (trin 1): debtors, invoices (kind invoice|credit_note – kreditnota = negativt beløb), invoice_payments,
