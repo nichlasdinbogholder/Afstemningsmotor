@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState } from "react";
+import { ADVARSEL, lignerPersonoplysninger } from "@/lib/personoplysninger";
 import { useAssistent } from "./Provider";
 
 // Svar vises som almindelig tekst. Kun **fed** og punktopstillinger ("- ") vises pænt – intet andet
@@ -25,6 +26,7 @@ function Svartekst({ tekst }: { tekst: string }) {
 export default function Fagassistent() {
   const { aaben, saetAaben, ulaest, slaaetTil, beskeder, svarer, fejl, spoerg, nySamtale } = useAssistent();
   const [tekst, setTekst] = useState("");
+  const [advarsel, setAdvarsel] = useState(false);
   const bund = useRef<HTMLDivElement>(null);
   const knap = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -43,8 +45,14 @@ export default function Fagassistent() {
     bund.current?.scrollIntoView({ block: "end" });
   }, [beskeder, aaben]);
 
-  function afsend() {
+  // Ligner beskeden personoplysninger, vises en advarsel først. "Send alligevel" sender den.
+  function afsend(alligevel = false) {
     if (!tekst.trim() || svarer || !slaaetTil) return;
+    if (!alligevel && lignerPersonoplysninger(tekst)) {
+      setAdvarsel(true);
+      return;
+    }
+    setAdvarsel(false);
     void spoerg(tekst);
     setTekst("");
   }
@@ -127,9 +135,20 @@ export default function Fagassistent() {
 
       <form onSubmit={(e) => { e.preventDefault(); afsend(); }} className="border-t border-slate-200 p-3">
         <textarea ref={felt} rows={2} aria-label="Skriv dit spørgsmål" placeholder="Skriv dit spørgsmål …"
-                  value={tekst} onChange={(e) => setTekst(e.target.value)}
+                  value={tekst} onChange={(e) => { setTekst(e.target.value); setAdvarsel(false); }}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); afsend(); } }}
                   className="w-full resize-none rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none" />
+        {advarsel && (
+          <div role="alert" className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <p className="font-medium">{ADVARSEL}</p>
+            <div className="mt-2 flex gap-2">
+              <button type="button" onClick={() => { setAdvarsel(false); felt.current?.focus(); }}
+                      className="rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700">Ret beskeden</button>
+              <button type="button" onClick={() => afsend(true)}
+                      className="rounded-md border border-amber-400 px-3 py-1 text-xs text-amber-900 hover:bg-amber-100">Send alligevel</button>
+            </div>
+          </div>
+        )}
         <div className="mt-2 flex justify-end">
           <button type="submit" disabled={!tekst.trim() || svarer || !slaaetTil}
                   className="rounded-md bg-brand-600 px-4 py-1.5 text-sm text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-brand-600/40">

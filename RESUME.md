@@ -423,6 +423,10 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
   Trin 4 er taget med i trin 3, så fast regel 1 gælder fra første svar. Tests: `tests/test_assistent_api.py`
   (13; modellen er erstattet af en falsk). Kaldet er afprøvet mod en lokal prøveserver i Anthropics format, og
   panelet i browser (7 kontroller). Prompttest 14/16/17 mod den rigtige model: `python -m app.assistent.proeve`.
+- **Fase 1, trin 5 (16.10.2026):** advarsel før afsendelse, hvis beskeden ligner personoplysninger
+  (`web/lib/personoplysninger.ts`: CPR `\d{6}-?\d{4}`, reg.nr. + kontonr., talrækker på 11+ cifre). "Ret
+  beskeden" eller "Send alligevel" – bremser, blokerer ikke. Afprøvet i browser (spec-test 18 + almindelige tal
+  som beløb, kontoplan-konti og datoer, der IKKE må udløse den): 12/12.
 
 ## Beslutninger
 - 16.10.2026: Administratorer ser loggen over ALLE spørgsmål (trin 6); en medarbejder ser kun sine egne.
