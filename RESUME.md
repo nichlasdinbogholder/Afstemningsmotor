@@ -385,6 +385,7 @@ Derfor (skal bygges ind, før noget vises for en kunde – gælder alle trin):
    kræver en registreret kundekontrol (metode + hvem/hvad), ellers afvises det.
 5. Et alias er først aktivt, når en prøvemail fra kundens videresendelse er kommet ind på den rigtige kunde.
 6. I appen ser en kunde kun egne bilag (testes).
+7. Indkøring: alle bilag for en NY kunde går forbi en medarbejder de første 30 dage (aftalt 16.10.2026).
 
 ## Skal afklares (før de berørte trin)
 - **Trin 2 – adgang til postkassen:** `Mail.Read` som *application*-tilladelse giver adgang til ALLE
