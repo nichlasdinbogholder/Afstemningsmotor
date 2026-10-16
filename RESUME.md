@@ -405,7 +405,10 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
 ## Bygget
 - **Fase 1, trin 1 (16.10.2026):** tabellerne `assistant_conversations`, `assistant_messages`,
   `assistant_feedback`, `kb_documents` (dansk fritekstsøgning, GIN-indeks), `kb_rate_checks`
-  (migrering 4380b1e2b9d6). Tests: `tests/test_assistent_datamodel.py`.
+  (migrering 4380b1e2b9d6). Tests: `tests/test_assistent_datamodel.py`. Kører på serveren (16.10.2026 10:41).
+- **Hændelse 16.10.2026 10:29–10:41:** siden var nede. auto_opdater.sh brugte umask 077, så de nye filer kun
+  kunne læses af root, og programmet i containeren (almindelig bruger) kunne ikke indlæse app/models.py →
+  migrate fejlede. Rettet: umask 022 i scriptet + `chmod -R a+rX` i Dockerfile. Ingen data tabt.
 
 ## Afvigelser fra spec'ens SQL (bevidste)
 - `user_id TEXT` er i stedet `staff_id` → `staff.id` (rigtig relation med indeks, som alle andre tabeller).
