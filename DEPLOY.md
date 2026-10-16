@@ -280,7 +280,7 @@ Derfor:
 ## Automatisk opdatering
 
 Slås til ÉN gang: `bash scripts/auto_opdater.sh installer`. Derefter kontrollerer serveren GitHub hvert
-2. minut (kun læsning) og opdaterer selv, når der er ny kode på grenen, serveren står på:
+20. sekund (kun læsning) og opdaterer selv, når der er ny kode på grenen, serveren står på:
 1. Ændres databasens opbygning (`migrations/`), tages der først en backup (`scripts/backup.sh`).
    Mislykkes den, opdateres der IKKE.
 2. Ny kode hentes, bygges og startes (`up -d --build`; tjenesten `migrate` opdaterer databasen).

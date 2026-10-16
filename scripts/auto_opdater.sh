@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Automatisk opdatering af serveren: henter nyeste kode fra GitHub og genstarter.
 #
-#     bash scripts/auto_opdater.sh             # én kontrol (køres hvert 2. minut af systemd)
+#     bash scripts/auto_opdater.sh             # én kontrol (køres hvert 20. sekund af systemd)
 #     bash scripts/auto_opdater.sh installer   # slå den automatiske opdatering til (én gang)
 #     bash scripts/auto_opdater.sh status      # er den slået til, og hvad skete der sidst?
 #     bash scripts/auto_opdater.sh afinstaller # slå den fra igen
 #
 # Én kontrol:
-# 1. Henter fra GitHub (kun læsning – serveren skriver aldrig til GitHub).
+# 1. Henter fra GitHub hvert 20. sekund (kun læsning – serveren skriver aldrig til GitHub).
 # 2. Er der intet nyt: gør ingenting.
 # 3. Ændrer den nye kode databasens opbygning (migrations/): tag en backup FØRST.
 #    Mislykkes backup'en, opdateres der IKKE.
@@ -42,11 +42,28 @@ sund() {
 	return 1
 }
 
-byg() {
-	$COMPOSE up -d --build >> "$LOG" 2>&1
+# Hvilke dele skal bygges om? Kun webdelen ændret -> kun caddy (hurtigt, og natkørslen/workers
+# afbrydes ikke). Kun dokumentation/tests ændret -> intet. Ellers alt.
+hvad_bygges() {
+	local filer; filer="$(git diff --name-only "$1" "$2")"
+	if ! printf '%s\n' "$filer" | grep -qvE '(\.md$|^tests/)'; then
+		echo "intet"
+	elif ! printf '%s\n' "$filer" | grep -qvE '^(web/|deploy/Caddyfile$|deploy/Dockerfile\.caddy$|.*\.md$|tests/)'; then
+		echo "caddy"
+	else
+		echo "alt"
+	fi
 }
 
-installer() {
+byg() {
+	case "$1" in
+		intet) return 0 ;;
+		caddy) $COMPOSE up -d --build caddy >> "$LOG" 2>&1 ;;
+		*) $COMPOSE up -d --build >> "$LOG" 2>&1 ;;
+	esac
+}
+
+skriv_enheder() {
 	cat > /etc/systemd/system/afstemning-opdater.service <<EOF
 [Unit]
 Description=Afstemningsmotor: hent og start nyeste kode
@@ -58,18 +75,23 @@ ExecStart=/bin/bash $ROD/scripts/auto_opdater.sh
 EOF
 	cat > /etc/systemd/system/afstemning-opdater.timer <<'EOF'
 [Unit]
-Description=Afstemningsmotor: kontrollér for ny kode hvert 2. minut
+Description=Afstemningsmotor: kontrollér for ny kode hvert 20. sekund
 
 [Timer]
-OnBootSec=2min
-OnUnitActiveSec=2min
+OnBootSec=1min
+OnUnitActiveSec=20s
+AccuracySec=1s
 
 [Install]
 WantedBy=timers.target
 EOF
+}
+
+installer() {
+	skriv_enheder
 	systemctl daemon-reload
 	systemctl enable --now afstemning-opdater.timer
-	echo "Automatisk opdatering er slået TIL. Serveren kontrollerer GitHub hvert 2. minut."
+	echo "Automatisk opdatering er slået TIL. Serveren kontrollerer GitHub hvert 20. sekund."
 	echo "Se hvad der sker:  bash $ROD/scripts/auto_opdater.sh status"
 }
 
@@ -99,18 +121,31 @@ esac
 exec 9>/run/afstemning-opdater.lock
 flock -n 9 || exit 0
 
+# Er tidsplanen ændret i en ny udgave af dette script, opdateres den selv (ingen terminal nødvendig).
+if [ -f /etc/systemd/system/afstemning-opdater.timer ]; then
+	foer="$(cat /etc/systemd/system/afstemning-opdater.*)"
+	skriv_enheder
+	if [ "$foer" != "$(cat /etc/systemd/system/afstemning-opdater.*)" ]; then
+		systemctl daemon-reload
+		systemctl restart afstemning-opdater.timer
+		log "Tidsplanen for automatisk opdatering er opdateret."
+	fi
+fi
+
 gren="$(git rev-parse --abbrev-ref HEAD)"
 if ! git fetch -q origin "$gren" 2>> "$LOG"; then
-	log "FEJL: kunne ikke hente fra GitHub (prøver igen om 2 minutter)."
+	log "FEJL: kunne ikke hente fra GitHub (prøver igen om lidt)."
 	exit 1
 fi
 gammel="$(git rev-parse HEAD)"
 ny="$(git rev-parse "origin/$gren")"
 [ "$gammel" = "$ny" ] && exit 0
-# Kode, der før er rullet tilbage, prøves ikke igen hvert 2. minut – først når der kommer nyere kode.
+# Kode, der før er rullet tilbage, prøves ikke igen og igen – først når der kommer nyere kode.
 [ "$(cat "$SPRUNGET" 2>/dev/null)" = "$ny" ] && exit 0
 
-log "Ny kode fundet: $(git log -1 --format='%h – %s' "$ny")"
+start=$SECONDS
+dele="$(hvad_bygges "$gammel" "$ny")"
+log "Ny kode fundet: $(git log -1 --format='%h – %s' "$ny") (bygger: $dele)"
 db_aendret=0
 if ! git diff --quiet "$gammel" "$ny" -- migrations/; then
 	db_aendret=1
@@ -123,8 +158,8 @@ fi
 
 # .env og andre filer, der ikke ligger i git, røres ikke.
 git reset -q --hard "$ny"
-if byg && sund; then
-	log "OK: kører nu $(git log -1 --format='%h – %s')."
+if byg "$dele" && sund; then
+	log "OK: kører nu $(git log -1 --format='%h – %s') ($((SECONDS - start)) sek.)."
 	exit 0
 fi
 
@@ -135,7 +170,7 @@ fi
 log "FEJL: ny kode svarer ikke på /health – går tilbage til $(git log -1 --format='%h' "$gammel")."
 echo "$ny" > "$SPRUNGET"
 git reset -q --hard "$gammel"
-if byg && sund; then
+if byg "$dele" && sund; then
 	log "Tilbage på den forrige kode – siden virker igen. Den nye kode ($(git log -1 --format='%h' "$ny")) springes over."
 else
 	log "KRÆVER HANDLING: heller ikke den forrige kode svarer."
