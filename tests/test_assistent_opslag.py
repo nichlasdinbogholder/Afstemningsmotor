@@ -187,7 +187,7 @@ def test_33_alle_opslag_er_laesende(db_session, samme_session, medarbejder, kund
                                                         "date$gte:2026-07-01$and:date$lte:2026-09-30")
             data = [{"entryNumber": 1, "date": "2026-08-01", "account": {"accountNumber": 3217}, "amount": 10,
                      "amountInBaseCurrency": 10, "currency": "DKK", "remainder": 10,
-                     "customer": {"customerNumber": 1}}]
+                     "customer": {"customerNumber": 1}, "invoiceNumber": 4711}]  # tal – som i e-conomic
         else:
             data = []
         return httpx.Response(200, json={"collection": data, "pagination": {"results": len(data)}})
@@ -234,6 +234,7 @@ def test_36_cpr_kontonumre_og_loentekster_skjules(db_session, samme_session, pro
         "Udlæg [CPR skjult] til konto [kontonr. skjult]"
     assert op.skjul_tekst("IBAN DK50 0040 0440 1162 43") == "IBAN [kontonr. skjult]"
     assert op.skjul_tekst("Faktura 4711 på 1.250,00 kr.") == "Faktura 4711 på 1.250,00 kr."
+    assert op.skjul_tekst(4711) == "4711"
 
 
 # --- Værktøjsløkken med en falsk model --------------------------------------------

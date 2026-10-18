@@ -39,10 +39,12 @@ _BANKKONTO = re.compile(r"(?<!\d)\d{4}[- ]\d{6,10}(?!\d)")
 LOENORD = ("løn", "gage", "feriepenge", "feriegodtgørelse", "atp", "am-bidrag", "a-skat", "pension")
 
 
-def skjul_tekst(tekst: str | None) -> str | None:
-    """Fjern CPR-numre og bank-/kontonumre fra en tekst."""
+def skjul_tekst(tekst) -> str | None:
+    """Fjern CPR-numre og bank-/kontonumre fra en tekst. Tal laves til tekst først (e-conomic sender fx
+    fakturanumre som tal)."""
     if tekst is None:
         return None
+    tekst = str(tekst)
     tekst = _IBAN.sub("[kontonr. skjult]", tekst)
     tekst = _BANKKONTO.sub("[kontonr. skjult]", tekst)
     return _CPR.sub("[CPR skjult]", tekst)
