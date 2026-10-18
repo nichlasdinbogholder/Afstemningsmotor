@@ -10,6 +10,7 @@ import { hent, send } from "@/lib/api";
 export type Besked = {
   id: number | null; rolle: "user" | "assistant"; tekst: string; status: string; min_vurdering?: string | null;
   kilder?: { kb_id: number; title: string }[];
+  opslag?: string[]; // det, Svend slog op i kundens regnskab (beskrevet af serveren)
 };
 type Samtale = { id: number; titel: string | null; kunde_id: number | null };
 export type Kunde = { id: number; navn: string; kundenummer: string };
@@ -153,7 +154,7 @@ export function AssistentProvider({ children }: { children: React.ReactNode }) {
           } else if (h.type === "tekst") tilfoej(h.tekst);
           else if (h.type === "slut") {
             slutStatus = h.status;
-            setBeskeder((b) => [...b.slice(0, -1), { ...b[b.length - 1], id: h.besked_id, status: h.status }]);
+            setBeskeder((b) => [...b.slice(0, -1), { ...b[b.length - 1], id: h.besked_id, status: h.status, opslag: h.opslag ?? [] }]);
           } else if (h.type === "fejl") setFejl(h.besked);
         }
       }

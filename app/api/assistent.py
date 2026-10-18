@@ -45,7 +45,8 @@ def _samtale_json(s: AssistantConversation, session: Session | None = None) -> d
 
 def _besked_json(b: AssistantMessage, vurdering: str | None = None) -> dict:
     return {"id": b.id, "rolle": b.role, "tekst": b.content, "status": b.status,
-            "kilder": b.sources or [], "tidspunkt": b.created_at.isoformat(), "min_vurdering": vurdering}
+            "kilder": b.sources or [], "opslag": [sm.beskriv_opslag(x) for x in b.lookups or []],
+            "tidspunkt": b.created_at.isoformat(), "min_vurdering": vurdering}
 
 
 def _hent_egen(session: Session, samtale_id: int, m: Staff) -> AssistantConversation:
@@ -161,7 +162,8 @@ async def _stream(samtale_id: int, spoergsmaal_id: int, beskeder_til_model: list
             yield _haendelse({"type": "tekst", "tekst": AFKORTET_TEKST})
         besked_id = _gem(samtale_id, svar, "complete")
         gemt = True
-        yield _haendelse({"type": "slut", "besked_id": besked_id, "status": "complete"})
+        yield _haendelse({"type": "slut", "besked_id": besked_id, "status": "complete",
+                          "opslag": [sm.beskriv_opslag(x) for x in svar.lookups]})
     except (asyncio.CancelledError, GeneratorExit):
         # Medarbejderen lukkede siden midt i svaret: gem det modtagne med markering (ikke en tom række).
         if svar.tekst.strip():

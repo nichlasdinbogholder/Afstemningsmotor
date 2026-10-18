@@ -138,10 +138,44 @@ def kundetekst(kunde: Client | None) -> str:
             f"Samtalen handler om kunden {kunde.navn} (kundenr. {kunde.kundenummer}"
             f"{', CVR ' + kunde.cvr if kunde.cvr else ''}), client_id {kunde.id}.\n"
             "Du kan slå op i kundens regnskab med opslagsfunktionerne (kun læsning). Brug dem, når spørgsmålet "
-            "kræver kundens tal – gæt aldrig et tal. Nævn kun tal, du selv har slået op i denne samtale, og skriv "
-            "hvad du slog op, og hvor (konto, periode). Rammer et opslag loftet for rækker eller antal opslag, så "
-            "sig det i svaret i stedet for at hente videre. Tallene er fakta fra bogføringen – du konkluderer "
-            "stadig ikke på kundens vegne, og du laver ingen momsangivelse.")
+            "kræver kundens tal – gæt aldrig et tal. Nævn kun tal, du selv har slået op i denne samtale.\n"
+            "Har du slået tal op, bygger du svaret sådan:\n"
+            "1. Først hvad du slog op, og hvor: konto (nummer og navn), periode og hvad du fandt – fx antal "
+            "posteringer og beløb.\n"
+            "2. Så reglen, forklaret kort.\n"
+            "3. Til sidst, hvem der skal vurdere den konkrete sag.\n"
+            "Eksempel:\n"
+            "Jeg har set på konto 3217 (Arbejdstøj) for 3. kvartal: der er bogført 12.400 kr. fordelt på fem bilag.\n"
+            "Reglen er, at … [forklaring]\n"
+            "Om de konkrete bilag kan stå, skal du have den kundeansvarlige til at vurdere.\n"
+            "Skriv beløb på dansk (1.234,50 kr.). Rammer et opslag loftet for rækker eller antal opslag, så sig det "
+            "i svaret i stedet for at hente videre. Tallene er fakta fra bogføringen – du konkluderer stadig ikke "
+            "på kundens vegne, og du laver ingen momsangivelse eller siger, hvad der skal indberettes.")
+
+
+OPSLAGSNAVNE = {
+    "get_kontoplan": "Kontoplan", "get_saldo": "Saldo", "get_posteringer": "Posteringer",
+    "get_aabne_debitorer": "Åbne poster hos debitorer", "get_aabne_kreditorer": "Åbne poster hos kreditorer",
+    "get_moms": "Momskonti", "get_kundeinfo": "Kundeinfo",
+}
+
+
+def beskriv_opslag(opslag: dict) -> str:
+    """Én linje om et opslag til visning under svaret, fx 'Saldo · konto 3217 · 01.07.2026–30.09.2026 · 1 række'."""
+    a = opslag.get("argumenter") or {}
+    dele = [OPSLAGSNAVNE.get(opslag.get("funktion"), str(opslag.get("funktion")))]
+    if a.get("konto") is not None:
+        dele.append(f"konto {a['konto']}")
+    try:
+        dele.append(f"{_dk_dato(date.fromisoformat(a['fra']))}–{_dk_dato(date.fromisoformat(a['til']))}")
+    except (KeyError, TypeError, ValueError):
+        pass
+    if opslag.get("fejl"):
+        dele.append(f"ikke udført: {opslag['fejl']}")
+    else:
+        n = opslag.get("antal_raekker", 0)
+        dele.append(f"{n} {'række' if n == 1 else 'rækker'}" + (" (afkortet)" if opslag.get("afkortet") else ""))
+    return " · ".join(dele)
 
 
 def systemtekst(materiale: list[KbDocument] | None = None, kunde: Client | None = None) -> str:
