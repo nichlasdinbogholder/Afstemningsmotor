@@ -23,7 +23,9 @@ TABELLER = {
     "dunning_skips", "installment_plans", "installment_lines", "reference_rates", "collection_cases",
     "fee_revenue", "billing_periods",
     "assistant_conversations", "assistant_messages", "assistant_feedback", "kb_documents", "kb_rate_checks",
-    "staff_cost_rates",
+    "time_employees", "time_employee_rates", "time_client_terms", "time_sales_rates", "time_task_types",
+    "time_weeks", "time_entry_notes", "time_toil_settlements", "time_toil_movements", "time_payroll_batches",
+    "time_payroll_lines", "time_audit",
 }
 
 
@@ -67,7 +69,7 @@ def test_alle_staff_kolonner_peger_paa_staff(inspektor):
     forventet = {
         "clients": {"ansvarlig_medarbejder_id", "daglig_medarbejder_id"},
         "tasks": {"ansvarlig_id"},
-        "time_entries": {"staff_id"},
+        "time_entries": {"created_by"},
         "notes": {"staff_id"},
         "documents": {"uploadet_af"},
         "handovers": {"fra_staff_id", "til_staff_id", "kvitteret_af_staff_id"},
@@ -79,7 +81,13 @@ def test_alle_staff_kolonner_peger_paa_staff(inspektor):
         "assistant_conversations": {"staff_id"},
         "assistant_feedback": {"staff_id"},
         "kb_rate_checks": {"reviewed_by"},
-        "staff_cost_rates": {"staff_id", "created_by"},
+        "time_employees": {"staff_id"},
+        "time_employee_rates": {"created_by"},
+        "time_client_terms": {"created_by"},
+        "time_weeks": {"rejected_by", "approved_by"},
+        "time_entry_notes": {"author_id"},
+        "time_toil_settlements": {"settled_by"},
+        "time_audit": {"actor_id"},
     }
     for tabel, kolonner in forventet.items():
         til_staff = {
@@ -145,6 +153,16 @@ def test_alle_staff_kolonner_peger_paa_staff(inspektor):
         ("kb_rate_checks", "outcome"),
         ("kb_rate_checks", "decision"),
         ("kb_rate_checks", "method"),
+        ("time_employees", "employment"),
+        ("time_client_terms", "billing_model"),
+        ("time_task_types", "kind"),
+        ("time_weeks", "status"),
+        ("time_entries", "task_kind"),
+        ("time_entries", "billing_model"),
+        ("time_toil_movements", "kind"),
+        ("time_payroll_batches", "status"),
+        ("time_payroll_lines", "kind"),
+        ("time_audit", "action"),
     ],
 )
 def test_statusfelter_er_laast_til_faste_vaerdier(inspektor, tabel, kolonne):

@@ -1,21 +1,8 @@
 """Vores egne medarbejdere."""
 
-from datetime import date, datetime
-from decimal import Decimal
+from datetime import datetime
 
-from sqlalchemy import (
-    Boolean,
-    CheckConstraint,
-    Date,
-    DateTime,
-    ForeignKey,
-    Integer,
-    Numeric,
-    String,
-    UniqueConstraint,
-    func,
-    true,
-)
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Integer, String, func, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base, kun_vaerdier
@@ -48,24 +35,3 @@ class Staff(Base):
 
     def __repr__(self) -> str:
         return f"<Staff id={self.id} navn={self.navn!r}>"
-
-
-class StaffCostRate(Base):
-    """Kostpris pr. time for en medarbejder – med den dato, den gælder fra. KUN for administratorer.
-
-    En ny kostpris overskriver aldrig den gamle: timer regnes med den kostpris, der gjaldt på dagen.
-    Den gældende kostpris = den med den seneste `valid_from`, der ikke ligger efter dagen. Slettes ikke.
-    """
-
-    __tablename__ = "staff_cost_rates"
-    __table_args__ = (
-        UniqueConstraint("staff_id", "valid_from", name="uq_staff_cost_rates_medarbejder_dato"),
-        CheckConstraint("hourly_cost >= 0", name="kostpris_ikke_negativ"),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    staff_id: Mapped[int] = mapped_column(ForeignKey("staff.id", ondelete="RESTRICT"))
-    hourly_cost: Mapped[Decimal] = mapped_column(Numeric(15, 2))
-    valid_from: Mapped[date] = mapped_column(Date)
-    created_by: Mapped[int] = mapped_column(ForeignKey("staff.id", ondelete="RESTRICT"), index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
