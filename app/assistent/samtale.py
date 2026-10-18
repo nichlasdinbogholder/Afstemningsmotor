@@ -9,6 +9,8 @@
   ikke oplyser satser, beløbsgrænser eller frister (fast regel 1).
 """
 
+import asyncio
+import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -134,8 +136,12 @@ def kundetekst(kunde: Client | None) -> str:
         return ""
     return ("VALGT KUNDE\n"
             f"Samtalen handler om kunden {kunde.navn} (kundenr. {kunde.kundenummer}"
-            f"{', CVR ' + kunde.cvr if kunde.cvr else ''}). Opslag i kundens regnskab er endnu ikke slået til – "
-            "nævn derfor ingen tal fra kundens regnskab, og sig det, hvis spørgsmålet kræver dem.")
+            f"{', CVR ' + kunde.cvr if kunde.cvr else ''}), client_id {kunde.id}.\n"
+            "Du kan slå op i kundens regnskab med opslagsfunktionerne (kun læsning). Brug dem, når spørgsmålet "
+            "kræver kundens tal – gæt aldrig et tal. Nævn kun tal, du selv har slået op i denne samtale, og skriv "
+            "hvad du slog op, og hvor (konto, periode). Rammer et opslag loftet for rækker eller antal opslag, så "
+            "sig det i svaret i stedet for at hente videre. Tallene er fakta fra bogføringen – du konkluderer "
+            "stadig ikke på kundens vegne, og du laver ingen momsangivelse.")
 
 
 def systemtekst(materiale: list[KbDocument] | None = None, kunde: Client | None = None) -> str:
@@ -185,7 +191,7 @@ def gem_spoergsmaal(session: Session, samtale: AssistantConversation, tekst: str
 
 def gem_svar(session: Session, samtale_id: int, svar: "Svar", status: str) -> AssistantMessage:
     besked = AssistantMessage(conversation_id=samtale_id, role="assistant", content=svar.tekst, status=status,
-                              sources=svar.kilder, lookups=[], model=svar.model, tokens_in=svar.tokens_ind,
+                              sources=svar.kilder, lookups=svar.lookups, model=svar.model, tokens_in=svar.tokens_ind,
                               tokens_out=svar.tokens_ud, latency_ms=svar.millisekunder)
     session.add(besked)
     samtale = session.get(AssistantConversation, samtale_id)
@@ -207,6 +213,7 @@ class Svar:
     afkortet: bool = False
     afvist: bool = False
     kilder: list = field(default_factory=list)  # [{kb_id, title}] – dokumenterne, der blev sendt med
+    lookups: list = field(default_factory=list)  # opslag i kundens regnskab (se opslag.py)
 
 
 def _klient():
@@ -220,28 +227,94 @@ def _klient():
     return anthropic.AsyncAnthropic(api_key=noegle.get_secret_value(), max_retries=2, timeout=120.0)
 
 
-async def stream_svar(beskeder: list[dict], svar: Svar, system: str | None = None) -> AsyncIterator[str]:
-    """Kald modellen og giv tekststykkerne videre, efterhånden som de kommer. `svar` udfyldes undervejs."""
+LOFT_OPSLAG_TEKST = ("\n\n(Svend har brugt det højeste antal opslag i kundens regnskab ({n}) til dette spørgsmål. "
+                     "Mangler der noget, så spørg mere præcist.)")
+LOFT_RAEKKER_TEKST = ("\n\n(Mindst ét opslag gav flere rækker end Svend må hente ({n}), så listen er afkortet. "
+                      "Spørg gerne om en kortere periode eller én konto.)")
+
+
+def _blok(b) -> dict:
+    """En indholdsblok fra modellens svar, som den skal sendes tilbage i næste kald."""
+    if b.type == "text":
+        return {"type": "text", "text": b.text}
+    if b.type == "tool_use":
+        return {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
+    return b.model_dump(mode="json", exclude_none=True)
+
+
+async def stream_svar(beskeder: list[dict], svar: Svar, system: str | None = None,
+                      opslag=None) -> AsyncIterator[str]:
+    """Kald modellen og giv tekststykkerne videre, efterhånden som de kommer. `svar` udfyldes undervejs.
+
+    Med `opslag` (kun i en samtale om en kunde) får modellen de læsende opslagsfunktioner. Beder den om et
+    opslag, udføres det på serveren (med kontrol af kunden), resultatet sendes tilbage, og modellen fortsætter.
+    Højst ASSISTANT_MAX_TOOL_CALLS opslag pr. besked – derefter må modellen kun skrive sit svar."""
+    from app.assistent import opslag as opslagsmodul
+
     s = get_settings()
     klient = _klient()
     start = datetime.now(timezone.utc)
-    # Afviser modellen et spørgsmål af sikkerhedsgrunde, prøver API'et selv en anden model ("fallbacks").
-    async with klient.beta.messages.stream(
-        model=s.assistant_model,
-        max_tokens=s.assistant_max_tokens,
-        system=system or systemtekst(),
-        messages=beskeder,
-        output_config={"effort": s.assistant_effort},
-        betas=["server-side-fallback-2026-07-01"],
-        fallbacks="default",
-    ) as stream:
-        async for stykke in stream.text_stream:
-            svar.tekst += stykke
-            yield stykke
-        endelig = await stream.get_final_message()
-    svar.model = endelig.model
-    svar.tokens_ind = endelig.usage.input_tokens
-    svar.tokens_ud = endelig.usage.output_tokens
+    beskeder = list(beskeder)
+    brugt = 0
+    loft_naaet = False
+    svar.tokens_ind, svar.tokens_ud = 0, 0
+    if opslag is not None:
+        svar.lookups = opslag.lookups  # samme liste – så opslagene gemmes, også hvis svaret afbrydes
+    for _ in range(s.assistant_max_tool_calls + 2):
+        ekstra = {}
+        if opslag is not None:
+            ekstra["tools"] = opslagsmodul.VAERKTOEJER
+            if brugt >= s.assistant_max_tool_calls:
+                ekstra["tool_choice"] = {"type": "none"}
+        # Afviser modellen et spørgsmål af sikkerhedsgrunde, prøver API'et selv en anden model ("fallbacks").
+        async with klient.beta.messages.stream(
+            model=s.assistant_model,
+            max_tokens=s.assistant_max_tokens,
+            system=system or systemtekst(),
+            messages=beskeder,
+            output_config={"effort": s.assistant_effort},
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+            **ekstra,
+        ) as stream:
+            async for stykke in stream.text_stream:
+                svar.tekst += stykke
+                yield stykke
+            endelig = await stream.get_final_message()
+        svar.model = endelig.model
+        svar.tokens_ind += endelig.usage.input_tokens
+        svar.tokens_ud += endelig.usage.output_tokens
+        svar.afkortet = endelig.stop_reason == "max_tokens"
+        svar.afvist = endelig.stop_reason == "refusal"
+        kald = [b for b in endelig.content if b.type == "tool_use"]
+        if opslag is None or endelig.stop_reason != "tool_use" or not kald:
+            break
+        resultater = []
+        for b in kald:
+            if brugt >= s.assistant_max_tool_calls:
+                loft_naaet = True
+                indhold = {"fejl": f"Loftet på {s.assistant_max_tool_calls} opslag pr. besked er nået. Hent ikke "
+                                   "mere – skriv svaret ud fra det, du har, og sig, at loftet er nået."}
+            else:
+                brugt += 1
+                indhold = await asyncio.to_thread(opslag.udfoer, b.name, dict(b.input or {}))
+            resultater.append({"type": "tool_result", "tool_use_id": b.id, "is_error": "fejl" in indhold,
+                               "content": json.dumps(indhold, ensure_ascii=False)})
+        if brugt >= s.assistant_max_tool_calls:
+            loft_naaet = True
+        beskeder += [{"role": "assistant", "content": [_blok(b) for b in endelig.content]},
+                     {"role": "user", "content": resultater}]
+        # Kommer der mere tekst efter et opslag, adskilles det fra det foregående.
+        if svar.tekst and not svar.tekst.endswith("\n"):
+            svar.tekst += "\n\n"
+            yield "\n\n"
+    if opslag is not None:
+        if loft_naaet:
+            tekst = LOFT_OPSLAG_TEKST.format(n=s.assistant_max_tool_calls)
+            svar.tekst += tekst
+            yield tekst
+        if opslag.afkortet:
+            tekst = LOFT_RAEKKER_TEKST.format(n=s.assistant_max_rows)
+            svar.tekst += tekst
+            yield tekst
     svar.millisekunder = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
-    svar.afkortet = endelig.stop_reason == "max_tokens"
-    svar.afvist = endelig.stop_reason == "refusal"

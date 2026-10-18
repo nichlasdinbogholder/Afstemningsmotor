@@ -53,7 +53,7 @@ def klient(db_session, medarbejder, monkeypatch):
 
 
 def _falsk_model(monkeypatch, stykker, fejl=None, kontrol=None, system_ud=None):
-    async def stream_svar(beskeder, svar, system=None):
+    async def stream_svar(beskeder, svar, system=None, opslag=None):
         if kontrol:
             kontrol(beskeder)
         if system_ud is not None:
@@ -194,7 +194,7 @@ def test_kundesamtale_faar_kunden_i_systemteksten(db_session, klient, medarbejde
     _falsk_model(monkeypatch, ["x"], system_ud=system)
     klient.post(f"/api/v1/assistant/conversations/{s['id']}/messages", headers=H, json={"tekst": "Hej"})
     assert "Samtalen handler om kunden Egen Tømrer ApS" in system[0]
-    assert "Opslag i kundens regnskab er endnu ikke slået til" in system[0]
+    assert f"client_id {egen.id}" in system[0] and "gæt aldrig et tal" in system[0]
 
 
 # 9 + 10. Spørgsmålet gemmes før kaldet; svaret streames og gemmes komplet

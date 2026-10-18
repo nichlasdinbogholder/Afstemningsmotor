@@ -8,6 +8,8 @@ aldrig, hvilket system data kommer fra – det bruger kun AccountingProvider:
         provider.fetch_customers()               -> list[Kunde]
         provider.fetch_suppliers()               -> list[Leverandoer]
         provider.fetch_entries(efter)            -> PosteringsSvar    (kun nye siden `efter`)
+        provider.fetch_entries_period(fra, til)  -> list[Postering]   (alle poster med dato i perioden)
+        provider.fetch_vat_accounts()            -> list[Momskode]    (momskoder og deres momskonti)
         provider.fetch_open_entries()            -> list[AabenPost]   (altid alle)
         provider.fetch_journals()                -> list[Kassekladde]
         provider.fetch_journal_entries(nummer)   -> list[KladdePost]  (endnu ikke bogført)
@@ -253,6 +255,17 @@ class Regnskabsaar:
 
 
 @dataclass(frozen=True)
+class Momskode:
+    """En momskode i kundens egen opsætning og den konto, momsen bogføres på."""
+
+    kode: str
+    navn: str | None
+    sats: Decimal | None          # procent, fx 25
+    kontonummer: int | None       # momskontoen
+    modkontonummer: int | None    # modkonto (fx ved EU-køb, hvor der både er købs- og salgsmoms)
+
+
+@dataclass(frozen=True)
 class PosteringsSvar:
     poster: list[Postering]
     ny_cursor: str | None
@@ -269,6 +282,8 @@ class AccountingProvider(Protocol):
     def fetch_customers(self) -> list[Kunde]: ...
     def fetch_suppliers(self) -> list[Leverandoer]: ...
     def fetch_entries(self, efter: str | None) -> PosteringsSvar: ...
+    def fetch_entries_period(self, fra: date, til: date) -> list[Postering]: ...
+    def fetch_vat_accounts(self) -> list[Momskode]: ...
     def fetch_open_entries(self) -> list[AabenPost]: ...
     def fetch_journals(self) -> list[Kassekladde]: ...
     def fetch_journal_entries(self, nummer: int) -> list[KladdePost]: ...

@@ -23,6 +23,7 @@ from app.api.data import kraev_header
 from app.api.login import db, nuvaerende_medarbejder
 from app.assistent import samtale as sm
 from app.assistent.models import AssistantConversation, AssistantFeedback, AssistantMessage
+from app.assistent.opslag import Opslag
 from app.db import ny_session
 from app.kunder.models import Client
 from app.personale.models import Staff
@@ -136,19 +137,21 @@ async def spoerg(samtale_id: int, data: Spoergsmaal, m: Staff = Depends(nuvaeren
     beskeder_til_model = sm.historik(session, samtale_id)
     materiale = sm.find_materiale(session, tekst)
     kunde = session.get(Client, samtale.client_id) if samtale.client_id else None
+    # Opslagene i kundens regnskab findes KUN i en samtale om en kunde (spec-test 38).
+    opslag = Opslag(staff_id=m.id, client_id=kunde.id) if kunde is not None else None
     return StreamingResponse(_stream(samtale_id, spoergsmaal.id, beskeder_til_model,
-                                     sm.systemtekst(materiale, kunde), sm.kilder(materiale)),
+                                     sm.systemtekst(materiale, kunde), sm.kilder(materiale), opslag),
                              media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 async def _stream(samtale_id: int, spoergsmaal_id: int, beskeder_til_model: list[dict], system: str,
-                  kilder: list[dict]):
+                  kilder: list[dict], opslag: Opslag | None = None):
     svar = sm.Svar(kilder=kilder)
     gemt = False
     yield _haendelse({"type": "start", "spoergsmaal_id": spoergsmaal_id, "kilder": kilder})
     try:
-        async for stykke in sm.stream_svar(beskeder_til_model, svar, system):
+        async for stykke in sm.stream_svar(beskeder_til_model, svar, system, opslag=opslag):
             yield _haendelse({"type": "tekst", "tekst": stykke})
         if svar.afvist and not svar.tekst.strip():
             svar.tekst = AFVIST_TEKST
