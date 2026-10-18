@@ -20,8 +20,9 @@ from sqlalchemy.orm import Session
 
 from app.assistent.models import AssistantConversation, AssistantMessage, KbDocument
 from app.assistent.satskontrol import er_foraeldet
-from app.kunder.models import Client
 from app.config import get_settings
+from app.kunder.models import Client
+from app.personale.models import Staff
 from app.sikkerhed.hemmeligheder import registrer_hemmelighed
 
 GRUNDINSTRUKS = Path(__file__).with_name("system_prompt.md")
@@ -111,18 +112,21 @@ def materialetekst(materiale: list[KbDocument]) -> str:
     return "\n\n".join(dele)
 
 
-def tilknyttede_kunder(session: Session, staff_id: int) -> list[Client]:
-    """De kunder, medarbejderen må slå op hos i Svend: aktive kunder, hvor hun er den ANSVARLIGE medarbejder
-    (beslutning 18.10.2026). Kontrolleres på serveren ved hvert kald – aldrig kun i brugerfladen."""
-    return session.scalars(
-        select(Client).where(Client.status == "aktiv", Client.ansvarlig_medarbejder_id == staff_id)
-        .order_by(Client.navn)
-    ).all()
+def tilknyttede_kunder(session: Session, medarbejder: Staff) -> list[Client]:
+    """De kunder, medarbejderen må slå op hos i Svend (beslutning 18.10.2026): en ADMINISTRATOR må alle aktive
+    kunder; en medarbejder kun de aktive kunder, hun er ANSVARLIG for. Kontrolleres på serveren ved hvert kald –
+    aldrig kun i brugerfladen."""
+    q = select(Client).where(Client.status == "aktiv")
+    if medarbejder.rolle != "admin":
+        q = q.where(Client.ansvarlig_medarbejder_id == medarbejder.id)
+    return session.scalars(q.order_by(Client.navn)).all()
 
 
-def er_tilknyttet(session: Session, staff_id: int, client_id: int) -> bool:
+def er_tilknyttet(session: Session, medarbejder: Staff, client_id: int) -> bool:
     k = session.get(Client, client_id)
-    return k is not None and k.status == "aktiv" and k.ansvarlig_medarbejder_id == staff_id
+    if k is None or k.status != "aktiv":
+        return False
+    return medarbejder.rolle == "admin" or k.ansvarlig_medarbejder_id == medarbejder.id
 
 
 def kundetekst(kunde: Client | None) -> str:

@@ -324,7 +324,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     serveren; nøglen `ANTHROPIC_API_KEY` registreres i logfilteret. Grundinstruksen i `system_prompt.md`.
   - `app/api/assistent.py`: `/api/v1/assistant` – status, conversations (kun egne; andres = 404), messages
     (SSE; spørgsmål gemmes før kaldet; afbrudt = 'interrupted'), feedback (én pr. svar). POST kræver X-Afstemning.
-  - Kundevælger (fase 4): kun aktive kunder, hvor man er ANSVARLIG (`er_tilknyttet()`, tjekkes ved hvert kald);
+  - Kundevælger (fase 4): kun aktive kunder, hvor man er ANSVARLIG – admin: alle aktive (`er_tilknyttet()`, tjekkes ved hvert kald);
     kunden kan ikke skiftes i en samtale. Kundeopslag hentes DIREKTE fra e-conomic via adapter-laget, kun læsning.
   - `proeve.py`: `python -m app.assistent.proeve` – faste prøvespørgsmål mod den rigtige model (kode 0/1/2).
   - Webdelen: `web/components/assistent/` (Provider + panel i Ramme, dvs. rodlayoutet). Assistenten hedder **Svend**.
