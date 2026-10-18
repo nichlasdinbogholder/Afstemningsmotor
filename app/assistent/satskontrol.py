@@ -250,6 +250,47 @@ def kontroller_alle(session: Session, nu: datetime | None = None) -> list[KbRate
     return [kontroller(session, d, nu) for d in satser]
 
 
+# --- Forældelse (trin 11): sikkerhedsnettet under mandagsjobbet --------------------------------------------
+# Holder kontrollen op med at virke, uden at nogen opdager det, siger Svend selv fra: en sats, der ikke er
+# bekræftet i ASSISTANT_RATE_STALE_DAYS dage, er FORÆLDET (Svend advarer, når den bruges). Efter det dobbelte
+# oprettes et fund (udfald 'stale') – højst ét åbent pr. sats.
+
+def dage_siden_bekraeftet(dok: KbDocument, nu: datetime | None = None) -> int | None:
+    if dok.last_verified_at is None:
+        return None
+    return ((nu or datetime.now(timezone.utc)) - dok.last_verified_at).days
+
+
+def er_foraeldet(dok: KbDocument, nu: datetime | None = None) -> bool:
+    if dok.category != "satser":
+        return False
+    dage = dage_siden_bekraeftet(dok, nu)
+    return dage is None or dage > get_settings().assistant_rate_stale_days
+
+
+def tjek_foraeldelse(session: Session, nu: datetime | None = None) -> list[KbRateCheck]:
+    nu = nu or datetime.now(timezone.utc)
+    graense = get_settings().assistant_rate_stale_days * 2
+    nye = []
+    for dok in session.scalars(select(KbDocument).where(KbDocument.category == "satser",
+                                                        KbDocument.status == "active").order_by(KbDocument.id)):
+        dage = dage_siden_bekraeftet(dok, nu)
+        if dage is not None and dage <= graense:
+            continue
+        aaben = session.scalar(select(KbRateCheck.id).where(
+            KbRateCheck.kb_id == dok.id, KbRateCheck.outcome == "stale", KbRateCheck.decision.is_(None)))
+        if aaben is not None:
+            continue
+        grund = ("Satsen er aldrig blevet bekræftet" if dage is None else
+                 f"Satsen er ikke bekræftet siden {dok.last_verified_at.strftime('%d.%m.%Y')} ({dage} dage)")
+        k = KbRateCheck(kb_id=dok.id, checked_at=nu, outcome="stale", previous_value=dok.value,
+                        error=grund + " – kør kontrollen, eller ret satsen i videnbasen.")
+        session.add(k)
+        nye.append(k)
+    session.flush()
+    return nye
+
+
 # --- Afgørelse (et menneske) ------------------------------------------------------------------------------
 
 class AfgoerelsesFejl(Exception):

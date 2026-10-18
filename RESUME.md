@@ -467,6 +467,12 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
   browser 12/12.
   **Sådan skrives hintet:** sæt den tekst, tallet står LIGE EFTER på siden, i citationstegn – fx
   `Tallet efter 'Op til 20.000 km'`. Står teksten flere steder, eller er der intet citat, læser Svend siden.
+- **Fase 3, trin 11 (16.10.2026):** forældelse – sikkerhedsnettet. En aktiv sats, der ikke er bekræftet i
+  ASSISTANT_RATE_STALE_DAYS (45) dage, er forældet (beregnes ved opslag – ingen kolonne): mærkaten "Forældet" i
+  videnbasen, og Svend får besked om at skrive ordret "Satsen er senest bekræftet [dato] — tjek den, før du bruger
+  den til noget bindende." Over 2 × dagene (90) laver det daglige job `assistent_foraeldelse` (kl. 06.30) et fund
+  (kb_rate_checks.outcome = 'stale', højst ét åbent pr. sats), som kvitteres i Satskontrol. Migrering 93484f38bd75.
+  Tests: spec-test 29 m.fl. i `tests/test_satskontrol.py`. **Fase 3 er færdig.**
 
 ## Beslutninger
 - 16.10.2026: Hub'en bruges KUN på PC – ikke på telefon. Nye sider bygges ikke til mobil. (Spec'ens widget-test 5

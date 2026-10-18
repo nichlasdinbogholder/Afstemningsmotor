@@ -13,6 +13,7 @@ type Dok = {
   id: number; titel: string; kategori: string; status: string; vaerdi: string | null; enhed: string | null;
   kilde: string | null; gyldig_fra: string | null; gyldig_til: string | null; senest_bekraeftet: string | null;
   kontrol_kilde: string | null; kontrol_hint: string | null; rettet_af: string | null; rettet: string; tekst?: string;
+  foraeldet: boolean;
 };
 
 const KATEGORIER: Record<string, string> = {
@@ -133,7 +134,10 @@ export default function Videnbase({ start = null }: { start?: number | null }) {
                         className={`w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 ${valgt?.id === d.id ? "bg-slate-50" : ""}`}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-slate-900">{d.titel}</span>
-                    <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${STATUS[d.status]?.farve}`}>{STATUS[d.status]?.tekst}</span>
+                    <span className="flex gap-1">
+                      {d.foraeldet && <span title="Ikke bekræftet længe – tjek satsen" className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-900">Forældet</span>}
+                      <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${STATUS[d.status]?.farve}`}>{STATUS[d.status]?.tekst}</span>
+                    </span>
                   </div>
                   <div className="mt-0.5 text-xs text-slate-500">
                     {KATEGORIER[d.kategori]}
@@ -217,6 +221,7 @@ export default function Videnbase({ start = null }: { start?: number | null }) {
               <p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm">
                 <span className="font-semibold">{vaerdi(valgt.vaerdi)} {valgt.enhed}</span>
                 <span className="text-slate-500"> · senest bekræftet {valgt.senest_bekraeftet ? tidspunkt(valgt.senest_bekraeftet) : "aldrig"}</span>
+                {valgt.foraeldet && <span className="block text-amber-800">Forældet: Svend advarer, når satsen bruges. Kør satskontrollen, eller ret satsen.</span>}
               </p>
             )}
             <div className="mt-4 text-sm leading-relaxed text-slate-800"><Svartekst tekst={valgt.tekst ?? ""} /></div>
