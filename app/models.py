@@ -20,7 +20,7 @@ from app.bilag.models import (
     InboxPosting,
     SupplierAccountMap,
 )
-from app.crm.models import Document, Handover, Note, Task, TimeEntry
+from app.crm.models import Document, Handover, Note, Task
 from app.jobs.models import Job
 from app.kontoudtog.models import Statement, StatementLine
 from app.kunder.models import Client, Contact, Credential
@@ -39,10 +39,25 @@ from app.opkraevning.models import (
     PaymentAllocation,
     ReferenceRate,
 )
-from app.personale.models import Staff, StaffCostRate
+from app.personale.models import Staff
 from app.rules.models import Finding, FindingEvent, RuleRun
 from app.regnskab.models import Account, CustomerCache, EntryCache, OpenEntryCache, SupplierCache
 from app.synk.models import SyncState
+from app.timeregistrering.models import (
+    TimeAudit,
+    TimeClientTerms,
+    TimeEmployee,
+    TimeEmployeeRate,
+    TimeEntryNote,
+    TimePayrollBatch,
+    TimePayrollLine,
+    TimeRegistration,
+    TimeSalesRate,
+    TimeTaskType,
+    TimeToilMovement,
+    TimeToilSettlement,
+    TimeWeek,
+)
 
 __all__ = [
     "AssistantConversation",
@@ -89,11 +104,22 @@ __all__ = [
     "Note",
     "OpenEntryCache",
     "Staff",
-    "StaffCostRate",
     "Statement",
     "StatementLine",
     "SupplierCache",
     "SyncState",
     "Task",
-    "TimeEntry",
+    "TimeAudit",
+    "TimeClientTerms",
+    "TimeEmployee",
+    "TimeEmployeeRate",
+    "TimeEntryNote",
+    "TimePayrollBatch",
+    "TimePayrollLine",
+    "TimeRegistration",
+    "TimeSalesRate",
+    "TimeTaskType",
+    "TimeToilMovement",
+    "TimeToilSettlement",
+    "TimeWeek",
 ]

@@ -1,11 +1,10 @@
-"""CRM: opgaver, timer, noter, dokumenter og overleveringer.
+"""CRM: opgaver, noter, dokumenter og overleveringer (timer ligger i app/timeregistrering).
 
-Historik (timer, noter, dokumenter, overleveringer) må ikke forsvinde, så
+Historik (noter, dokumenter, overleveringer) må ikke forsvinde, så
 kunder og medarbejdere med historik kan ikke slettes (ondelete=RESTRICT).
 """
 
 from datetime import date, datetime
-from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
@@ -14,7 +13,6 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
-    Numeric,
     String,
     Text,
     false,
@@ -61,25 +59,6 @@ class Task(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     loest: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-
-class TimeEntry(Base):
-    __tablename__ = "time_entries"
-    __table_args__ = (
-        CheckConstraint("timer > 0 AND timer <= 24", name="timer_0_til_24"),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    client_id: Mapped[int] = _kunde()
-    staff_id: Mapped[int] = _medarbejder()
-    dato: Mapped[date] = mapped_column(Date)
-    timer: Mapped[Decimal] = mapped_column(Numeric(4, 2))
-    opgavetype: Mapped[str | None] = mapped_column(String(100))
-    kommentar: Mapped[str | None] = mapped_column(Text)
-    faktureret: Mapped[bool] = mapped_column(Boolean, server_default=false())
-    oprettet: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
 
 
 class Note(Base):

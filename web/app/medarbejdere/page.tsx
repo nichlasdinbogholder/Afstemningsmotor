@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { useMig } from "@/components/Ramme";
 import { hent, send } from "@/lib/api";
 import { dato, tidspunkt } from "@/lib/format";
@@ -8,9 +8,29 @@ import { dato, tidspunkt } from "@/lib/format";
 type Medarbejder = {
   id: number; navn: string; email: string; rolle: "admin" | "medarbejder"; aktiv: boolean;
   forbundet_til_microsoft: boolean; sidst_logget_ind: string | null;
-  kostpris_pr_time: string | null; kostpris_fra: string | null;
-  naeste_kostpris: { kostpris_pr_time: string; fra: string } | null;
+  tid: Tid;
 };
+type Sats = { fra: string; til: string | null; normtid: string | null; kostpris_pr_time: string;
+  produktive_timer_aar: string; note: string | null };
+type Tid = {
+  ansaettelse: "fastloennet" | "timeloennet" | null; flexjob: boolean; afspadsering: boolean | null;
+  loenref: string | null; sats: Sats | null; naeste_sats: Sats | null;
+  tidligere_kostpris: { kostpris_pr_time: string; fra: string } | null;
+};
+
+const ANSAETTELSE = { fastloennet: "Fastlønnet", timeloennet: "Timelønnet" };
+
+function tal(v: string): string {
+  return Number(v).toLocaleString("da-DK", { maximumFractionDigits: 2 });
+}
+
+// Kun dansk skrivemåde: 425 · 425,50 · 1.250,00 – "425.5" afvises, så et tal aldrig gættes.
+// Returnerer tallet med punktum (til serveren) eller null, hvis det ikke kan læses.
+function danskTal(v: string): string | null {
+  const t = v.trim();
+  if (!/^\d{1,3}(\.\d{3})*(,\d{1,2})?$|^\d+(,\d{1,2})?$/.test(t)) return null;
+  return t.replace(/\./g, "").replace(",", ".");
+}
 
 function kr(v: string): string {
   return Number(v).toLocaleString("da-DK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " kr.";
@@ -22,6 +42,7 @@ export default function Side() {
   const mig = useMig();
   const [liste, setListe] = useState<Medarbejder[] | null>(null);
   const [besked, setBesked] = useState<{ tekst: string; fejl?: boolean } | null>(null);
+  const [aaben, setAaben] = useState<number | null>(null);
   const hentListe = useCallback(() => { hent<Medarbejder[]>("/api/medarbejdere").then(setListe); }, []);
   useEffect(() => { if (mig?.rolle === "admin") hentListe(); }, [mig, hentListe]);
 
@@ -53,14 +74,15 @@ export default function Side() {
           <table className="w-full text-sm">
             <thead className="border-b border-slate-200 text-left text-xs font-semibold text-slate-600">
               <tr><th className="px-3 py-2">Navn</th><th className="px-3 py-2">E-mail</th><th className="px-3 py-2">Rolle</th>
-                <th className="px-3 py-2">Kostpris pr. time</th>
+                <th className="px-3 py-2">Timeregistrering</th>
                 <th className="px-3 py-2">Adgang</th><th className="px-3 py-2">Sidst logget ind</th><th className="px-3 py-2" /></tr>
             </thead>
             <tbody>
               {liste.map((m) => {
                 const mig_selv = m.email === mig.email;
                 return (
-                  <tr key={m.id} className={`border-b border-slate-100 last:border-0 ${m.aktiv ? "" : "text-slate-400"}`}>
+                  <Fragment key={m.id}>
+                  <tr className={`border-b border-slate-100 last:border-0 ${m.aktiv ? "" : "text-slate-400"}`}>
                     <td className="px-3 py-2">{m.navn}{mig_selv && <span className="ml-2 text-xs text-slate-400">(dig)</span>}</td>
                     <td className="px-3 py-2">{m.email}</td>
                     <td className="px-3 py-2">
@@ -74,9 +96,9 @@ export default function Side() {
                       </select>
                     </td>
                     <td className="px-3 py-2">
-                      <Kostpris m={m} gem={(kostpris, fra) => udfoer(
-                        () => send(`/api/medarbejdere/${m.id}/kostpris`, { kostpris_pr_time: kostpris, gyldig_fra: fra }),
-                        `Kostprisen for ${m.navn} er gemt (gælder fra ${dato(fra)})`)} />
+                      <TidKort tid={m.tid} />
+                      <button type="button" onClick={() => setAaben(aaben === m.id ? null : m.id)}
+                              className="text-xs text-brand-600 hover:underline">{aaben === m.id ? "Luk" : "Ret"}</button>
                     </td>
                     <td className="px-3 py-2">
                       {m.aktiv ? <span className="rounded bg-emerald-100 px-1.5 text-xs font-semibold text-emerald-800">Aktiv</span>
@@ -94,6 +116,14 @@ export default function Side() {
                       ))}
                     </td>
                   </tr>
+                  {aaben === m.id && (
+                    <tr className="border-b border-slate-100 bg-slate-50">
+                      <td colSpan={7} className="px-3 py-3">
+                        <TidRet m={m} udfoer={udfoer} />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -104,46 +134,118 @@ export default function Side() {
   );
 }
 
-// Kostpris pr. time: gældende pris + "Ny kostpris" fra en dato. Beløbet skrives med dansk komma (fx 425,50).
-function Kostpris({ m, gem }: { m: Medarbejder; gem: (kostpris: string, fra: string) => Promise<boolean> }) {
-  const [aaben, setAaben] = useState(false);
-  const [beloeb, setBeloeb] = useState("");
+// Kort oversigt i tabellen: ansættelsesform, normtid og kostpris, der gælder i dag.
+function TidKort({ tid }: { tid: Tid }) {
+  if (!tid.ansaettelse) return <div className="text-slate-400">ikke sat op</div>;
+  return (
+    <div className="tabular-nums">
+      <div>{ANSAETTELSE[tid.ansaettelse]}{tid.flexjob && " · flexjob"}</div>
+      {tid.sats ? (
+        <div className="text-xs text-slate-600">
+          {tid.sats.normtid ? `${tal(tid.sats.normtid)} t/uge · ` : ""}{kr(tid.sats.kostpris_pr_time)}/t
+          <span className="text-slate-400"> fra {dato(tid.sats.fra)}</span>
+        </div>
+      ) : <div className="text-xs text-slate-400">ingen sats i dag</div>}
+      {tid.naeste_sats && (
+        <div className="text-xs text-slate-500">→ {kr(tid.naeste_sats.kostpris_pr_time)}/t fra {dato(tid.naeste_sats.fra)}</div>
+      )}
+    </div>
+  );
+}
+
+// Ret ansættelsesform og læg en ny sats ind (normtid, kostpris, produktive timer) fra en dato.
+// Intet beregnes automatisk – alt tastes. Samme dato som en eksisterende sats retter den.
+function TidRet({ m, udfoer }: { m: Medarbejder; udfoer: (h: () => Promise<unknown>, ok: string) => Promise<boolean> }) {
+  const [ansaettelse, setAnsaettelse] = useState<string>(m.tid.ansaettelse ?? "");
+  const [flexjob, setFlexjob] = useState(m.tid.flexjob);
+  const [loenref, setLoenref] = useState(m.tid.loenref ?? "");
   const [fra, setFra] = useState(() => new Date().toISOString().slice(0, 10));
+  const [normtid, setNormtid] = useState("");
+  const [kostpris, setKostpris] = useState("");
+  const [produktive, setProduktive] = useState("");
+  const [note, setNote] = useState("");
   const [fejl, setFejl] = useState<string | null>(null);
 
-  async function gemNu() {
-    const v = beloeb.trim();
-    // Kun dansk skrivemåde: 425 · 425,50 · 1.250,00 – "425.5" afvises, så et beløb aldrig gættes.
-    if (!/^\d{1,3}(\.\d{3})*(,\d{1,2})?$|^\d+(,\d{1,2})?$/.test(v)) {
-      setFejl("Skriv beløbet med komma som decimaltegn, fx 425,50");
-      return;
-    }
-    if (!fra) { setFejl("Vælg datoen, kostprisen gælder fra"); return; }
+  async function gemAnsaettelse() {
+    if (!ansaettelse) { setFejl("Vælg ansættelsesform"); return; }
     setFejl(null);
-    if (await gem(v.replace(/\./g, "").replace(",", "."), fra)) { setAaben(false); setBeloeb(""); }
+    await udfoer(() => send(`/api/medarbejdere/${m.id}/ansaettelse`, { ansaettelse, flexjob, loenref: loenref || null }),
+                 `Ansættelsen for ${m.navn} er gemt`);
   }
 
+  async function gemSats() {
+    const n = normtid.trim() ? danskTal(normtid) : null;
+    const k = danskTal(kostpris);
+    const p = danskTal(produktive);
+    if (normtid.trim() && n === null) { setFejl("Skriv normtiden med komma som decimaltegn, fx 37 eller 37,5"); return; }
+    if (k === null) { setFejl("Skriv kostprisen med komma som decimaltegn, fx 425,50"); return; }
+    if (p === null) { setFejl("Skriv de produktive timer pr. år, fx 1.450"); return; }
+    if (!fra) { setFejl("Vælg datoen, satsen gælder fra"); return; }
+    setFejl(null);
+    if (await udfoer(() => send(`/api/medarbejdere/${m.id}/sats`, {
+      gyldig_fra: fra, normtid: n, kostpris_pr_time: k, produktive_timer_aar: p, note: note.trim() || null }),
+      `Satsen for ${m.navn} er gemt (gælder fra ${dato(fra)})`)) {
+      setNormtid(""); setKostpris(""); setProduktive(""); setNote("");
+    }
+  }
+
+  const felt = "mt-1 rounded border border-slate-300 bg-white px-2 py-1";
   return (
-    <div className="text-sm">
-      {m.kostpris_pr_time ? (
-        <span className="tabular-nums">{kr(m.kostpris_pr_time)} <span className="text-xs text-slate-400">fra {dato(m.kostpris_fra)}</span></span>
-      ) : <span className="text-slate-400">ikke sat</span>}
-      {m.naeste_kostpris && (
-        <div className="text-xs text-slate-500">→ {kr(m.naeste_kostpris.kostpris_pr_time)} fra {dato(m.naeste_kostpris.fra)}</div>
+    <div className="space-y-4 text-sm">
+      {m.tid.tidligere_kostpris && (
+        <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900">
+          Tidligere tastet kostpris: {kr(m.tid.tidligere_kostpris.kostpris_pr_time)}/t fra {dato(m.tid.tidligere_kostpris.fra)}.
+          Den skal tastes ind igen som en sats nedenfor (sammen med normtid og produktive timer).
+        </p>
       )}
-      {!aaben ? (
-        <button type="button" onClick={() => setAaben(true)} className="ml-2 text-xs text-brand-600 hover:underline">Ny kostpris</button>
-      ) : (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <input value={beloeb} onChange={(e) => setBeloeb(e.target.value)} inputMode="decimal" placeholder="kr. pr. time"
-                 aria-label="Kostpris pr. time" className="w-28 rounded border border-slate-300 px-2 py-1" />
-          <input type="date" value={fra} onChange={(e) => setFra(e.target.value)} aria-label="Gælder fra"
-                 className="rounded border border-slate-300 px-2 py-1" />
-          <button type="button" onClick={gemNu} className="rounded bg-brand-600 px-3 py-1 text-xs text-white hover:bg-brand-700">Gem</button>
-          <button type="button" onClick={() => { setAaben(false); setFejl(null); }} className="text-xs text-slate-500 hover:underline">Annullér</button>
-          {fejl && <p className="w-full text-xs text-red-700">{fejl}</p>}
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col">Ansættelsesform
+          <select value={ansaettelse} onChange={(e) => setAnsaettelse(e.target.value)} className={felt}>
+            <option value="">Vælg …</option>
+            <option value="fastloennet">Fastlønnet</option>
+            <option value="timeloennet">Timelønnet</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 pb-1.5">
+          <input type="checkbox" checked={flexjob} onChange={(e) => setFlexjob(e.target.checked)} /> Flexjob
+        </label>
+        <label className="flex flex-col">Lønnummer (Zenergy)
+          <input value={loenref} onChange={(e) => setLoenref(e.target.value)} className={`${felt} w-40`} />
+        </label>
+        <button type="button" onClick={gemAnsaettelse}
+                className="rounded bg-brand-600 px-3 py-1.5 text-xs text-white hover:bg-brand-700">Gem ansættelse</button>
+        {ansaettelse === "timeloennet" && <span className="pb-1.5 text-xs text-slate-500">Timelønnede optjener ikke afspadsering og kan ikke registrere ferie.</span>}
+      </div>
+
+      {m.tid.ansaettelse && (
+        <div className="flex flex-wrap items-end gap-3 border-t border-slate-200 pt-3">
+          <label className="flex flex-col">Gælder fra
+            <input type="date" value={fra} onChange={(e) => setFra(e.target.value)} className={felt} />
+          </label>
+          <label className="flex flex-col">Normtid (timer/uge)
+            <input value={normtid} onChange={(e) => setNormtid(e.target.value)} inputMode="decimal" placeholder="fx 37"
+                   className={`${felt} w-28`} />
+          </label>
+          <label className="flex flex-col">Kostpris pr. time (kr.)
+            <input value={kostpris} onChange={(e) => setKostpris(e.target.value)} inputMode="decimal" placeholder="fx 425,50"
+                   className={`${felt} w-32`} />
+          </label>
+          <label className="flex flex-col">Produktive timer pr. år
+            <input value={produktive} onChange={(e) => setProduktive(e.target.value)} inputMode="decimal" placeholder="fx 1.450"
+                   className={`${felt} w-32`} />
+          </label>
+          <label className="flex flex-col">Note
+            <input value={note} onChange={(e) => setNote(e.target.value)} className={`${felt} w-56`} />
+          </label>
+          <button type="button" onClick={gemSats}
+                  className="rounded bg-brand-600 px-3 py-1.5 text-xs text-white hover:bg-brand-700">Gem sats</button>
         </div>
       )}
+      {fejl && <p className="text-xs text-red-700">{fejl}</p>}
+      <p className="text-xs text-slate-500">
+        Kostprisen er direkte: løn, feriepenge, ATP, pension og sociale omkostninger – intet overhead. En ny sats afslutter
+        den forrige; satser slettes aldrig, og alle ændringer logges.
+      </p>
     </div>
   );
 }

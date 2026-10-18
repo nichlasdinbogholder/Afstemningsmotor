@@ -53,7 +53,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/personale/models.py` – medarbejdere (`staff`).
 - `app/kunder/models.py` – kundekartotek (`clients`), kontaktpersoner (`contacts`)
   og adgange (`credentials`). Adskilt fra kommende afstemningslogik.
-- `app/crm/models.py` – `tasks`, `time_entries`, `notes`, `documents`, `handovers`.
+- `app/crm/models.py` – `tasks`, `notes`, `documents`, `handovers` (timer: `app/timeregistrering`).
 - `app/audit/models.py` – `audit_log` (kan kun tilføjes til; må aldrig
   indeholde tokens eller andre hemmeligheder).
 - `app/sikkerhed/kryptering.py` – kryptering af tokens med Fernet og hovednøglen
@@ -246,9 +246,14 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/api/medarbejdere.py` + siden `web/app/medarbejdere/` – det samme fra websiden (KUN admin, menupunktet ses kun af
   admins): `GET/POST /api/medarbejdere`, `POST /api/medarbejdere/{id}` (navn/rolle/aktiv). Ingen sletning, e-mail kan
   ikke ændres, man kan ikke fjerne sin egen admin-adgang, altid mindst én aktiv admin. audit_log `medarbejder_*`. Ligger under INDSTILLINGER.
-  KOSTPRIS pr. time (kun admin): tabellen `staff_cost_rates` (kr. pr. time + gælder fra; slettes aldrig – trigger),
-  `GET /api/medarbejdere/{id}/kostpriser`, `POST /api/medarbejdere/{id}/kostpris` (samme dato = rettelse);
-  audit `medarbejder_kostpris` med fra/til. Til timeregistrering/controlling senere.
+  Timeregistreringens stamdata (kun admin): ansættelsesform/flexjob/lønnummer og satser (normtid, kostpris pr. time,
+  produktive timer pr. år, gyldig fra) – `POST /api/medarbejdere/{id}/ansaettelse`, `GET …/satser`, `POST …/sats`.
+- `app/timeregistrering/` – TIMEREGISTRERING (spec 18.10.2026, se RESUME.md; fase 1 trin 1 bygget). Tabeller `time_*`
+  (`models.py`, bygger på staff/clients). DATABASEN håndhæver: godkendt uge låst (kun korrektionslinjer i åben uge), kun
+  godkendte uger til løn, ferie blokeret for timelønnede, timelønnede optjener ikke afspadsering, kvarte timer,
+  'ikke på arbejde' = 0 timer, noter/afspadseringsbevægelser/time_audit kun tilføjelser, satser slettes aldrig og
+  overlapper aldrig (EXCLUDE, btree_gist), alt logges i time_audit (aktør via `stamdata.saet_aktoer()`).
+  Opgavetypen `salg` er inaktiv, indtil pipeline-emner bygges. Beløb/timer NUMERIC; priser ekskl. moms.
 - `app/bilag/` – BILAGSINDBAKKEN (spec v3; trin 1 bygget, se RESUME.md): mail + upload → én pipeline. Tabeller
   `inbox_*` + `supplier_account_map` (`models.py`). DATABASEN håndhæver: levering af faktura/kreditnota/kontoudtog
   til Corpay kræver godkendelse af præcis den fil (trigger `inbox_require_approval`; rykker undtaget);

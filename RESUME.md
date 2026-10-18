@@ -530,3 +530,42 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
 
 ## Skal afklares (før de berørte trin)
 - Intet åbent lige nu for Fagassistenten.
+
+
+# Timeregistrering (spec 18.10.2026)
+
+Nyt modul i hub'en (`app/timeregistrering/`) – samme database, jobkø, back office og roller. Kun Din Bogholder (ingen
+selskabsdimension). Fire faser; ét trin ad gangen med PR og merge.
+
+## Beslutninger (bygherren 18.10.2026)
+- Bygger på `staff` (ikke en ny brugertabel): `time_employees` har kun det nye (ansættelsesform, flexjob, afspadsering,
+  lønnummer) og peger på staff – navn og e-mail findes ét sted.
+- Kostprisen findes kun ét sted: `time_employee_rates` (kostpris + normtid + produktive timer pr. år, gyldig fra/til).
+  `staff_cost_rates` er fjernet. Allerede tastede kostpriser kunne ikke flyttes automatisk (ansættelsesform og produktive
+  timer kendes ikke) – de står i audit_log (`kostpris_flyttet`) og vises på siden Medarbejdere, indtil de er tastet igen.
+- Pipeline-emner: model A (enkel liste: navn, status åben/vundet/tabt, kunde) – men bygges IKKE nu ("én ting ad
+  gangen"). Indtil da er opgavetypen `salg` oprettet, men ikke aktiv (databasen afviser den), og `time_entries` har
+  ingen `lead_id` endnu.
+- Den gamle, ubrugte timetabel fra CRM-starten er fjernet (migreringen stopper, hvis den har rækker).
+- Ejer = administrator: en administrators egen uge godkendes ved aflevering (self_approved); administratorer godkender.
+- Salgsprisen 699,00 kr. ekskl. moms gælder fra 18.10.2026.
+- Zenergy-lønoverførslen (fase 3) skriver til et andet system – bygges først efter udtrykkelig tilladelse.
+
+## Afvigelser fra spec'ens SQL (bevidste)
+- `users`/`user_id` → `staff`/`staff_id`; name/email/active ligger på staff. Aktør-kolonner (created_by, approved_by …)
+  er rigtige relationer til staff med indeks (som resten af databasen).
+- `time_entries.lead_id` kommer med pipelinen; CHECK'en for art/kunde er derfor uden lead.
+- Ekstra regler i databasen: 'ikke på arbejde' tvinger 0 timer; inaktive opgavetyper afvises; linjen skal høre til
+  medarbejderens egen uge og ligge i den; låsningen gælder også en linje, der flyttes ud af en godkendt uge;
+  `faktureres særskilt` kræver beskrivelse (CHECK); `corrects_entry_id` kræver `is_correction`; satser kan ikke slettes.
+- Revisionssporet skrives af databasen selv (trigger `time_skriv_audit` på alle time_-tabeller) med aktøren fra
+  `stamdata.saet_aktoer()` (`app.actor_id` pr. transaktion).
+
+## Bygget
+- **Fase 1, trin 1 (18.10.2026):** migrering f95b5ad78632 (tabeller, btree_gist, triggere, opgavetyper, salgspris),
+  `models.py`, `stamdata.py` (ansættelse; ny sats afslutter den forrige; samme dato = rettelse). Siden Medarbejdere
+  (kun admin): kolonnen Timeregistrering + "Ret" (ansættelsesform, flexjob, lønnummer; ny sats med gyldig fra, normtid,
+  kostpris, produktive timer, note). API: `POST /api/medarbejdere/{id}/ansaettelse`, `GET …/satser`, `POST …/sats`.
+  Tests: `tests/test_timeregistrering_skema.py` (spec 1–7, 10, 11, 23, 25–27, 36, 41 + revisionsspor),
+  `tests/test_api_medarbejdere.py`.
+
