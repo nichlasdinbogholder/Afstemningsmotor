@@ -414,6 +414,7 @@ def test_14_svarets_opbygning_i_instruksen(kunde):
                                 tekst.index("hvem der skal vurdere"))
     assert foerst < regel < vurdering
     assert "Jeg har set på konto 3217 (Arbejdstøj)" in tekst and "konkluderer stadig ikke" in tekst
+    assert "Begynd svaret direkte med" in tekst
 
 
 def test_14_proeven_kontrollerer_svarets_opbygning(db_session, samme_session, provider, medarbejder, kunde,

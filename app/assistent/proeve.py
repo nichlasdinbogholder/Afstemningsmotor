@@ -41,7 +41,7 @@ async def _spoerg(tekst: str, materiale: list, kunde=None, opslag=None) -> str:
     return svar.tekst
 
 
-# Første afsnit skal nævne en konto (4-5 cifre) og et beløb i kr.
+# Begyndelsen af svaret skal nævne en konto (4-5 cifre) og et beløb i kr.
 KONTO_OG_BELOEB = re.compile(r"\b\d{4,5}\b.*\d.*kr", re.IGNORECASE | re.DOTALL)
 INDBERETNING = re.compile(r"skal (du )?(indberette|angive)|indberet(ter|) (du|i)", re.IGNORECASE)
 
@@ -74,13 +74,14 @@ async def _kundeproeve(kundenummer: str, email: str) -> list[bool]:
     for x in opslag.lookups:
         print("  Slået op: " + sm.beskriv_opslag(x))
     print("  Svar: " + svar.strip().replace("\n", "\n        "))
-    foerste = svar.strip().split("\n\n")[0]
+    # "Først hvad der er slået op": de første tre linjer med tekst skal nævne en konto og et beløb.
+    foerste = "\n".join([linje for linje in svar.strip().splitlines() if linje.strip()][:3])
     udfoert = [x for x in opslag.lookups if not x.get("fejl")]
     return [
         _vis("slår op i kundens regnskab", bool(udfoert), f"{len(udfoert)} opslag" if udfoert else "ingen opslag"),
         _vis("starter med hvad der er slået op", bool(KONTO_OG_BELOEB.search(foerste)),
-             "første afsnit nævner konto og beløb" if KONTO_OG_BELOEB.search(foerste)
-             else "første afsnit nævner ikke konto og beløb"),
+             "begyndelsen nævner konto og beløb" if KONTO_OG_BELOEB.search(foerste)
+             else "de første tre linjer nævner ikke konto og beløb"),
         _vis("siger ikke hvad der skal indberettes", not INDBERETNING.search(svar),
              "ingen indberetning" if not INDBERETNING.search(svar) else "svaret siger, hvad der skal indberettes"),
         _vis("henviser til hvem der svarer bindende", bool(BINDENDE.search(svar)),
