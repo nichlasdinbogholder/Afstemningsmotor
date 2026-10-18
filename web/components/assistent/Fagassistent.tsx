@@ -46,7 +46,7 @@ function Vurdering({ beskedId, givet }: { beskedId: number; givet: string | null
 }
 
 export default function Fagassistent() {
-  const { aaben, saetAaben, ulaest, slaaetTil, beskeder, svarer, fejl, spoerg, nySamtale } = useAssistent();
+  const { aaben, saetAaben, ulaest, slaaetTil, beskeder, svarer, fejl, spoerg, nySamtale, kunder, kundeId, vaelgKunde } = useAssistent();
   const [tekst, setTekst] = useState("");
   const [advarsel, setAdvarsel] = useState(false);
   const bund = useRef<HTMLDivElement>(null);
@@ -138,6 +138,17 @@ export default function Fagassistent() {
           </svg>
         </button>
         </div>
+      </div>
+
+      {/* Kundevælgeren står synligt hele tiden. Et skift starter en ny samtale. */}
+      <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm">
+        <label htmlFor="svend-kunde" className="text-slate-500">Kunde:</label>
+        <select id="svend-kunde" value={kundeId ?? ""} disabled={svarer}
+                onChange={(e) => vaelgKunde(e.target.value ? Number(e.target.value) : null)}
+                className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm">
+          <option value="">Generelt (ingen kunde)</option>
+          {kunder.map((k) => <option key={k.id} value={k.id}>{k.navn} ({k.kundenummer})</option>)}
+        </select>
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto p-4 text-sm" aria-live="polite">

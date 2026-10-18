@@ -39,7 +39,7 @@ from app.opkraevning.models import (
     PaymentAllocation,
     ReferenceRate,
 )
-from app.personale.models import Staff
+from app.personale.models import Staff, StaffCostRate
 from app.rules.models import Finding, FindingEvent, RuleRun
 from app.regnskab.models import Account, CustomerCache, EntryCache, OpenEntryCache, SupplierCache
 from app.synk.models import SyncState
@@ -89,6 +89,7 @@ __all__ = [
     "Note",
     "OpenEntryCache",
     "Staff",
+    "StaffCostRate",
     "Statement",
     "StatementLine",
     "SupplierCache",

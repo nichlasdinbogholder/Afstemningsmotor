@@ -3,12 +3,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { useMig } from "@/components/Ramme";
 import { hent, send } from "@/lib/api";
-import { tidspunkt } from "@/lib/format";
+import { dato, tidspunkt } from "@/lib/format";
 
 type Medarbejder = {
   id: number; navn: string; email: string; rolle: "admin" | "medarbejder"; aktiv: boolean;
   forbundet_til_microsoft: boolean; sidst_logget_ind: string | null;
+  kostpris_pr_time: string | null; kostpris_fra: string | null;
+  naeste_kostpris: { kostpris_pr_time: string; fra: string } | null;
 };
+
+function kr(v: string): string {
+  return Number(v).toLocaleString("da-DK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " kr.";
+}
 
 const ROLLE = { admin: "Administrator", medarbejder: "Medarbejder" };
 
@@ -47,6 +53,7 @@ export default function Side() {
           <table className="w-full text-sm">
             <thead className="border-b border-slate-200 text-left text-xs font-semibold text-slate-600">
               <tr><th className="px-3 py-2">Navn</th><th className="px-3 py-2">E-mail</th><th className="px-3 py-2">Rolle</th>
+                <th className="px-3 py-2">Kostpris pr. time</th>
                 <th className="px-3 py-2">Adgang</th><th className="px-3 py-2">Sidst logget ind</th><th className="px-3 py-2" /></tr>
             </thead>
             <tbody>
@@ -65,6 +72,11 @@ export default function Side() {
                         <option value="medarbejder">Medarbejder</option>
                         <option value="admin">Administrator</option>
                       </select>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Kostpris m={m} gem={(kostpris, fra) => udfoer(
+                        () => send(`/api/medarbejdere/${m.id}/kostpris`, { kostpris_pr_time: kostpris, gyldig_fra: fra }),
+                        `Kostprisen for ${m.navn} er gemt (gælder fra ${dato(fra)})`)} />
                     </td>
                     <td className="px-3 py-2">
                       {m.aktiv ? <span className="rounded bg-emerald-100 px-1.5 text-xs font-semibold text-emerald-800">Aktiv</span>
@@ -86,6 +98,50 @@ export default function Side() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Kostpris pr. time: gældende pris + "Ny kostpris" fra en dato. Beløbet skrives med dansk komma (fx 425,50).
+function Kostpris({ m, gem }: { m: Medarbejder; gem: (kostpris: string, fra: string) => Promise<boolean> }) {
+  const [aaben, setAaben] = useState(false);
+  const [beloeb, setBeloeb] = useState("");
+  const [fra, setFra] = useState(() => new Date().toISOString().slice(0, 10));
+  const [fejl, setFejl] = useState<string | null>(null);
+
+  async function gemNu() {
+    const v = beloeb.trim();
+    // Kun dansk skrivemåde: 425 · 425,50 · 1.250,00 – "425.5" afvises, så et beløb aldrig gættes.
+    if (!/^\d{1,3}(\.\d{3})*(,\d{1,2})?$|^\d+(,\d{1,2})?$/.test(v)) {
+      setFejl("Skriv beløbet med komma som decimaltegn, fx 425,50");
+      return;
+    }
+    if (!fra) { setFejl("Vælg datoen, kostprisen gælder fra"); return; }
+    setFejl(null);
+    if (await gem(v.replace(/\./g, "").replace(",", "."), fra)) { setAaben(false); setBeloeb(""); }
+  }
+
+  return (
+    <div className="text-sm">
+      {m.kostpris_pr_time ? (
+        <span className="tabular-nums">{kr(m.kostpris_pr_time)} <span className="text-xs text-slate-400">fra {dato(m.kostpris_fra)}</span></span>
+      ) : <span className="text-slate-400">ikke sat</span>}
+      {m.naeste_kostpris && (
+        <div className="text-xs text-slate-500">→ {kr(m.naeste_kostpris.kostpris_pr_time)} fra {dato(m.naeste_kostpris.fra)}</div>
+      )}
+      {!aaben ? (
+        <button type="button" onClick={() => setAaben(true)} className="ml-2 text-xs text-brand-600 hover:underline">Ny kostpris</button>
+      ) : (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input value={beloeb} onChange={(e) => setBeloeb(e.target.value)} inputMode="decimal" placeholder="kr. pr. time"
+                 aria-label="Kostpris pr. time" className="w-28 rounded border border-slate-300 px-2 py-1" />
+          <input type="date" value={fra} onChange={(e) => setFra(e.target.value)} aria-label="Gælder fra"
+                 className="rounded border border-slate-300 px-2 py-1" />
+          <button type="button" onClick={gemNu} className="rounded bg-brand-600 px-3 py-1 text-xs text-white hover:bg-brand-700">Gem</button>
+          <button type="button" onClick={() => { setAaben(false); setFejl(null); }} className="text-xs text-slate-500 hover:underline">Annullér</button>
+          {fejl && <p className="w-full text-xs text-red-700">{fejl}</p>}
         </div>
       )}
     </div>

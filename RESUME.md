@@ -473,8 +473,25 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
   den til noget bindende." Over 2 × dagene (90) laver det daglige job `assistent_foraeldelse` (kl. 06.30) et fund
   (kb_rate_checks.outcome = 'stale', højst ét åbent pr. sats), som kvitteres i Satskontrol. Migrering 93484f38bd75.
   Tests: spec-test 29 m.fl. i `tests/test_satskontrol.py`. **Fase 3 er færdig.**
+- **Fase 4, trin 12 (18.10.2026):** kundevælgeren øverst i Svends panel ("Generelt" eller en kunde – står synligt
+  hele tiden). Kun AKTIVE kunder, hvor medarbejderen er ANSVARLIG (`clients.ansvarlig_medarbejder_id`), kontrolleret
+  på serveren ved hvert kald (`samtale.er_tilknyttet`) – mister man ansvaret, er adgangen væk med det samme.
+  Kunden gemmes på samtalen og kan ikke ændres; et skift starter en ny samtale. Indtil opslagene (trin 13) findes,
+  får Svend at vide, at han ikke må nævne tal fra kundens regnskab. `/api/v1/assistant/kunder`. Ansvarlig sættes
+  med `python -m app.kunder.opret --kundenummer <nr> --ansvarlig <e-mail>`. Tests: spec 30, 31, 32.
 
 ## Beslutninger
+- 18.10.2026: Moms i Svend (trin 13, `get_moms`) – bygherren valgte A: Svend viser BEVÆGELSER og SALDO på kundens
+  momskonti i perioden. Momskontiene findes ud fra momskoden (vatCode) i kundens egen kontoplan i e-conomic.
+  Svend beregner IKKE en momsangivelse og siger ikke, hvad der skal indberettes.
+- 18.10.2026: Kostpris pr. medarbejder (Indstillinger → Medarbejdere, kun admin): kr. pr. time med en
+  "gælder fra"-dato, så gamle timer beholder den pris, der gjaldt dengang (tabellen `staff_cost_rates`; rækker
+  kan ikke slettes; samme dato igen = rettelse af en tastefejl). Hver ændring logges (`medarbejder_kostpris`, fra/til).
+  ANTAGELSE: prisen er pr. time – afventer bekræftelse fra bygherren.
+- 18.10.2026: Svends kundeopslag hentes DIREKTE fra e-conomic (kundens token, via adapter-laget) – ikke fra vores
+  database. Kun læsning.
+- 18.10.2026: "Tilknyttet" = den ANSVARLIGE medarbejder på kunden (sættes, når kunden oprettes i hub'en).
+  Administratorer får (indtil videre) ingen særadgang – afventer svar.
 - 16.10.2026: Hub'en bruges KUN på PC – ikke på telefon. Nye sider bygges ikke til mobil. (Spec'ens widget-test 5
   – "under 640 px fylder panelet hele skærmen" – er derfor ikke længere et krav; det eksisterende er ladt urørt.)
 - 16.10.2026: Satskontrollens fund gemmes i kb_rate_checks (med afgørelse), ikke i `findings`, fordi en sats ikke
@@ -497,7 +514,5 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
 - Samtaler/kunder slettes ikke (RESTRICT); beskeder følger samtalen (CASCADE som i spec'en).
 
 ## Skal afklares (før de berørte trin)
-- Fase 4: "kunder brugeren er tilknyttet" = `clients.ansvarlig_medarbejder_id` / `daglig_medarbejder_id`?
-  Og må administratorer slå op i alle kunder?
-- Fase 3: fund for satser hører ikke til én kunde – `findings` kræver i dag en kunde.
-- `ANTHROPIC_API_KEY` skal oprettes og lægges i serverens .env (aldrig i chatten).
+- Fase 4: må administratorer slå op i ALLE kunder i Svend? (I dag: nej – kun dem, de er ansvarlige for.)
+- Kostpris: er det rigtigt, at den er pr. time?
