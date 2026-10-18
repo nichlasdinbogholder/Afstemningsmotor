@@ -246,6 +246,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/api/medarbejdere.py` + siden `web/app/medarbejdere/` – det samme fra websiden (KUN admin, menupunktet ses kun af
   admins): `GET/POST /api/medarbejdere`, `POST /api/medarbejdere/{id}` (navn/rolle/aktiv). Ingen sletning, e-mail kan
   ikke ændres, man kan ikke fjerne sin egen admin-adgang, altid mindst én aktiv admin. audit_log `medarbejder_*`. Ligger under INDSTILLINGER.
+  KOSTPRIS pr. time (kun admin): tabellen `staff_cost_rates` (kr. pr. time + gælder fra; slettes aldrig – trigger),
+  `GET /api/medarbejdere/{id}/kostpriser`, `POST /api/medarbejdere/{id}/kostpris` (samme dato = rettelse);
+  audit `medarbejder_kostpris` med fra/til. Til timeregistrering/controlling senere.
 - `app/bilag/` – BILAGSINDBAKKEN (spec v3; trin 1 bygget, se RESUME.md): mail + upload → én pipeline. Tabeller
   `inbox_*` + `supplier_account_map` (`models.py`). DATABASEN håndhæver: levering af faktura/kreditnota/kontoudtog
   til Corpay kræver godkendelse af præcis den fil (trigger `inbox_require_approval`; rykker undtaget);

@@ -23,6 +23,7 @@ TABELLER = {
     "dunning_skips", "installment_plans", "installment_lines", "reference_rates", "collection_cases",
     "fee_revenue", "billing_periods",
     "assistant_conversations", "assistant_messages", "assistant_feedback", "kb_documents", "kb_rate_checks",
+    "staff_cost_rates",
 }
 
 
@@ -78,6 +79,7 @@ def test_alle_staff_kolonner_peger_paa_staff(inspektor):
         "assistant_conversations": {"staff_id"},
         "assistant_feedback": {"staff_id"},
         "kb_rate_checks": {"reviewed_by"},
+        "staff_cost_rates": {"staff_id", "created_by"},
     }
     for tabel, kolonner in forventet.items():
         til_staff = {

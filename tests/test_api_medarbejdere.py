@@ -76,3 +76,55 @@ def test_ingen_kan_laase_alle_ude(db_session, klient, admin):
     # To aktive admins: den anden må gerne lukkes – men så er der kun én tilbage.
     assert klient.post(f"/api/medarbejdere/{anden.id}", headers=H, json={"aktiv": False}).status_code == 200
     assert klient.post(f"/api/medarbejdere/{anden.id}", headers=H, json={"aktiv": True}).json()["aktiv"] is True
+
+
+# Kostpris pr. time – kun administratorer; gemmes med gyldig-fra-dato (historik), kan ikke slettes
+def test_kostpris_kun_for_administratorer(db_session, klient):
+    m = Staff(navn="Bo", email="bo-kost@dinbogholder.dk", rolle="medarbejder", aktiv=True)
+    db_session.add(m)
+    db_session.flush()
+    app.dependency_overrides[login.nuvaerende_medarbejder] = lambda: m
+    assert klient.post(f"/api/medarbejdere/{m.id}/kostpris", headers=H,
+                       json={"kostpris_pr_time": "400.00", "gyldig_fra": "2026-01-01"}).status_code == 403
+    assert klient.get(f"/api/medarbejdere/{m.id}/kostpriser").status_code == 403
+    assert "kostpris" not in klient.get("/api/mig").text
+
+
+def test_kostpris_med_historik_og_log(db_session, klient, admin):
+    from datetime import date, timedelta
+
+    m = Staff(navn="Bo", email="bo-kost2@dinbogholder.dk", rolle="medarbejder", aktiv=True)
+    db_session.add(m)
+    db_session.flush()
+    url = f"/api/medarbejdere/{m.id}/kostpris"
+    assert klient.post(url, json={"kostpris_pr_time": "400", "gyldig_fra": "2026-01-01"}).status_code == 403  # header
+    assert klient.post(url, headers=H, json={"kostpris_pr_time": "-1", "gyldig_fra": "2026-01-01"}).status_code == 422
+    svar = klient.post(url, headers=H, json={"kostpris_pr_time": "400.00", "gyldig_fra": "2026-01-01"}).json()
+    assert (svar["kostpris_pr_time"], svar["kostpris_fra"]) == ("400.00", "2026-01-01")
+    fremtid = (date.today() + timedelta(days=30)).isoformat()
+    svar = klient.post(url, headers=H, json={"kostpris_pr_time": "450.00", "gyldig_fra": fremtid}).json()
+    assert svar["kostpris_pr_time"] == "400.00"  # den nye gælder først senere
+    assert svar["naeste_kostpris"] == {"kostpris_pr_time": "450.00", "fra": fremtid}
+    # Tastefejl samme dato rettes (ikke en ny række)
+    klient.post(url, headers=H, json={"kostpris_pr_time": "410.00", "gyldig_fra": "2026-01-01"})
+    historik = klient.get(f"/api/medarbejdere/{m.id}/kostpriser").json()
+    assert [(h["kostpris_pr_time"], h["fra"]) for h in historik] == [("450.00", fremtid), ("410.00", "2026-01-01")]
+    log = db_session.scalars(select(AuditLog).where(AuditLog.handling == "medarbejder_kostpris")).all()
+    assert [(l.detaljer["fra"], l.detaljer["til"]) for l in log] == [(None, "400.00"), (None, "450.00"), ("400.00", "410.00")]
+    rad = [x for x in klient.get("/api/medarbejdere").json() if x["id"] == m.id][0]
+    assert rad["kostpris_pr_time"] == "410.00"
+
+
+def test_kostpriser_kan_ikke_slettes(db_session, admin):
+    from datetime import date
+
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+
+    from app.personale.models import StaffCostRate
+
+    db_session.add(StaffCostRate(staff_id=admin.id, hourly_cost=400, valid_from=date(2026, 1, 1), created_by=admin.id))
+    db_session.flush()
+    with pytest.raises(DBAPIError, match="kan ikke slettes"):
+        with db_session.begin_nested():
+            db_session.execute(text("DELETE FROM staff_cost_rates WHERE staff_id = :s"), {"s": admin.id})
