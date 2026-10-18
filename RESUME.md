@@ -480,8 +480,21 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
   får Svend at vide, at han ikke må nævne tal fra kundens regnskab. `/api/v1/assistant/kunder`. Ansvarlig sættes
   med `python -m app.kunder.opret --kundenummer <nr> --ansvarlig <e-mail>`. Tests: spec 30, 31, 32.
 
-## Beslutninger
-- 18.10.2026: Moms i Svend (trin 13, `get_moms`) – bygherren valgte A: Svend viser BEVÆGELSER og SALDO på kundens
+- **Fase 4, trin 13 (18.10.2026):** Svends syv LÆSENDE opslag (`app/assistent/opslag.py`): get_kontoplan,
+  get_saldo (bevægelser i perioden – ikke primosaldo), get_posteringer, get_aabne_debitorer/-kreditorer, get_moms
+  (bevægelser på momskontiene fundet via momskoderne i kundens opsætning, /vat-accounts – ingen momsangivelse) og
+  get_kundeinfo. Hentes DIREKTE fra e-conomic via adapter-laget (nye læsefunktioner `fetch_entries_period` med
+  datofilter og `fetch_vat_accounts`). Kun i en samtale om en kunde (ellers får modellen ingen opslag).
+  Kontrol ved HVERT opslag: kunde-id'et skal være samtalens kunde, og medarbejderen skal stadig være ansvarlig
+  (eller admin). Lofter: ASSISTANT_MAX_ROWS (200) rækker pr. opslag og ASSISTANT_MAX_TOOL_CALLS (5) opslag pr.
+  besked – rammes et loft, skriver serveren selv en fast sætning i svaret. Personoplysninger fjernes, før data når
+  modellen: CPR-numre, bank-/IBAN-numre og hele teksten på posteringer på lønkonti (kontonavn med løn, gage,
+  feriepenge, feriegodtgørelse, ATP, AM-bidrag, A-skat eller pension – beløbene bliver). Hvert opslag gemmes i
+  `assistant_messages.lookups` (funktion, kunde, argumenter, antal rækker, evt. fejl/afkortet). Prøv på serveren
+  uden modellen: `python -m app.assistent.opslag_proeve --kundenummer <nr> --ansvarlig <e-mail>`.
+  Tests: spec 31, 33–38 i `tests/test_assistent_opslag.py`. Trin 14 (svarets form) og 15 (adgangslog) mangler.
+  UAFPRØVET mod rigtig e-conomic indtil prøvekommandoen er kørt: datofilteret på entries og /vat-accounts.
+ (trin 13, `get_moms`) – bygherren valgte A: Svend viser BEVÆGELSER og SALDO på kundens
   momskonti i perioden. Momskontiene findes ud fra momskoden (vatCode) i kundens egen kontoplan i e-conomic.
   Svend beregner IKKE en momsangivelse og siger ikke, hvad der skal indberettes.
 - 18.10.2026: Kostpris pr. medarbejder (Indstillinger → Medarbejdere, kun admin): kr. pr. time med en

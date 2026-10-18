@@ -12,6 +12,8 @@ Endpoints og felter (fra e-conomics JSON-skemaer, restapi.e-conomic.com):
 - /journals/{nr}/entries : journalEntryNumber, voucher.voucherNumber, date,
                    account.accountNumber, contraAccount.accountNumber, text, amount,
                    currency.code, entryType                (kladdelinjer, ikke bogført)
+- /vat-accounts  : vatCode, name, ratePercentage, account.accountNumber, contraAccount.accountNumber
+                   (momskoderne og de konti, momsen bogføres på)
 - /accounting-years                 : year ("2026" eller "2025/2026"), fromDate, toDate, closed
 - /accounting-years/{år}/entries    : entryNumber, voucherNumber, date, dueDate,
                    account.accountNumber, text, amount, amountInBaseCurrency, currency, entryType,
@@ -50,6 +52,7 @@ from app.adaptere.regnskab.base import (
     KladdePost,
     Kunde,
     Leverandoer,
+    Momskode,
     Postering,
     PosteringsSvar,
     Regnskabsaar,
@@ -265,6 +268,16 @@ def oversaet_aaben_post(d: dict) -> AabenPost:
     )
 
 
+def oversaet_momskode(d: dict) -> Momskode:
+    return Momskode(
+        kode=str(_kraev(d, "vatCode", "en momskode")),
+        navn=_tekst(d.get("name")),
+        sats=_decimal(d.get("ratePercentage")),
+        kontonummer=_nummer(d.get("account"), "accountNumber"),
+        modkontonummer=_nummer(d.get("contraAccount"), "accountNumber"),
+    )
+
+
 def oversaet_kassekladde(d: dict) -> Kassekladde:
     return Kassekladde(nummer=_kraev(d, "journalNumber", "en kassekladde"), navn=d.get("name"))
 
@@ -366,6 +379,27 @@ class EconomicAdapter:
         hoejeste = max((p.bogfoert_id for p in poster), default=None)
         ny_cursor = str(max(hoejeste, int(efter or 0))) if hoejeste is not None else efter
         return PosteringsSvar(poster, ny_cursor, "id" if ny_cursor is not None else None)
+
+    def fetch_entries_period(self, fra: date, til: date) -> list[Postering]:
+        """Alle poster med dato fra og med `fra` til og med `til` – kun i de regnskabsår, der rører perioden.
+        e-conomic filtrerer på dato, og for en sikkerheds skyld filtreres der også her i koden."""
+        if til < fra:
+            raise EconomicFejl("Perioden slutter før den starter")
+        filter = f"date$gte:{fra.isoformat()}$and:date$lte:{til.isoformat()}"
+        poster: list[Postering] = []
+        for a in self._klient.hent_alle("/accounting-years"):
+            start, slut = _dato(a.get("fromDate")), _dato(a.get("toDate"))
+            if (start is not None and start > til) or (slut is not None and slut < fra):
+                continue
+            aar = kod_id(str(_kraev(a, "year", "et regnskabsår")))
+            for d in self._klient.hent_alle(f"/accounting-years/{aar}/entries", filter=filter, sort="entryNumber"):
+                p = oversaet_postering(d)
+                if p.dato is not None and fra <= p.dato <= til:
+                    poster.append(p)
+        return poster
+
+    def fetch_vat_accounts(self) -> list[Momskode]:
+        return [oversaet_momskode(d) for d in self._klient.hent_alle("/vat-accounts")]
 
     def fetch_open_entries(self) -> list[AabenPost]:
         return [

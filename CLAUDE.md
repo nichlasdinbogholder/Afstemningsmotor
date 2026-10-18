@@ -73,7 +73,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/adaptere/` – adapter-laget til e-conomic/Dinero. `hent_adgang()` og
   `hent_token(session, client_id, system)` er de eneste, der kalder dekrypteringen.
 - `app/adaptere/regnskab/base.py` – det fælles interface `AccountingProvider` med
-  `fetch_accounts`, `fetch_customers`, `fetch_suppliers`, `fetch_entries(efter)`,
+  `fetch_accounts`, `fetch_customers`, `fetch_suppliers`, `fetch_entries(efter)`, `fetch_entries_period(fra, til)`, `fetch_vat_accounts`,
   `fetch_open_entries`, samt `fetch_journals`/`fetch_journal_entries(nr)` (kassekladder).
   Fælles format: Konto, Kunde, Leverandoer, Postering, AabenPost, Kassekladde, KladdePost.
   Hent en provider med `hent_adapter(session, client_id)`. Resten af systemet må ALDRIG
@@ -326,6 +326,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     (SSE; spørgsmål gemmes før kaldet; afbrudt = 'interrupted'), feedback (én pr. svar). POST kræver X-Afstemning.
   - Kundevælger (fase 4): kun aktive kunder, hvor man er ANSVARLIG – admin: alle aktive (`er_tilknyttet()`, tjekkes ved hvert kald);
     kunden kan ikke skiftes i en samtale. Kundeopslag hentes DIREKTE fra e-conomic via adapter-laget, kun læsning.
+  - `opslag.py` (trin 13): de 7 læsende opslag (`VAERKTOEJER`, `Opslag.udfoer`) – kunde kontrolleres ved hvert
+    opslag, lofter ASSISTANT_MAX_ROWS/ASSISTANT_MAX_TOOL_CALLS, CPR/kontonumre/lønposteringstekster skjules, alt
+    logges i `lookups`. Værktøjsløkken er i `samtale.stream_svar(opslag=...)`. Prøv uden model:
+    `python -m app.assistent.opslag_proeve --kundenummer <nr> --ansvarlig <e-mail>`.
   - `proeve.py`: `python -m app.assistent.proeve` – faste prøvespørgsmål mod den rigtige model (kode 0/1/2).
   - Webdelen: `web/components/assistent/` (Provider + panel i Ramme, dvs. rodlayoutet). Assistenten hedder **Svend**.
     Siden `/fagassistent/` (punktet "Svend" under INDSTILLINGER nederst til venstre – `Indstillinger` i Ramme.tsx): loggen – admin ser alle spørgsmål, medarbejdere kun egne
