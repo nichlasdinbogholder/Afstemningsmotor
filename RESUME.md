@@ -493,7 +493,8 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
   `assistant_messages.lookups` (funktion, kunde, argumenter, antal rækker, evt. fejl/afkortet). Prøv på serveren
   uden modellen: `python -m app.assistent.opslag_proeve --kundenummer <nr> --ansvarlig <e-mail>`.
   Tests: spec 31, 33–38 i `tests/test_assistent_opslag.py`. Trin 14 (svarets form) og 15 (adgangslog) mangler.
-  UAFPRØVET mod rigtig e-conomic indtil prøvekommandoen er kørt: datofilteret på entries og /vat-accounts.
+  Afprøvet mod rigtig e-conomic 18.10.2026 (Connect El): 7 af 7 opslag lykkedes, 4 momskonti fundet via
+  momskoderne. Kontoplan og åbne kreditorer rammer loftet på 200 rækker hos Connect El.
  (trin 13, `get_moms`) – bygherren valgte A: Svend viser BEVÆGELSER og SALDO på kundens
   momskonti i perioden. Momskontiene findes ud fra momskoden (vatCode) i kundens egen kontoplan i e-conomic.
   Svend beregner IKKE en momsangivelse og siger ikke, hvad der skal indberettes.

@@ -187,7 +187,7 @@ def test_33_alle_opslag_er_laesende(db_session, samme_session, medarbejder, kund
                                                         "date$gte:2026-07-01$and:date$lte:2026-09-30")
             data = [{"entryNumber": 1, "date": "2026-08-01", "account": {"accountNumber": 3217}, "amount": 10,
                      "amountInBaseCurrency": 10, "currency": "DKK", "remainder": 10,
-                     "customer": {"customerNumber": 1}}]
+                     "customer": {"customerNumber": 1}, "invoiceNumber": 4711}]  # tal – som i e-conomic
         else:
             data = []
         return httpx.Response(200, json={"collection": data, "pagination": {"results": len(data)}})
@@ -234,6 +234,7 @@ def test_36_cpr_kontonumre_og_loentekster_skjules(db_session, samme_session, pro
         "Udlæg [CPR skjult] til konto [kontonr. skjult]"
     assert op.skjul_tekst("IBAN DK50 0040 0440 1162 43") == "IBAN [kontonr. skjult]"
     assert op.skjul_tekst("Faktura 4711 på 1.250,00 kr.") == "Faktura 4711 på 1.250,00 kr."
+    assert op.skjul_tekst(4711) == "4711"
 
 
 # --- Værktøjsløkken med en falsk model --------------------------------------------
@@ -358,6 +359,12 @@ def test_37_opslag_gemmes_paa_svaret(db_session, samme_session, provider, medarb
         assert [(x["funktion"], x["kunde_id"], x["argumenter"]["konto"], x["antal_raekker"]) for x in besked.lookups] \
             == [("get_saldo", kunde.id, 3217, 1)]
         assert "1.000,00 kr." in besked.content and besked.status == "complete"
+        # Trin 14: det, Svend slog op, vises under svaret – både lige efter svaret og ved genindlæsning.
+        slut = [json.loads(x[6:]) for x in r.text.split("\n\n") if x.startswith("data: ")][-1]
+        forventet = ["Saldo · konto 3217 · 01.07.2026–30.09.2026 · 1 række"]
+        assert slut["type"] == "slut" and slut["opslag"] == forventet
+        beskeder = k.get(f"/api/v1/assistant/conversations/{s['id']}/messages").json()
+        assert beskeder[-1]["opslag"] == forventet and beskeder[0]["opslag"] == []
     finally:
         app.dependency_overrides.clear()
 
@@ -388,3 +395,43 @@ def test_proevekommandoen(db_session, samme_session, provider, medarbejder, kund
     ud = capsys.readouterr().out
     assert "7 af 7 opslag lykkedes" in ud and "14260 Salgsmoms (U25): -2500.00 kr." in ud
     assert opslag_proeve.main(["--kundenummer", "FINDES-IKKE", "--ansvarlig", medarbejder.email]) == 2
+
+
+# Trin 14: svar med kundetal
+def test_14_beskrivelse_af_opslag():
+    assert sm.beskriv_opslag({"funktion": "get_moms", "argumenter": {"fra": "2026-07-01", "til": "2026-09-30"},
+                              "antal_raekker": 4}) == "Momskonti · 01.07.2026–30.09.2026 · 4 rækker"
+    assert sm.beskriv_opslag({"funktion": "get_kontoplan", "argumenter": {}, "antal_raekker": 200,
+                              "afkortet": True}) == "Kontoplan · 200 rækker (afkortet)"
+    assert sm.beskriv_opslag({"funktion": "get_kontoplan", "argumenter": {}, "antal_raekker": 0,
+                              "fejl": "Afvist: du kan kun slå op hos samtalens kunde"}) == \
+        "Kontoplan · ikke udført: Afvist: du kan kun slå op hos samtalens kunde"
+
+
+def test_14_svarets_opbygning_i_instruksen(kunde):
+    tekst = sm.kundetekst(kunde)
+    foerst, regel, vurdering = (tekst.index("Først hvad du slog op"), tekst.index("Så reglen"),
+                                tekst.index("hvem der skal vurdere"))
+    assert foerst < regel < vurdering
+    assert "Jeg har set på konto 3217 (Arbejdstøj)" in tekst and "konkluderer stadig ikke" in tekst
+
+
+def test_14_proeven_kontrollerer_svarets_opbygning(db_session, samme_session, provider, medarbejder, kunde,
+                                                   monkeypatch, capsys):
+    import asyncio
+
+    from app.assistent import proeve
+
+    monkeypatch.setattr(proeve, "ny_session", samme_session)
+    monkeypatch.setattr(proeve, "_materiale", lambda tekst: [])
+    godt = ("Jeg har set på konto 14260 (Salgsmoms) for perioden: der er bogført -2.500,00 kr.\n\n"
+            "Reglen er, at salgsmomsen skal stemme med omsætningen.\n\n"
+            "Om tallene kan indberettes, skal den kundeansvarlige vurdere.")
+    model = FalskModel([([_kald(1, "get_moms", client_id=kunde.id, **Q3)], "tool_use"), ([_tekst(godt)], "end_turn")])
+    monkeypatch.setattr(sm, "_klient", lambda: model)
+    assert asyncio.run(proeve._kundeproeve("OPS-1", medarbejder.email)) == [True, True, True, True]
+    assert "Slået op: Momskonti · 01.07.2026–30.09.2026 · 2 rækker" in capsys.readouterr().out
+    daarligt = "Ja, du skal indberette -2.500 kr. i salgsmoms."
+    model = FalskModel([([_tekst(daarligt)], "end_turn")])
+    monkeypatch.setattr(sm, "_klient", lambda: model)
+    assert asyncio.run(proeve._kundeproeve("OPS-1", medarbejder.email)) == [False, False, False, False]

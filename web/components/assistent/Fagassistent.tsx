@@ -165,6 +165,14 @@ export default function Fagassistent() {
           <div key={i} className="mr-4 rounded-lg border border-slate-200 bg-white px-3 py-2 leading-relaxed text-slate-800">
             {b.tekst ? <Svartekst tekst={b.tekst} /> : <span className="text-slate-400">Tænker …</span>}
             {b.status === "interrupted" && <p className="mt-1 text-xs text-slate-400">(Svaret blev afbrudt)</p>}
+            {b.opslag && b.opslag.length > 0 && (
+              <div className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-500">
+                <p>Slået op i kundens regnskab:</p>
+                <ul className="mt-0.5 list-disc pl-4">
+                  {b.opslag.map((o, j) => <li key={j}>{o}</li>)}
+                </ul>
+              </div>
+            )}
             {b.kilder && b.kilder.length > 0 && (
               <div className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-500">
                 Kilder fra videnbasen:{" "}
