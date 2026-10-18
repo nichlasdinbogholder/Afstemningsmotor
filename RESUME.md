@@ -487,11 +487,12 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
 - 18.10.2026: Kostpris pr. medarbejder (Indstillinger → Medarbejdere, kun admin): kr. pr. time med en
   "gælder fra"-dato, så gamle timer beholder den pris, der gjaldt dengang (tabellen `staff_cost_rates`; rækker
   kan ikke slettes; samme dato igen = rettelse af en tastefejl). Hver ændring logges (`medarbejder_kostpris`, fra/til).
-  ANTAGELSE: prisen er pr. time – afventer bekræftelse fra bygherren.
+  Bygherren har bekræftet: kr. pr. time.
 - 18.10.2026: Svends kundeopslag hentes DIREKTE fra e-conomic (kundens token, via adapter-laget) – ikke fra vores
   database. Kun læsning.
 - 18.10.2026: "Tilknyttet" = den ANSVARLIGE medarbejder på kunden (sættes, når kunden oprettes i hub'en).
-  Administratorer får (indtil videre) ingen særadgang – afventer svar.
+  ADMINISTRATORER må slå op i ALLE aktive kunder; medarbejdere kun i dem, de selv er ansvarlige for (bygherren).
+  Rollen tjekkes ved hvert kald – mister man admin-rollen, gælder den almindelige regel med det samme.
 - 16.10.2026: Hub'en bruges KUN på PC – ikke på telefon. Nye sider bygges ikke til mobil. (Spec'ens widget-test 5
   – "under 640 px fylder panelet hele skærmen" – er derfor ikke længere et krav; det eksisterende er ladt urørt.)
 - 16.10.2026: Satskontrollens fund gemmes i kb_rate_checks (med afgørelse), ikke i `findings`, fordi en sats ikke
@@ -514,5 +515,4 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
 - Samtaler/kunder slettes ikke (RESTRICT); beskeder følger samtalen (CASCADE som i spec'en).
 
 ## Skal afklares (før de berørte trin)
-- Fase 4: må administratorer slå op i ALLE kunder i Svend? (I dag: nej – kun dem, de er ansvarlige for.)
-- Kostpris: er det rigtigt, at den er pr. time?
+- Intet åbent lige nu for Fagassistenten.

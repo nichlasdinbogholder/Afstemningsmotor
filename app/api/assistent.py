@@ -63,14 +63,14 @@ class NySamtale(BaseModel):
     kunde_id: int | None = None
 
 
-IKKE_TILKNYTTET = "Du er ikke ansvarlig for den kunde og kan ikke slå op i dens regnskab"
+IKKE_TILKNYTTET = "Du er ikke ansvarlig for den kunde og kan ikke spørge til dens regnskab"
 
 
 @router.get("/kunder")
 def mine_kunder(m: Staff = Depends(nuvaerende_medarbejder), session: Session = Depends(db)) -> list[dict]:
-    """Kunderne i vælgeren: kun dem, medarbejderen er ansvarlig for."""
+    """Kunderne i vælgeren: alle aktive for en administrator, ellers kun dem, medarbejderen er ansvarlig for."""
     return [{"id": k.id, "navn": k.navn, "kundenummer": k.kundenummer}
-            for k in sm.tilknyttede_kunder(session, m.id)]
+            for k in sm.tilknyttede_kunder(session, m)]
 
 
 @router.post("/conversations", dependencies=[Depends(kraev_header)])
@@ -79,7 +79,7 @@ def ny_samtale(data: NySamtale | None = None, m: Staff = Depends(nuvaerende_meda
     """En samtale er enten generel eller om ÉN kunde – og kunden kan ikke skiftes bagefter (ny samtale i stedet),
     så en tråd aldrig blander to kunders tal."""
     kunde_id = data.kunde_id if data is not None else None
-    if kunde_id is not None and not sm.er_tilknyttet(session, m.id, kunde_id):
+    if kunde_id is not None and not sm.er_tilknyttet(session, m, kunde_id):
         raise HTTPException(status_code=403, detail=IKKE_TILKNYTTET)
     samtale = AssistantConversation(staff_id=m.id, client_id=kunde_id)
     session.add(samtale)
@@ -125,7 +125,7 @@ async def spoerg(samtale_id: int, data: Spoergsmaal, m: Staff = Depends(nuvaeren
     if not sm.slaaet_til():
         raise HTTPException(status_code=503, detail="Fagassistenten er ikke slået til endnu")
     # Tilknytningen kontrolleres ved HVERT kald – er man ikke længere ansvarlig, er adgangen væk med det samme.
-    if samtale.client_id is not None and not sm.er_tilknyttet(session, m.id, samtale.client_id):
+    if samtale.client_id is not None and not sm.er_tilknyttet(session, m, samtale.client_id):
         raise HTTPException(status_code=403, detail=IKKE_TILKNYTTET)
     tekst = data.tekst.strip()
     if not tekst:

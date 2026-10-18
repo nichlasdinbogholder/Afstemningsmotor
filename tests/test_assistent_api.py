@@ -152,6 +152,31 @@ def test_31_fremmed_kunde_afvises_paa_serveren(db_session, klient, medarbejder, 
                        json={"tekst": "Hej"}).status_code == 403
 
 
+def test_admin_maa_slaa_op_i_alle_aktive_kunder(db_session, klient, medarbejder, anden, monkeypatch):
+    # Beslutning 18.10.2026: administratorer må alle aktive kunder; medarbejdere kun dem, de er ansvarlige for.
+    chef = Staff(navn="Chef", email="chef-kunder@dinbogholder.dk", rolle="admin", aktiv=True)
+    db_session.add(chef)
+    db_session.flush()
+    andens = _kunde(db_session, "Andens VVS ApS", anden)
+    uden = _kunde(db_session, "Uden Ansvarlig ApS")
+    opsagt = _kunde(db_session, "Opsagt El ApS", anden, status="opsagt")
+    app.dependency_overrides[login.nuvaerende_medarbejder] = lambda: chef
+    navne = [k["navn"] for k in klient.get("/api/v1/assistant/kunder").json()]
+    assert andens.navn in navne and uden.navn in navne and opsagt.navn not in navne
+    s = klient.post("/api/v1/assistant/conversations", headers=H, json={"kunde_id": andens.id})
+    assert s.status_code == 200
+    assert klient.post("/api/v1/assistant/conversations", headers=H,
+                       json={"kunde_id": opsagt.id}).status_code == 403
+    _falsk_model(monkeypatch, ["Svar"])
+    assert klient.post(f"/api/v1/assistant/conversations/{s.json()['id']}/messages", headers=H,
+                       json={"tekst": "Hej"}).status_code == 200
+    # Fratages admin-rollen, gælder den almindelige regel med det samme.
+    chef.rolle = "medarbejder"
+    db_session.flush()
+    assert klient.post(f"/api/v1/assistant/conversations/{s.json()['id']}/messages", headers=H,
+                       json={"tekst": "Hej"}).status_code == 403
+
+
 def test_32_kunden_kan_ikke_skiftes_i_en_samtale():
     # Der findes intet endpoint, der ændrer en samtales kunde – et skift starter en ny samtale (i panelet).
     from app.api.main import app as a
