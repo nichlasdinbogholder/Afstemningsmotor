@@ -120,8 +120,56 @@ def test_slaaet_fra_uden_noegle(klient, monkeypatch):
                        json={"tekst": "Hej"}).status_code == 503
 
 
-def test_kunde_kommer_i_fase_4(klient):
-    assert klient.post("/api/v1/assistant/conversations", headers=H, json={"kunde_id": 1}).status_code == 422
+# Fase 4, trin 12: kundevælgeren – kun kunder, man er ANSVARLIG for; kontrolleret på serveren ved hvert kald
+def _kunde(db_session, navn, ansvarlig=None, status="aktiv"):
+    from app.kunder.models import Client
+
+    k = Client(navn=navn, kundenummer=f"ASS-{navn[:6]}", regnskabssystem="economic", status=status,
+               ansvarlig_medarbejder_id=ansvarlig.id if ansvarlig else None)
+    db_session.add(k)
+    db_session.flush()
+    return k
+
+
+def test_30_kun_egne_kunder_i_vaelgeren(db_session, klient, medarbejder, anden):
+    egen = _kunde(db_session, "Egen Tømrer ApS", medarbejder)
+    _kunde(db_session, "Andens VVS ApS", anden)
+    _kunde(db_session, "Opsagt El ApS", medarbejder, status="opsagt")
+    assert [k["navn"] for k in klient.get("/api/v1/assistant/kunder").json()] == [egen.navn]
+
+
+def test_31_fremmed_kunde_afvises_paa_serveren(db_session, klient, medarbejder, anden, monkeypatch):
+    fremmed = _kunde(db_session, "Andens VVS ApS", anden)
+    assert klient.post("/api/v1/assistant/conversations", headers=H, json={"kunde_id": fremmed.id}).status_code == 403
+    # Mister man ansvaret, er adgangen væk med det samme – også i en eksisterende samtale.
+    egen = _kunde(db_session, "Egen Tømrer ApS", medarbejder)
+    s = klient.post("/api/v1/assistant/conversations", headers=H, json={"kunde_id": egen.id}).json()
+    assert (s["kunde_id"], s["kunde"]) == (egen.id, "Egen Tømrer ApS")
+    egen.ansvarlig_medarbejder_id = anden.id
+    db_session.flush()
+    _falsk_model(monkeypatch, ["x"])
+    assert klient.post(f"/api/v1/assistant/conversations/{s['id']}/messages", headers=H,
+                       json={"tekst": "Hej"}).status_code == 403
+
+
+def test_32_kunden_kan_ikke_skiftes_i_en_samtale():
+    # Der findes intet endpoint, der ændrer en samtales kunde – et skift starter en ny samtale (i panelet).
+    from app.api.main import app as a
+
+    stier = {(r.path, m) for r in a.routes for m in getattr(r, "methods", set())}
+    assert not any(p.startswith("/api/v1/assistant/conversations/{samtale_id}") and m in ("PUT", "PATCH")
+                   for p, m in stier)
+    assert ("/api/v1/assistant/conversations/{samtale_id}", "POST") not in stier
+
+
+def test_kundesamtale_faar_kunden_i_systemteksten(db_session, klient, medarbejder, monkeypatch):
+    egen = _kunde(db_session, "Egen Tømrer ApS", medarbejder)
+    s = klient.post("/api/v1/assistant/conversations", headers=H, json={"kunde_id": egen.id}).json()
+    system = []
+    _falsk_model(monkeypatch, ["x"], system_ud=system)
+    klient.post(f"/api/v1/assistant/conversations/{s['id']}/messages", headers=H, json={"tekst": "Hej"})
+    assert "Samtalen handler om kunden Egen Tømrer ApS" in system[0]
+    assert "Opslag i kundens regnskab er endnu ikke slået til" in system[0]
 
 
 # 9 + 10. Spørgsmålet gemmes før kaldet; svaret streames og gemmes komplet

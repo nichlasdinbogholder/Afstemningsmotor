@@ -65,7 +65,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   (`python -m app.sikkerhed.ny_noegle [--gem]`).
 - `app/kunder/adgange.py` – `gem_token(session, client_id, system, token)`:
   gemmer/udskifter en kundes token (krypteres straks, logges i audit_log uden tokenet).
-- `app/kunder/opret.py` – opret en kunde: `python -m app.kunder.opret --navn ... --kundenummer ... --cvr ... --system economic` (`--vis` viser alle).
+- `app/kunder/opret.py` – opret en kunde: `python -m app.kunder.opret --navn ... --kundenummer ... --cvr ... --system economic
+  [--ansvarlig <e-mail>]` (`--vis` viser alle; `--kundenummer <nr> --ansvarlig <e-mail>` sætter den ansvarlige).
 - `app/kunder/gem_token.py` – kommando til at lægge et token ind:
   `python -m app.kunder.gem_token --kundenummer <nr> --system economic|dinero`.
   Tokenet indtastes skjult – aldrig som argument på kommandolinjen.
@@ -320,6 +321,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     serveren; nøglen `ANTHROPIC_API_KEY` registreres i logfilteret. Grundinstruksen i `system_prompt.md`.
   - `app/api/assistent.py`: `/api/v1/assistant` – status, conversations (kun egne; andres = 404), messages
     (SSE; spørgsmål gemmes før kaldet; afbrudt = 'interrupted'), feedback (én pr. svar). POST kræver X-Afstemning.
+  - Kundevælger (fase 4): kun aktive kunder, hvor man er ANSVARLIG (`er_tilknyttet()`, tjekkes ved hvert kald);
+    kunden kan ikke skiftes i en samtale. Kundeopslag hentes DIREKTE fra e-conomic via adapter-laget, kun læsning.
   - `proeve.py`: `python -m app.assistent.proeve` – faste prøvespørgsmål mod den rigtige model (kode 0/1/2).
   - Webdelen: `web/components/assistent/` (Provider + panel i Ramme, dvs. rodlayoutet). Assistenten hedder **Svend**.
     Siden `/fagassistent/` (punktet "Svend" under INDSTILLINGER nederst til venstre – `Indstillinger` i Ramme.tsx): loggen – admin ser alle spørgsmål, medarbejdere kun egne

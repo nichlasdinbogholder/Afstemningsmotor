@@ -24,6 +24,7 @@ from app.api.login import db, nuvaerende_medarbejder
 from app.assistent import samtale as sm
 from app.assistent.models import AssistantConversation, AssistantFeedback, AssistantMessage
 from app.db import ny_session
+from app.kunder.models import Client
 from app.personale.models import Staff
 
 router = APIRouter(prefix="/api/v1/assistant", dependencies=[Depends(nuvaerende_medarbejder)])
@@ -35,8 +36,9 @@ AFKORTET_TEKST = "\n\n(Svaret blev afkortet, fordi det blev for langt. Spørg ge
 AFVIST_TEKST = "Det spørgsmål kan Svend ikke svare på. Spørg den kundeansvarlige."
 
 
-def _samtale_json(s: AssistantConversation) -> dict:
-    return {"id": s.id, "titel": s.title, "kunde_id": s.client_id,
+def _samtale_json(s: AssistantConversation, session: Session | None = None) -> dict:
+    kunde = session.get(Client, s.client_id) if session is not None and s.client_id else None
+    return {"id": s.id, "titel": s.title, "kunde_id": s.client_id, "kunde": kunde.navn if kunde else None,
             "oprettet": s.created_at.isoformat(), "opdateret": s.updated_at.isoformat()}
 
 
@@ -61,15 +63,28 @@ class NySamtale(BaseModel):
     kunde_id: int | None = None
 
 
+IKKE_TILKNYTTET = "Du er ikke ansvarlig for den kunde og kan ikke slå op i dens regnskab"
+
+
+@router.get("/kunder")
+def mine_kunder(m: Staff = Depends(nuvaerende_medarbejder), session: Session = Depends(db)) -> list[dict]:
+    """Kunderne i vælgeren: kun dem, medarbejderen er ansvarlig for."""
+    return [{"id": k.id, "navn": k.navn, "kundenummer": k.kundenummer}
+            for k in sm.tilknyttede_kunder(session, m.id)]
+
+
 @router.post("/conversations", dependencies=[Depends(kraev_header)])
 def ny_samtale(data: NySamtale | None = None, m: Staff = Depends(nuvaerende_medarbejder),
                session: Session = Depends(db)) -> dict:
-    if data is not None and data.kunde_id is not None:
-        raise HTTPException(status_code=422, detail="Opslag i en kundes regnskab kommer i en senere fase")
-    samtale = AssistantConversation(staff_id=m.id)
+    """En samtale er enten generel eller om ÉN kunde – og kunden kan ikke skiftes bagefter (ny samtale i stedet),
+    så en tråd aldrig blander to kunders tal."""
+    kunde_id = data.kunde_id if data is not None else None
+    if kunde_id is not None and not sm.er_tilknyttet(session, m.id, kunde_id):
+        raise HTTPException(status_code=403, detail=IKKE_TILKNYTTET)
+    samtale = AssistantConversation(staff_id=m.id, client_id=kunde_id)
     session.add(samtale)
     session.commit()
-    return _samtale_json(samtale)
+    return _samtale_json(samtale, session)
 
 
 @router.get("/conversations")
@@ -78,7 +93,7 @@ def samtaler(m: Staff = Depends(nuvaerende_medarbejder), session: Session = Depe
         select(AssistantConversation).where(AssistantConversation.staff_id == m.id)
         .order_by(AssistantConversation.updated_at.desc(), AssistantConversation.id.desc()).limit(MAKS_SAMTALER)
     )
-    return [_samtale_json(s) for s in raekker]
+    return [_samtale_json(s, session) for s in raekker]
 
 
 @router.get("/conversations/{samtale_id}/messages")
@@ -109,6 +124,9 @@ async def spoerg(samtale_id: int, data: Spoergsmaal, m: Staff = Depends(nuvaeren
     samtale = _hent_egen(session, samtale_id, m)
     if not sm.slaaet_til():
         raise HTTPException(status_code=503, detail="Fagassistenten er ikke slået til endnu")
+    # Tilknytningen kontrolleres ved HVERT kald – er man ikke længere ansvarlig, er adgangen væk med det samme.
+    if samtale.client_id is not None and not sm.er_tilknyttet(session, m.id, samtale.client_id):
+        raise HTTPException(status_code=403, detail=IKKE_TILKNYTTET)
     tekst = data.tekst.strip()
     if not tekst:
         raise HTTPException(status_code=422, detail="Skriv et spørgsmål")
@@ -117,8 +135,9 @@ async def spoerg(samtale_id: int, data: Spoergsmaal, m: Staff = Depends(nuvaeren
     session.commit()
     beskeder_til_model = sm.historik(session, samtale_id)
     materiale = sm.find_materiale(session, tekst)
+    kunde = session.get(Client, samtale.client_id) if samtale.client_id else None
     return StreamingResponse(_stream(samtale_id, spoergsmaal.id, beskeder_til_model,
-                                     sm.systemtekst(materiale), sm.kilder(materiale)),
+                                     sm.systemtekst(materiale, kunde), sm.kilder(materiale)),
                              media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 

@@ -11,7 +11,8 @@ export type Besked = {
   id: number | null; rolle: "user" | "assistant"; tekst: string; status: string; min_vurdering?: string | null;
   kilder?: { kb_id: number; title: string }[];
 };
-type Samtale = { id: number; titel: string | null };
+type Samtale = { id: number; titel: string | null; kunde_id: number | null };
+export type Kunde = { id: number; navn: string; kundenummer: string };
 
 type Tilstand = {
   aaben: boolean;
@@ -23,6 +24,9 @@ type Tilstand = {
   fejl: string | null;
   spoerg: (tekst: string) => Promise<void>;
   nySamtale: () => void;
+  kunder: Kunde[];
+  kundeId: number | null;
+  vaelgKunde: (id: number | null) => void;
   vurder: (beskedId: number, vurdering: "up" | "down", kommentar?: string) => Promise<void>;
 };
 
@@ -48,6 +52,9 @@ export function AssistentProvider({ children }: { children: React.ReactNode }) {
   const [ulaest, setUlaest] = useState(false);
   const [slaaetTil, setSlaaetTil] = useState<boolean | null>(null);
   const [samtaleId, setSamtaleId] = useState<number | null>(null);
+  // Samtalens kunde (null = "Generelt"). Kunderne i vælgeren er kun dem, man er ansvarlig for (serveren afgør).
+  const [kundeId, setKundeId] = useState<number | null>(null);
+  const [kunder, setKunder] = useState<Kunde[]>([]);
   const [beskeder, setBeskeder] = useState<Besked[]>([]);
   const [svarer, setSvarer] = useState(false);
   const [fejl, setFejl] = useState<string | null>(null);
@@ -55,11 +62,13 @@ export function AssistentProvider({ children }: { children: React.ReactNode }) {
   // Hent status og den seneste samtale fra serveren.
   useEffect(() => {
     hent<{ slaaet_til: boolean }>("/api/v1/assistant/status").then((s) => setSlaaetTil(s.slaaet_til)).catch(() => setSlaaetTil(false));
+    hent<Kunde[]>("/api/v1/assistant/kunder").then(setKunder).catch(() => {});
     hent<Samtale[]>("/api/v1/assistant/conversations")
       .then(async (samtaler) => {
         if (samtaler.length === 0) return;
         const b = await hent<Besked[]>(`/api/v1/assistant/conversations/${samtaler[0].id}/messages`);
         setSamtaleId(samtaler[0].id);
+        setKundeId(samtaler[0].kunde_id);
         setBeskeder(b);
       })
       .catch(() => {});
@@ -71,6 +80,15 @@ export function AssistentProvider({ children }: { children: React.ReactNode }) {
     try {
       localStorage.setItem(NOEGLE, ny ? "1" : "0");
     } catch {}
+  }
+
+  // Et kundeskift starter altid en NY samtale – en tråd må ikke blande to kunders tal.
+  function vaelgKunde(id: number | null) {
+    if (svarer || id === kundeId) return;
+    setKundeId(id);
+    setSamtaleId(null);
+    setBeskeder([]);
+    setFejl(null);
   }
 
   function nySamtale() {
@@ -100,7 +118,7 @@ export function AssistentProvider({ children }: { children: React.ReactNode }) {
     try {
       let id = samtaleId;
       if (id === null) {
-        id = (await send<Samtale>("/api/v1/assistant/conversations")).id;
+        id = (await send<Samtale>("/api/v1/assistant/conversations", { kunde_id: kundeId })).id;
         setSamtaleId(id);
       }
       const r = await fetch(`/api/v1/assistant/conversations/${id}/messages`, {
@@ -160,7 +178,7 @@ export function AssistentProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AssistentKontekst.Provider value={{ aaben, saetAaben, ulaest, slaaetTil, beskeder, svarer, fejl, spoerg, nySamtale, vurder }}>
+    <AssistentKontekst.Provider value={{ aaben, saetAaben, ulaest, slaaetTil, beskeder, svarer, fejl, spoerg, nySamtale, vurder, kunder, kundeId, vaelgKunde }}>
       {children}
     </AssistentKontekst.Provider>
   );

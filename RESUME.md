@@ -473,8 +473,18 @@ PR og merge efter hvert trin; næste fase først når den foregående er merged 
   den til noget bindende." Over 2 × dagene (90) laver det daglige job `assistent_foraeldelse` (kl. 06.30) et fund
   (kb_rate_checks.outcome = 'stale', højst ét åbent pr. sats), som kvitteres i Satskontrol. Migrering 93484f38bd75.
   Tests: spec-test 29 m.fl. i `tests/test_satskontrol.py`. **Fase 3 er færdig.**
+- **Fase 4, trin 12 (18.10.2026):** kundevælgeren øverst i Svends panel ("Generelt" eller en kunde – står synligt
+  hele tiden). Kun AKTIVE kunder, hvor medarbejderen er ANSVARLIG (`clients.ansvarlig_medarbejder_id`), kontrolleret
+  på serveren ved hvert kald (`samtale.er_tilknyttet`) – mister man ansvaret, er adgangen væk med det samme.
+  Kunden gemmes på samtalen og kan ikke ændres; et skift starter en ny samtale. Indtil opslagene (trin 13) findes,
+  får Svend at vide, at han ikke må nævne tal fra kundens regnskab. `/api/v1/assistant/kunder`. Ansvarlig sættes
+  med `python -m app.kunder.opret --kundenummer <nr> --ansvarlig <e-mail>`. Tests: spec 30, 31, 32.
 
 ## Beslutninger
+- 18.10.2026: Svends kundeopslag hentes DIREKTE fra e-conomic (kundens token, via adapter-laget) – ikke fra vores
+  database. Kun læsning.
+- 18.10.2026: "Tilknyttet" = den ANSVARLIGE medarbejder på kunden (sættes, når kunden oprettes i hub'en).
+  Administratorer får (indtil videre) ingen særadgang – afventer svar.
 - 16.10.2026: Hub'en bruges KUN på PC – ikke på telefon. Nye sider bygges ikke til mobil. (Spec'ens widget-test 5
   – "under 640 px fylder panelet hele skærmen" – er derfor ikke længere et krav; det eksisterende er ladt urørt.)
 - 16.10.2026: Satskontrollens fund gemmes i kb_rate_checks (med afgørelse), ikke i `findings`, fordi en sats ikke

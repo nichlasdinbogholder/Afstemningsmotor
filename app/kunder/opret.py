@@ -3,9 +3,12 @@
     python -m app.kunder.opret --navn "Eksempel ApS" --kundenummer 1045 --cvr 12345678 --system economic
     python -m app.kunder.opret --vis
     python -m app.kunder.opret --kundenummer 1045 --kontoudtog-fra 2026-09-01   (ret en eksisterende kunde)
+    python -m app.kunder.opret --kundenummer 1045 --ansvarlig nichlas@dinbogholder.dk   (sæt ansvarlig medarbejder)
 
 --kontoudtog-fra: manglende kontoudtog fra grossister meldes fra denne måned
 (tom = måneden, kunden blev oprettet i systemet).
+--ansvarlig: den ansvarlige medarbejder (e-mail på en aktiv medarbejder). Kun den ansvarlige kan bede Svend
+slå op i kundens regnskab.
 
 Tokenet lægges ind bagefter med app.kunder.gem_token (skjult indtastning – aldrig som argument).
 Kunder slettes aldrig; brug status 'opsagt'. Oprettelsen logges i audit_log.
@@ -22,6 +25,16 @@ import app.models  # noqa: F401
 from app.audit.models import AuditLog
 from app.db import ny_session
 from app.kunder.models import SYSTEMER, Client
+from app.personale.models import Staff
+
+
+def _medarbejder(session, email: str | None) -> Staff | None:
+    if email is None:
+        return None
+    m = session.scalars(select(Staff).where(Staff.email == email.strip().lower())).one_or_none()
+    if m is None or not m.aktiv:
+        raise SystemExit(f"Fejl: {email} er ikke en aktiv medarbejder (se: python -m app.personale.bruger vis)")
+    return m
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -33,26 +46,35 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--system", choices=SYSTEMER, help="kundens regnskabssystem")
     parser.add_argument("--kontoudtog-fra", type=date.fromisoformat,
                         help="afstem kontoudtog fra denne dato (ÅÅÅÅ-MM-DD)")
+    parser.add_argument("--ansvarlig", help="e-mail på den ansvarlige medarbejder")
     args = parser.parse_args(argv)
 
     with ny_session() as session:
         if args.vis:
             for k in session.scalars(select(Client).order_by(Client.navn)):
+                ansvarlig = session.get(Staff, k.ansvarlig_medarbejder_id) if k.ansvarlig_medarbejder_id else None
                 print(f"id {k.id:<6} kundenr. {k.kundenummer:<12} CVR {k.cvr or '-':<9} {k.status:<8} "
                       f"{k.regnskabssystem or '-':<9} kontoudtog fra "
-                      f"{k.kontoudtog_fra.strftime('%d.%m.%Y') if k.kontoudtog_fra else 'oprettelsen':<11} {k.navn}")
+                      f"{k.kontoudtog_fra.strftime('%d.%m.%Y') if k.kontoudtog_fra else 'oprettelsen':<11} "
+                      f"ansvarlig {ansvarlig.email if ansvarlig else '-':<28} {k.navn}")
             return 0
-        if args.kundenummer and not args.navn and args.kontoudtog_fra:
+        if args.kundenummer and not args.navn and (args.kontoudtog_fra or args.ansvarlig):
             kunde = session.scalars(select(Client).where(Client.kundenummer == args.kundenummer)).one_or_none()
             if kunde is None:
                 print("Fejl: Kunden findes ikke", file=sys.stderr)
                 return 2
-            kunde.kontoudtog_fra = args.kontoudtog_fra
-            session.add(AuditLog(client_id=kunde.id, handling="kunde_rettet",
-                                 detaljer={"udfoert_af": getpass.getuser(),
-                                           "kontoudtog_fra": args.kontoudtog_fra.isoformat()}))
+            detaljer = {"udfoert_af": getpass.getuser()}
+            if args.kontoudtog_fra:
+                kunde.kontoudtog_fra = args.kontoudtog_fra
+                detaljer["kontoudtog_fra"] = args.kontoudtog_fra.isoformat()
+                print(f"{kunde.navn}: kontoudtog afstemmes fra {args.kontoudtog_fra:%d.%m.%Y}.")
+            if args.ansvarlig:
+                m = _medarbejder(session, args.ansvarlig)
+                detaljer["ansvarlig"] = {"fra": kunde.ansvarlig_medarbejder_id, "til": m.id, "email": m.email}
+                kunde.ansvarlig_medarbejder_id = m.id
+                print(f"{kunde.navn}: ansvarlig medarbejder er nu {m.navn} ({m.email}).")
+            session.add(AuditLog(client_id=kunde.id, handling="kunde_rettet", detaljer=detaljer))
             session.commit()
-            print(f"{kunde.navn}: kontoudtog afstemmes fra {args.kontoudtog_fra:%d.%m.%Y}.")
             return 0
         if not (args.navn and args.kundenummer and args.system):
             parser.error("angiv --navn, --kundenummer og --system")
@@ -64,8 +86,10 @@ def main(argv: list[str] | None = None) -> int:
         if findes:
             print(f"Fejl: Kunden findes allerede (id {findes.id}, {findes.navn})", file=sys.stderr)
             return 2
+        ansvarlig = _medarbejder(session, args.ansvarlig)
         kunde = Client(navn=args.navn, kundenummer=args.kundenummer, cvr=cvr, regnskabssystem=args.system,
-                       status="aktiv", kontoudtog_fra=args.kontoudtog_fra)
+                       status="aktiv", kontoudtog_fra=args.kontoudtog_fra,
+                       ansvarlig_medarbejder_id=ansvarlig.id if ansvarlig else None)
         session.add(kunde)
         session.flush()
         session.add(AuditLog(client_id=kunde.id, handling="kunde_oprettet",

@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.assistent.models import AssistantConversation, AssistantMessage, KbDocument
 from app.assistent.satskontrol import er_foraeldet
+from app.kunder.models import Client
 from app.config import get_settings
 from app.sikkerhed.hemmeligheder import registrer_hemmelighed
 
@@ -110,8 +111,34 @@ def materialetekst(materiale: list[KbDocument]) -> str:
     return "\n\n".join(dele)
 
 
-def systemtekst(materiale: list[KbDocument] | None = None) -> str:
-    return GRUNDINSTRUKS.read_text(encoding="utf-8").strip() + "\n\n" + materialetekst(materiale or [])
+def tilknyttede_kunder(session: Session, staff_id: int) -> list[Client]:
+    """De kunder, medarbejderen må slå op hos i Svend: aktive kunder, hvor hun er den ANSVARLIGE medarbejder
+    (beslutning 18.10.2026). Kontrolleres på serveren ved hvert kald – aldrig kun i brugerfladen."""
+    return session.scalars(
+        select(Client).where(Client.status == "aktiv", Client.ansvarlig_medarbejder_id == staff_id)
+        .order_by(Client.navn)
+    ).all()
+
+
+def er_tilknyttet(session: Session, staff_id: int, client_id: int) -> bool:
+    k = session.get(Client, client_id)
+    return k is not None and k.status == "aktiv" and k.ansvarlig_medarbejder_id == staff_id
+
+
+def kundetekst(kunde: Client | None) -> str:
+    if kunde is None:
+        return ""
+    return ("VALGT KUNDE\n"
+            f"Samtalen handler om kunden {kunde.navn} (kundenr. {kunde.kundenummer}"
+            f"{', CVR ' + kunde.cvr if kunde.cvr else ''}). Opslag i kundens regnskab er endnu ikke slået til – "
+            "nævn derfor ingen tal fra kundens regnskab, og sig det, hvis spørgsmålet kræver dem.")
+
+
+def systemtekst(materiale: list[KbDocument] | None = None, kunde: Client | None = None) -> str:
+    dele = [GRUNDINSTRUKS.read_text(encoding="utf-8").strip(), materialetekst(materiale or [])]
+    if kunde is not None:
+        dele.append(kundetekst(kunde))
+    return "\n\n".join(dele)
 
 
 def kilder(materiale: list[KbDocument]) -> list[dict]:

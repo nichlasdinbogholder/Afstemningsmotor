@@ -88,3 +88,39 @@ def test_opret_kunde(db_session, monkeypatch, capsys):
 
     assert opret.main(["--kundenummer", "T-1045", "--kontoudtog-fra", "2026-09-01"]) == 0
     assert str(k.kontoudtog_fra) == "2026-09-01"
+
+
+def test_opret_kunde_med_ansvarlig(db_session, monkeypatch, capsys):
+    from contextlib import contextmanager
+
+    import pytest
+    from sqlalchemy import select
+
+    from app.audit.models import AuditLog
+    from app.kunder import opret
+    from app.kunder.models import Client
+    from app.personale.models import Staff
+
+    @contextmanager
+    def samme():
+        yield db_session
+
+    monkeypatch.setattr(opret, "ny_session", samme)
+    m = Staff(navn="Ansvarlig", email="ansvarlig-kmd@dinbogholder.dk", rolle="medarbejder", aktiv=True)
+    db_session.add(m)
+    db_session.flush()
+    assert opret.main(["--navn", "Ansvar ApS", "--kundenummer", "T-2001", "--system", "economic",
+                       "--ansvarlig", "Ansvarlig-KMD@dinbogholder.dk"]) == 0
+    k = db_session.scalars(select(Client).where(Client.kundenummer == "T-2001")).one()
+    assert k.ansvarlig_medarbejder_id == m.id
+    with pytest.raises(SystemExit, match="ikke en aktiv medarbejder"):
+        opret.main(["--kundenummer", "T-2001", "--ansvarlig", "findes-ikke@dinbogholder.dk"])
+    m2 = Staff(navn="Ny ansvarlig", email="ny-kmd@dinbogholder.dk", rolle="medarbejder", aktiv=True)
+    db_session.add(m2)
+    db_session.flush()
+    assert opret.main(["--kundenummer", "T-2001", "--ansvarlig", "ny-kmd@dinbogholder.dk"]) == 0
+    assert k.ansvarlig_medarbejder_id == m2.id
+    log = db_session.scalars(select(AuditLog).where(AuditLog.client_id == k.id, AuditLog.handling == "kunde_rettet")).one()
+    assert log.detaljer["ansvarlig"]["til"] == m2.id
+    assert opret.main(["--vis"]) == 0
+    assert "ansvarlig ny-kmd@dinbogholder.dk" in capsys.readouterr().out
