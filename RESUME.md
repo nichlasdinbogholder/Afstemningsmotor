@@ -592,6 +592,13 @@ selskabsdimension). Fire faser; ét trin ad gangen med PR og merge.
   BEKRÆFTET (bygherren 19.10.2026): afregningsformen gælder den dag, ARBEJDET UDFØRES (linjens dato) – ikke den dag,
   linjen tastes.
   Tests: `tests/test_timeregistrering_registrering.py` (spec 8–10, ret/slet, låste uger, kun egne linjer).
+- **Fase 1, trin 4 (19.10.2026):** validering ved indtastning. Ferie vises slet ikke for timelønnede (serveren sorterer
+  den fra; afvises stadig, hvis den sendes). Kolonnen "Afregning": abonnementskunder får valget "Indeholdt i
+  abonnementet" (standard) / "Uden for abonnementet – timer" (= `billable_separately`, kræver beskrivelse; medarbejderen
+  vælger selv); timeafregningskunder viser blot "Timeafregning" (valget afvises af serveren for dem). "Ikke på arbejde"
+  (nul-timer-arter): dagene markeres med flueben i stedet for timer (gemmes som 0). Felter, der skal udfyldes (kunde,
+  beskrivelse ved "uden for"), markeres; alle regler kontrolleres på serveren og databasen. Tests:
+  `tests/test_timeregistrering_registrering.py` (trin 4), browsertest 9/9.
 - Opgavetyper (bygherren 19.10.2026, migrering e2a0a9a2bed1): Afstemning → **Controlling** (kode `controlling`),
   Bogføring → **Kundearbejde** (kode `kundearbejde`), Øvrigt kundearbejde taget ud af brug (ikke slettet).
 - Beslutning (bygherren 19.10.2026) til trin 4: på linjer for ABONNEMENTSKUNDER erstattes fluebenet "faktureres

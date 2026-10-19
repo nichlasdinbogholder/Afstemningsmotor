@@ -184,7 +184,7 @@ function Ugegitter() {
               <th className="px-2 py-2">Opgavetype</th>
               <th className="px-2 py-2">Kunde</th>
               <th className="px-2 py-2">Beskrivelse</th>
-              <th className="px-2 py-2 text-center" title="Arbejdet falder uden for abonnementet og faktureres særskilt">Faktureres særskilt</th>
+              <th className="px-2 py-2" title="Abonnementskunder: er arbejdet indeholdt i abonnementet, eller afregnes det som timer?">Afregning</th>
               {uge.dage.map((d, i) => (
                 <th key={d} className={`px-1 py-2 text-center ${i >= 5 ? "text-slate-400" : ""}`}>{DAG[i]}<br />{dato(d).slice(0, 5)}</th>
               ))}
@@ -203,8 +203,9 @@ function Ugegitter() {
                     <select value={l.opgavetype} disabled={!ulaast} aria-label="Opgavetype"
                             onChange={(e) => {
                               const ny = uge.opgavetyper.find((x) => x.kode === e.target.value);
-                              ret(l.noegle, ny?.art === "kunde" ? { opgavetype: e.target.value } : { opgavetype: e.target.value, kunde_id: null, saerskilt: false, afregning: [] });
-                            }} className={felt}>
+                              const timer = ny?.nul_timer ? {} : l.timer;  // dage med "ikke på arbejde" markeres – ingen timer
+                              ret(l.noegle, ny?.art === "kunde" ? { opgavetype: e.target.value, timer } : { opgavetype: e.target.value, kunde_id: null, saerskilt: false, afregning: [], timer });
+                            }} className={`${felt} min-w-40`}>
                       <option value="">Vælg …</option>
                       {(["kunde", "intern", "fravaer"] as const).map((art) => (
                         <optgroup key={art} label={ART[art]}>
@@ -216,32 +217,51 @@ function Ugegitter() {
                   </td>
                   <td className="w-56 px-2 py-2">
                     <select value={l.kunde_id ?? ""} disabled={!ulaast || !kundetid} aria-label="Kunde"
-                            onChange={(e) => vaelgKunde(l, e.target.value ? Number(e.target.value) : null)} className={felt}>
-                      <option value="">{kundetid ? "Vælg kunde …" : "—"}</option>
+                            onChange={(e) => vaelgKunde(l, e.target.value ? Number(e.target.value) : null)}
+                            className={`${felt} min-w-44 ${kundetid && !l.kunde_id && ulaast ? "border-amber-400" : ""}`}>
+                      <option value="">{kundetid ? "Vælg kunde (skal udfyldes)" : "—"}</option>
                       {uge.kunder.map((k) => <option key={k.id} value={k.id}>{k.navn}</option>)}
                     </select>
-                    {kundetid && l.afregning.length > 0 && (
-                      <div className={`mt-1 text-xs ${l.afregning.includes("mangler") ? "text-red-700" : "text-slate-500"}`}>
-                        {l.afregning.includes("mangler") ? "Mangler afregningsform – en administrator skal sætte den"
-                          : l.afregning.map((a) => AFREGNING[a] ?? a).join(" / ")}
-                      </div>
+                    {kundetid && l.afregning.includes("mangler") && (
+                      <div className="mt-1 text-xs text-red-700">Mangler afregningsform – en administrator skal sætte den</div>
                     )}
                   </td>
                   <td className="px-2 py-2">
                     <input value={l.beskrivelse} disabled={!ulaast} aria-label="Beskrivelse"
                            placeholder={l.saerskilt ? "Skal udfyldes – står på fakturaen" : ""}
-                           onChange={(e) => ret(l.noegle, { beskrivelse: e.target.value })} className={`${felt} min-w-40`} />
+                           onChange={(e) => ret(l.noegle, { beskrivelse: e.target.value })}
+                           className={`${felt} min-w-40 ${l.saerskilt && !l.beskrivelse.trim() && ulaast ? "border-amber-400" : ""}`} />
                   </td>
-                  <td className="px-2 py-2 text-center">
-                    <input type="checkbox" checked={l.saerskilt} disabled={!ulaast || !kundetid} aria-label="Faktureres særskilt"
-                           onChange={(e) => ret(l.noegle, { saerskilt: e.target.checked })} />
+                  <td className="px-2 py-2">
+                    {!kundetid || l.afregning.length === 0 || l.afregning.includes("mangler") ? (
+                      <span className="text-slate-400">—</span>
+                    ) : l.afregning.includes("abonnement") ? (
+                      // Abonnementskunde: medarbejderen vælger selv, om arbejdet er indeholdt (bygherren 19.10.2026).
+                      <select value={l.saerskilt ? "uden_for" : "indeholdt"} disabled={!ulaast} aria-label="Afregning"
+                              onChange={(e) => ret(l.noegle, { saerskilt: e.target.value === "uden_for" })} title={l.saerskilt ? "Timeafregning – arbejdet er uden for abonnementet og faktureres pr. time" : "Arbejdet er indeholdt i abonnementet"}
+                              className={`${felt} min-w-52`}>
+                        <option value="indeholdt">Indeholdt i abonnementet</option>
+                        <option value="uden_for">Uden for abonnementet – timer</option>
+                      </select>
+                    ) : (
+                      <span className="text-slate-600">{l.afregning.map((a) => AFREGNING[a] ?? a).join(" / ")}</span>
+                    )}
                   </td>
                   {uge.dage.map((d, i) => (
                     <td key={d} className={`px-1 py-2 ${i >= 5 ? "bg-slate-50" : ""}`}>
-                      <input value={l.timer[d] ?? ""} disabled={!ulaast} inputMode="decimal"
-                             aria-label={`Timer ${DAG[i]} ${dato(d)}`}
-                             onChange={(e) => ret(l.noegle, { timer: { ...l.timer, [d]: e.target.value } })}
-                             className="w-14 rounded border border-slate-300 px-1 py-1 text-right tabular-nums disabled:bg-slate-50" />
+                      {t?.nul_timer ? (
+                        // Fx "Ikke på arbejde": altid 0 timer – dagen markeres i stedet for at få timer.
+                        <label className="flex w-12 justify-center py-1">
+                          <input type="checkbox" checked={l.timer[d] !== undefined && l.timer[d] !== ""} disabled={!ulaast}
+                                 aria-label={`Markér ${DAG[i]} ${dato(d)}`}
+                                 onChange={(e) => ret(l.noegle, { timer: { ...l.timer, [d]: e.target.checked ? "0" : "" } })} />
+                        </label>
+                      ) : (
+                        <input value={l.timer[d] ?? ""} disabled={!ulaast} inputMode="decimal"
+                               aria-label={`Timer ${DAG[i]} ${dato(d)}`}
+                               onChange={(e) => ret(l.noegle, { timer: { ...l.timer, [d]: e.target.value } })}
+                               className="w-12 rounded border border-slate-300 px-1 py-1 text-right tabular-nums disabled:bg-slate-50" />
+                      )}
                     </td>
                   ))}
                   <td className="px-2 py-2 text-right tabular-nums">{l.aendret ? <span className="text-slate-400">–</span> : timerTekst(l.i_alt) || "0"}</td>

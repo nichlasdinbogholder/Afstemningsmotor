@@ -262,6 +262,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   - `registrering.py` + `app/api/tid.py` (trin 3): UGEGITTERET `/api/tid/uge|afregning|linje|linje/slet` og siden
     `web/app/timeregistrering/` (7 dage; kun egne timer; kun kladde/afvist kan rettes; afregningsform låses på rækken ved
     oprettelse; summer regnes på serveren). Åbn fra en opgave: `/timeregistrering/?dato=&kunde=&opgavetype=`.
+    Trin 4: ferie skjules for timelønnede; kolonnen "Afregning" (abonnementskunder: indeholdt / uden for abonnementet –
+    timer = billable_separately, kræver beskrivelse); nul-timer-arter markeres med flueben.
 - `app/bilag/` – BILAGSINDBAKKEN (spec v3; trin 1 bygget, se RESUME.md): mail + upload → én pipeline. Tabeller
   `inbox_*` + `supplier_account_map` (`models.py`). DATABASEN håndhæver: levering af faktura/kreditnota/kontoudtog
   til Corpay kræver godkendelse af præcis den fil (trigger `inbox_require_approval`; rykker undtaget);

@@ -177,3 +177,36 @@ def test_kraever_login_og_header(db_session, grund):
         assert TestClient(app).post("/api/tid/linje", json={}).status_code == 403
     finally:
         app.dependency_overrides.clear()
+
+
+# --- Trin 4: validering ved indtastning ------------------------------------------------------
+
+
+def test_trin4_ferie_skjules_for_timeloennede(db_session, klient, grund):
+    m, *_ = grund
+    assert "ferie" in [t["kode"] for t in klient.get(f"/api/tid/uge?dato={MANDAG}").json()["opgavetyper"]]
+    stamdata.saet_ansaettelse(db_session, m.id, "timeloennet", False, None)
+    koder = [t["kode"] for t in klient.get(f"/api/tid/uge?dato={MANDAG}").json()["opgavetyper"]]
+    assert "ferie" not in koder and "sygdom" in koder
+    # Skulle nogen alligevel sende ferie, afvises det (7).
+    svar = _gem(klient, "ferie", timer={MANDAG: "7,5"})
+    assert svar.status_code == 422 and "timelønnede" in svar.json()["detail"]
+
+
+def test_trin4_uden_for_abonnementet(db_session, klient, grund):
+    _, _, k, k2, _ = grund
+    # Abonnementskunde: "Timeafregning – uden for abonnementet" kræver beskrivelse (5).
+    svar = _gem(klient, kunde=k, timer={MANDAG: "2"}, saerskilt=True)
+    assert svar.status_code == 422 and "beskrivelse" in svar.json()["detail"]
+    linje = _gem(klient, kunde=k, timer={MANDAG: "2"}, saerskilt=True, beskrivelse="Ekstra: momsregistrering").json()
+    l = linje["linjer"][0]
+    assert (l["saerskilt"], l["afregning"]) == (True, ["abonnement"])  # kundens aftale står uændret på linjen
+    # Kan slås fra igen af medarbejderen.
+    assert _gem(klient, kunde=k, ids=l["ids"], timer={MANDAG: "2"}, beskrivelse="Ekstra: momsregistrering"
+                ).json()["linjer"][0]["saerskilt"] is False
+    # Timeafregningskunde: valget giver ikke mening – alle timer faktureres allerede.
+    svar = _gem(klient, kunde=k2, timer={MANDAG: "1"}, saerskilt=True, beskrivelse="Noget")
+    assert svar.status_code == 422 and "kun abonnementskunder" in svar.json()["detail"]
+    # Intern tid kan aldrig være uden for abonnementet.
+    svar = _gem(klient, "administration", timer={MANDAG: "1"}, saerskilt=True, beskrivelse="x")
+    assert svar.status_code == 422
