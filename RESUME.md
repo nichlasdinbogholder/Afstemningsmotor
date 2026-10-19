@@ -592,6 +592,8 @@ selskabsdimension). Fire faser; ét trin ad gangen med PR og merge.
   BEKRÆFTET (bygherren 19.10.2026): afregningsformen gælder den dag, ARBEJDET UDFØRES (linjens dato) – ikke den dag,
   linjen tastes.
   Tests: `tests/test_timeregistrering_registrering.py` (spec 8–10, ret/slet, låste uger, kun egne linjer).
+- Opgavetyper (bygherren 19.10.2026, migrering e2a0a9a2bed1): Afstemning → **Controlling** (kode `controlling`),
+  Bogføring → **Kundearbejde** (kode `kundearbejde`), Øvrigt kundearbejde taget ud af brug (ikke slettet).
 - Beslutning (bygherren 19.10.2026) til trin 4: på linjer for ABONNEMENTSKUNDER erstattes fluebenet "faktureres
   særskilt" af valget **Afregning**: "Indeholdt i abonnementet" (standard) / "Timeafregning – uden for abonnementet"
   (kræver beskrivelse). Gemmes som `billable_separately` – kundens aftale (billing_model) på linjen ændres ikke. Vises

@@ -75,7 +75,7 @@ def timer(tekst) -> Decimal:
 class Linje:
     """En linje i gitteret: hvad der arbejdes på. Timerne pr. dag gives særskilt."""
 
-    opgavetype: str               # kode, fx 'bogfoering'
+    opgavetype: str               # kode, fx 'kundearbejde'
     client_id: int | None
     beskrivelse: str | None
     saerskilt: bool               # "faktureres særskilt" (uden for abonnementet)

@@ -41,7 +41,7 @@ def klient(db_session, grund):
     app.dependency_overrides.clear()
 
 
-def _gem(klient, opgavetype="bogfoering", kunde=None, timer=None, ids=(), beskrivelse=None, saerskilt=False,
+def _gem(klient, opgavetype="kundearbejde", kunde=None, timer=None, ids=(), beskrivelse=None, saerskilt=False,
          dato=MANDAG):
     return klient.post("/api/tid/linje", headers=H, json={
         "dato": dato.isoformat(), "ids": list(ids), "opgavetype": opgavetype,
@@ -54,7 +54,8 @@ def test_uge_med_syv_dage_og_valg(klient, grund):
     assert (svar["aar"], svar["uge"], svar["status"], svar["kan_rettes"]) == (2027, 8, "kladde", True)
     assert svar["dage"] == [f"2027-02-{d}" for d in range(22, 29)]
     koder = [t["kode"] for t in svar["opgavetyper"]]
-    assert "bogfoering" in koder and "salg" not in koder  # salg er ikke i brug endnu
+    assert "kundearbejde" in koder and "salg" not in koder  # salg er ikke i brug endnu
+    assert "controlling" in koder and "oevrigt_kunde" not in koder
     assert "Gitter Abonnement ApS" in [k["navn"] for k in svar["kunder"]]
 
 
