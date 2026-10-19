@@ -592,4 +592,9 @@ selskabsdimension). Fire faser; ét trin ad gangen med PR og merge.
   BEKRÆFTET (bygherren 19.10.2026): afregningsformen gælder den dag, ARBEJDET UDFØRES (linjens dato) – ikke den dag,
   linjen tastes.
   Tests: `tests/test_timeregistrering_registrering.py` (spec 8–10, ret/slet, låste uger, kun egne linjer).
+- Beslutning (bygherren 19.10.2026) til trin 4: på linjer for ABONNEMENTSKUNDER erstattes fluebenet "faktureres
+  særskilt" af valget **Afregning**: "Indeholdt i abonnementet" (standard) / "Timeafregning – uden for abonnementet"
+  (kræver beskrivelse). Gemmes som `billable_separately` – kundens aftale (billing_model) på linjen ændres ikke. Vises
+  ikke for timeafregningskunder (alle timer faktureres dér). DEN ENKELTE MEDARBEJDER må vælge det. Linjerne står øverst
+  ved godkendelsen (fase 2).
 
