@@ -13,6 +13,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.timeregistrering.models import ANSAETTELSER, TimeEmployee, TimeEmployeeRate
+from app.timeregistrering.satser import placer_periode
 
 
 class StamdataFejl(Exception):
@@ -71,17 +72,13 @@ def ny_sats(session: Session, e: TimeEmployee, gyldig_fra: date, normtid: Decima
     if normtid is not None and not (0 <= normtid <= 168):
         raise StamdataFejl("Normtiden skal være mellem 0 og 168 timer om ugen")
     note = (note or "").strip() or None
-    alle = satser(session, e.id)
-    samme = next((r for r in alle if r.valid_from == gyldig_fra), None)
+    # Den sats, der gælder på startdatoen, afsluttes dagen før – den nye gælder til den næste sats' start.
+    samme, foer, efter = placer_periode(satser(session, e.id), gyldig_fra)
     if samme is not None:
         samme.weekly_norm, samme.cost_per_hour, samme.productive_hours_year = normtid, kostpris, produktive_timer
         samme.note, samme.created_by = note, af_staff_id
         session.flush()
         return samme
-    # Den sats, der gælder på startdatoen, afsluttes dagen før – den nye gælder til den næste sats' start.
-    foer = next((r for r in alle if r.valid_from < gyldig_fra and (r.valid_to is None or r.valid_to > gyldig_fra)),
-                None)
-    efter = min((r.valid_from for r in alle if r.valid_from > gyldig_fra), default=None)
     if foer is not None:
         foer.valid_to = gyldig_fra
         session.flush()
