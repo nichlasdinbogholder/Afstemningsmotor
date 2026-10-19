@@ -267,7 +267,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     Fravær: timelønnede ser kun sygdom og "Ikke på arbejde (kun for timelønnede)" (`only_hourly`, aldrig i statistikker:
     `excluded_from_reports`).
   - `paamindelse.py` (trin 5): kl. 16.05 på arbejdsdage, fra info@ (MAIL_AFSENDER), højst én pr. medarbejder pr. dag
-    (`time_reminders`); `TIME_REMINDER_SEND=false` = tørløb. `python -m app.timeregistrering.paamindelse vis [--dato]`.
+    (`time_reminders`); `TIME_REMINDER_SEND=false` = tørløb. `python -m app.timeregistrering.paamindelse vis [--dato]`,
+    `proevemail --til <e-mail>`. Opsætning af afsendelsen fra info@: DEPLOY.md, afsnittet "Udgående mail".
 - `app/mail.py` – udgående mail via Microsoft Graph (egen app med KUN Mail.Send til MAIL_AFSENDER; MAIL_TENANT_ID/
   MAIL_CLIENT_ID/MAIL_CLIENT_SECRET). Fejl indeholder kun statuskoden – aldrig nøgler.
 - `app/bilag/` – BILAGSINDBAKKEN (spec v3; trin 1 bygget, se RESUME.md): mail + upload → én pipeline. Tabeller

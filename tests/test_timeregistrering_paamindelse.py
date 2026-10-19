@@ -160,3 +160,28 @@ def test_mail_slaaet_fra_uden_noegler(monkeypatch):
     assert mail.mail_slaaet_til() is False
     with pytest.raises(mail.MailFejl, match="ikke slået til"):
         mail.send_mail("x@dinbogholder.dk", "E", "T")
+
+
+def test_proevemail_kommando(db_session, monkeypatch, capsys):
+    from contextlib import contextmanager
+
+    import app.db
+
+    @contextmanager
+    def samme():
+        yield db_session
+
+    monkeypatch.setattr(app.db, "ny_session", samme)
+    monkeypatch.setattr(db_session, "commit", db_session.flush)
+    sendt = []
+    monkeypatch.setattr(p, "send_mail", lambda til, emne, krop: sendt.append((til, emne)))
+    assert p.main(["proevemail", "--til", "nichlas@dinbogholder.dk"]) == 0
+    assert sendt == [("nichlas@dinbogholder.dk", "Prøvemail fra hub'en")]
+    assert "Prøvemail sendt fra info@dinbogholder.dk" in capsys.readouterr().out
+
+    def fejler(*a):
+        raise mail.MailFejl("Microsoft afviste mailen (status 403)")
+
+    monkeypatch.setattr(p, "send_mail", fejler)
+    assert p.main(["proevemail", "--til", "nichlas@dinbogholder.dk"]) == 1
+    assert "status 403" in capsys.readouterr().err
