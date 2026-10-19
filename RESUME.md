@@ -549,6 +549,10 @@ selskabsdimension). Fire faser; ét trin ad gangen med PR og merge.
 - Den gamle, ubrugte timetabel fra CRM-starten er fjernet (migreringen stopper, hvis den har rækker).
 - Ejer = administrator: en administrators egen uge godkendes ved aflevering (self_approved); administratorer godkender.
 - Salgsprisen 699,00 kr. ekskl. moms gælder fra 18.10.2026.
+- Kundevilkår (19.10.2026, valgt B): afregningsformen (timeafregning/abonnement + pris) vælges, når kunden OPRETTES –
+  på siden "Kunde", når den bygges. KUN administratorer kan rette den på kundeniveau. Indtil da lægges vilkår ind med
+  `python -m app.timeregistrering.satser vilkaar … --af <admin>` (kræver allerede admin). En kunde uden vilkår kan ikke
+  få kundetid registreret (ugegitteret i trin 3 siger det tydeligt) – systemet gætter ikke.
 - Zenergy-lønoverførslen (fase 3) skriver til et andet system – bygges først efter udtrykkelig tilladelse.
 
 ## Afvigelser fra spec'ens SQL (bevidste)
