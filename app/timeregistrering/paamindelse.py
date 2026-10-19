@@ -11,6 +11,7 @@ Dagen låses ALDRIG ved midnat – påmindelsen er en hjælp, og huller fanges, 
 
 Kommando (vis eller send for en dag):
     python -m app.timeregistrering.paamindelse vis [--dato ÅÅÅÅ-MM-DD]
+    python -m app.timeregistrering.paamindelse proevemail --til <din e-mail>   (sender én prøvemail – til afprøvning)
 """
 
 import argparse
@@ -103,9 +104,27 @@ def main(argv: list[str] | None = None) -> int:
     from app.db import ny_session
 
     parser = argparse.ArgumentParser(description="Påmindelser i timeregistreringen.")
-    parser.add_argument("kommando", choices=("vis",), help="vis hvem der mangler at udfylde dagen")
+    parser.add_argument("kommando", choices=("vis", "proevemail"),
+                        help="vis = hvem mangler at udfylde dagen; proevemail = send én prøvemail fra afsenderen")
     parser.add_argument("--dato", type=date.fromisoformat, default=None)
+    parser.add_argument("--til", help="modtager af prøvemailen (din egen adresse)")
     args = parser.parse_args(argv)
+    if args.kommando == "proevemail":
+        if not args.til:
+            parser.error("angiv --til <din e-mail>")
+        afsender = get_settings().mail_afsender
+        try:
+            send_mail(args.til, "Prøvemail fra hub'en",
+                      f"Hej\n\nDette er en prøve. Kan du læse den, virker afsendelsen fra {afsender}.\n\n"
+                      "Venlig hilsen\nDin Bogholder")
+        except MailFejl as fejl:
+            print(f"FEJL: {fejl}", file=sys.stderr)
+            return 1
+        with ny_session() as session:
+            session.add(AuditLog(handling="proevemail_sendt", detaljer={"til": args.til, "fra": afsender}))
+            session.commit()
+        print(f"Prøvemail sendt fra {afsender} til {args.til}. Tjek din indbakke (og evt. uønsket post).")
+        return 0
     dag = args.dato or datetime.now(TIDSZONE).date()
     with ny_session() as session:
         mangel = mangler(session, dag)

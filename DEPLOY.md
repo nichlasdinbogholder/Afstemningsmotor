@@ -290,3 +290,37 @@ Slås til ÉN gang: `bash scripts/auto_opdater.sh installer`. Derefter kontrolle
 
 Log: `/var/log/afstemning-opdatering.log` – kort udgave: `bash scripts/auto_opdater.sh status`.
 `.env` og andre filer, der ikke ligger i git, røres aldrig.
+
+## Udgående mail fra info@dinbogholder.dk (påmindelser i timeregistreringen)
+
+Hub'en sender med Microsoft Graph fra én afsender. Appen får KUN lov til at sende som info@ – ikke fra andre
+postkasser. Indtil dette er gjort, kører påmindelserne i tørløb (registreres, sendes ikke).
+
+1. **Opret appen** (Microsoft Entra admin center → Applikationer → App-registreringer → Ny registrering):
+   navn "Hub – udgående mail", kun denne organisation. Notér *Program-id (klient)* og *Mappe-id (lejer)*.
+   Under *Virksomhedsapplikationer* → appen: notér *Objekt-id*.
+2. **Hemmelighed:** appen → Certifikater og hemmeligheder → Ny klienthemmelighed (24 måneder). Kopiér *Værdi* med det
+   samme (vises kun én gang). Læg den ALDRIG i chat eller mail.
+3. **Giv IKKE Mail.Send under API-tilladelser** – det ville give adgang til alle postkasser. Rettigheden gives i stedet i
+   Exchange og begrænses til info@ (trin 4).
+4. **Exchange Online PowerShell** (som administrator):
+   ```powershell
+   Connect-ExchangeOnline -UserPrincipalName <din admin-mail>
+   New-ServicePrincipal -AppId <program-id> -ObjectId <objekt-id> -DisplayName "Hub – udgående mail"
+   New-ManagementScope -Name "Kun info" -RecipientRestrictionFilter "PrimarySmtpAddress -eq 'info@dinbogholder.dk'"
+   New-ManagementRoleAssignment -App <program-id> -Role "Application Mail.Send" -CustomResourceScope "Kun info"
+   Test-ServicePrincipalAuthorization -Identity <program-id> -Resource info@dinbogholder.dk      # InScope: True
+   Test-ServicePrincipalAuthorization -Identity <program-id> -Resource <en anden postkasse>      # InScope: False
+   ```
+   Ændringen kan tage op til et par timer om at slå igennem hos Microsoft.
+5. **Serverens .env** (`cd /opt/afstemning`):
+   ```bash
+   echo 'MAIL_TENANT_ID=<mappe-id>' >> .env
+   echo 'MAIL_CLIENT_ID=<program-id>' >> .env
+   read -rsp "Klienthemmelighed: " H && echo "MAIL_CLIENT_SECRET=$H" >> .env && unset H && echo
+   docker compose -f docker-compose.prod.yml up -d
+   ```
+6. **Prøvemail:** `docker compose -f docker-compose.prod.yml exec -T api python -m app.timeregistrering.paamindelse
+   proevemail --til <din e-mail>` → "Prøvemail sendt …", og mailen ligger i indbakken fra info@.
+7. **Slå påmindelserne til:** `sed -i 's/^TIME_REMINDER_SEND=.*/TIME_REMINDER_SEND=true/' .env` (findes linjen ikke:
+   `echo 'TIME_REMINDER_SEND=true' >> .env`), og `docker compose -f docker-compose.prod.yml up -d`.
