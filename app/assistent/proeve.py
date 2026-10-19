@@ -41,7 +41,11 @@ async def _spoerg(tekst: str, materiale: list, kunde=None, opslag=None) -> str:
     return svar.tekst
 
 
-INDBERETNING = re.compile(r"skal (du )?(indberette|angive)|indberet(ter|) (du|i)", re.IGNORECASE)
+# Svaret må ikke SIGE, hvad der skal indberettes: "du skal indberette …", "indberet 73.189 kr." eller "rubrik A: 1.234".
+# At nævne, at den kundeansvarlige afgør "hvad der skal indberettes", er derimod rigtigt (svar på serveren 19.10.2026).
+INDBERETNING = re.compile(r"\bdu skal (indberette|angive)\b"
+                          r"|\b(indberet|angiv)\s+(\S+\s+){0,4}-?\d[\d.,]*\s*kr"
+                          r"|\brubrik\w*\s+\w{1,3}\s*[:=]\s*-?\d", re.IGNORECASE)
 
 
 async def _kundeproeve(kundenummer: str, email: str) -> list[bool]:
