@@ -101,9 +101,10 @@ def _kontroller_linje(session: Session, e: TimeEmployee, linje: Linje) -> TimeTa
     if t.blocked_for_hourly and e.employment == "timeloennet":
         raise RegistreringsFejl("Denne fraværsart kan ikke registreres for timelønnede")
     if linje.saerskilt and t.kind != "kunde":
-        raise RegistreringsFejl("Kun kundearbejde kan faktureres særskilt")
+        raise RegistreringsFejl("Kun kundearbejde kan afregnes uden for abonnementet")
     if linje.saerskilt and not (linje.beskrivelse or "").strip():
-        raise RegistreringsFejl("Skriv en beskrivelse – den skal stå på fakturaen, når arbejdet faktureres særskilt")
+        raise RegistreringsFejl("Skriv en beskrivelse – den skal stå på fakturaen, når arbejdet er uden for "
+                                "abonnementet og afregnes som timer")
     return t
 
 
@@ -168,11 +169,17 @@ def gem_linje(session: Session, e: TimeEmployee, staff_id: int, dag_i_ugen: date
                 except ManglerSats:
                     raise RegistreringsFejl("Kunden har ingen afregningsform (abonnement eller timeafregning) "
                                             f"for {dag:%d.%m.%Y} – en administrator skal sætte den på kunden") from None
+            if linje.saerskilt and afregning == "timeafregning":
+                raise RegistreringsFejl(f"Kunden er på timeafregning {dag:%d.%m.%Y} – alle timer faktureres allerede; "
+                                        "valget 'uden for abonnementet' gælder kun abonnementskunder")
             session.add(TimeRegistration(week_id=uge.id, employee_id=e.id, work_date=dag, task_type_id=t.id,
                                          task_kind=t.kind, client_id=linje.client_id, description=beskrivelse,
                                          hours=v, billing_model=afregning, billable_separately=linje.saerskilt,
                                          created_by=staff_id))
         else:
+            if linje.saerskilt and r.billing_model == "timeafregning":
+                raise RegistreringsFejl(f"Kunden er på timeafregning {dag:%d.%m.%Y} – alle timer faktureres allerede; "
+                                        "valget 'uden for abonnementet' gælder kun abonnementskunder")
             r.task_type_id, r.task_kind, r.description = t.id, t.kind, beskrivelse
             r.billable_separately, r.hours, r.updated_at = linje.saerskilt, v, nu
     session.flush()

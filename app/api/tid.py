@@ -39,9 +39,11 @@ def uge(dato: date, m: Staff = Depends(nuvaerende_medarbejder), session: Session
     e = _ansat(session, m)
     u = reg.find_uge(session, e, dato)
     aar, nr, _ = dato.isocalendar()
+    # Arter, en timelønnet ikke kan registrere (ferie), vises slet ikke – i stedet for at blive afvist bagefter.
     opgavetyper = [{"kode": t.code, "navn": t.name, "art": t.kind, "nul_timer": t.zero_hours}
                    for t in session.scalars(select(TimeTaskType).where(TimeTaskType.active.is_(True))
-                                            .order_by(TimeTaskType.sort_order))]
+                                            .order_by(TimeTaskType.sort_order))
+                   if not (t.blocked_for_hourly and e.employment == "timeloennet")]
     kunder = [{"id": k.id, "navn": k.navn, "kundenummer": k.kundenummer}
               for k in session.scalars(select(Client).where(Client.status == "aktiv").order_by(Client.navn))]
     return {

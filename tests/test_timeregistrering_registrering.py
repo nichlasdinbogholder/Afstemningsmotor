@@ -107,15 +107,14 @@ def test_validering_ved_gem(db_session, klient, grund):
     assert "Vælg kunden" in fejl(_gem(klient, timer={MANDAG: "1"}))[1]
     assert "uden kunde" in fejl(_gem(klient, "sygdom", kunde=k, timer={MANDAG: "7,5"}))[1]
     assert "beskrivelse" in fejl(_gem(klient, kunde=k, timer={MANDAG: "1"}, saerskilt=True))[1]
-    assert "uden timer" in fejl(_gem(klient, "ikke_paa_arbejde", timer={MANDAG: "1"}))[1]
-    assert _gem(klient, "ikke_paa_arbejde", timer={MANDAG: "0"}).status_code == 200
+    assert "ikke i brug" in fejl(_gem(klient, "ikke_paa_arbejde", timer={MANDAG: "0"}))[1]  # bruges ikke (19.10.2026)
     assert "ikke i brug" in fejl(_gem(klient, "salg", timer={MANDAG: "1"}))[1]
     assert "ikke i ugen" in fejl(_gem(klient, kunde=k, timer={date(2027, 3, 1): "1"}))[1]
     _gem(klient, kunde=k, timer={MANDAG: "20"})
     assert "højst 24 timer" in fejl(_gem(klient, "administration", timer={MANDAG: "5"}))[1]
     assert "allerede en linje" in fejl(_gem(klient, kunde=k, timer={date(2027, 2, 23): "1"}))[1]
     # Intet af det fejlede blev gemt.
-    assert len(klient.get(f"/api/tid/uge?dato={MANDAG}").json()["linjer"]) == 2
+    assert len(klient.get(f"/api/tid/uge?dato={MANDAG}").json()["linjer"]) == 1
 
 
 def test_kunde_uden_vilkaar_og_medarbejder_uden_opsaetning(db_session, klient, grund):
@@ -177,3 +176,40 @@ def test_kraever_login_og_header(db_session, grund):
         assert TestClient(app).post("/api/tid/linje", json={}).status_code == 403
     finally:
         app.dependency_overrides.clear()
+
+
+# --- Trin 4: validering ved indtastning ------------------------------------------------------
+
+
+def test_trin4_ferie_skjules_for_timeloennede(db_session, klient, grund):
+    m, *_ = grund
+    assert "ferie" in [t["kode"] for t in klient.get(f"/api/tid/uge?dato={MANDAG}").json()["opgavetyper"]]
+    stamdata.saet_ansaettelse(db_session, m.id, "timeloennet", False, None)
+    koder = [t["kode"] for t in klient.get(f"/api/tid/uge?dato={MANDAG}").json()["opgavetyper"]]
+    # Bygherren 19.10.2026: timelønnede ser kun sygdom af fraværsarterne.
+    assert [k for k in koder if k in ("sygdom", "ferie", "barn_syg", "afspadsering", "barsel", "skoleophold",
+                                      "ikke_paa_arbejde")] == ["sygdom"]
+    for kode in ("barn_syg", "afspadsering", "barsel", "skoleophold"):
+        assert _gem(klient, kode, timer={MANDAG: "7,5"}).status_code == 422
+    # Skulle nogen alligevel sende ferie, afvises det (7).
+    svar = _gem(klient, "ferie", timer={MANDAG: "7,5"})
+    assert svar.status_code == 422 and "timelønnede" in svar.json()["detail"]
+
+
+def test_trin4_uden_for_abonnementet(db_session, klient, grund):
+    _, _, k, k2, _ = grund
+    # Abonnementskunde: "Timeafregning – uden for abonnementet" kræver beskrivelse (5).
+    svar = _gem(klient, kunde=k, timer={MANDAG: "2"}, saerskilt=True)
+    assert svar.status_code == 422 and "beskrivelse" in svar.json()["detail"]
+    linje = _gem(klient, kunde=k, timer={MANDAG: "2"}, saerskilt=True, beskrivelse="Ekstra: momsregistrering").json()
+    l = linje["linjer"][0]
+    assert (l["saerskilt"], l["afregning"]) == (True, ["abonnement"])  # kundens aftale står uændret på linjen
+    # Kan slås fra igen af medarbejderen.
+    assert _gem(klient, kunde=k, ids=l["ids"], timer={MANDAG: "2"}, beskrivelse="Ekstra: momsregistrering"
+                ).json()["linjer"][0]["saerskilt"] is False
+    # Timeafregningskunde: valget giver ikke mening – alle timer faktureres allerede.
+    svar = _gem(klient, kunde=k2, timer={MANDAG: "1"}, saerskilt=True, beskrivelse="Noget")
+    assert svar.status_code == 422 and "kun abonnementskunder" in svar.json()["detail"]
+    # Intern tid kan aldrig være uden for abonnementet.
+    svar = _gem(klient, "administration", timer={MANDAG: "1"}, saerskilt=True, beskrivelse="x")
+    assert svar.status_code == 422
