@@ -589,7 +589,7 @@ selskabsdimension). Fire faser; ét trin ad gangen med PR og merge.
   afvises (de ville løbe sammen). Summer pr. linje/dag/uge regnes på serveren. Kunde uden vilkår: tydelig besked om, at
   en administrator skal sætte afregningsformen. Medarbejder uden ansættelsesform: besked om at kontakte en admin.
   Start fra en opgave/kunde: `/timeregistrering/?dato=&kunde=&opgavetype=` (bruges, når Opgavestyring/Kunde bygges).
-  FORTOLKNING (bør bekræftes): "kundens vilkår på dagens dato" = på ARBEJDSDAGEN (linjens dato), ikke den dag,
-  linjen tastes – i tråd med fast regel 6 (satser på registreringsdatoen) og spec-test 9.
+  BEKRÆFTET (bygherren 19.10.2026): afregningsformen gælder den dag, ARBEJDET UDFØRES (linjens dato) – ikke den dag,
+  linjen tastes.
   Tests: `tests/test_timeregistrering_registrering.py` (spec 8–10, ret/slet, låste uger, kun egne linjer).
 
