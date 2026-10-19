@@ -74,20 +74,23 @@ def test_stamdata_er_lagt_ind(db_session):
     assert koder["afspadsering"].reduces_toil
     assert koder["ikke_paa_arbejde"].zero_hours and not koder["ikke_paa_arbejde"].payable
     assert not koder["salg"].active  # venter på pipelinen
+    # Bygherren 19.10.2026: Afstemning -> Controlling, Bogføring -> Kundearbejde, Øvrigt kundearbejde ude af brug.
+    assert (koder["controlling"].name, koder["kundearbejde"].name) == ("Controlling", "Kundearbejde")
+    assert "afstemning" not in koder and "bogfoering" not in koder and not koder["oevrigt_kunde"].active
     pris = db_session.scalars(select(TimeSalesRate).where(TimeSalesRate.valid_from == date(2026, 10, 18))).one()
     assert pris.rate_per_hour == Decimal("699.00") and pris.valid_to is None
 
 
 def test_registrering_regler(db_session, grund):
     s, k, e, uge = grund
-    kunde = _linje(db_session, s, e, uge, "bogfoering", "1.25", k)
+    kunde = _linje(db_session, s, e, uge, "kundearbejde", "1.25", k)
     assert kunde.task_kind == "kunde"  # sat af databasen
     intern = _linje(db_session, s, e, uge, "administration", "0.5")
     assert intern.task_kind == "intern"
     # 10. Lørdag kan registreres
-    _linje(db_session, s, e, uge, "bogfoering", "2", k, dag=date(2026, 10, 17))
+    _linje(db_session, s, e, uge, "kundearbejde", "2", k, dag=date(2026, 10, 17))
     # 1. Kvarte timer
-    _afvist(db_session, IntegrityError, "kvarte_timer", lambda: _linje(db_session, s, e, uge, "bogfoering", "1.1", k))
+    _afvist(db_session, IntegrityError, "kvarte_timer", lambda: _linje(db_session, s, e, uge, "kundearbejde", "1.1", k))
     # 2. Kundetype uden kunde
     _afvist(db_session, IntegrityError, "kunde_kun_paa_kundetid", lambda: _linje(db_session, s, e, uge, "moms", "1"))
     # 4. Fravær med kunde
@@ -95,8 +98,8 @@ def test_registrering_regler(db_session, grund):
             lambda: _linje(db_session, s, e, uge, "sygdom", "7.5", k))
     # 5. Faktureres særskilt uden beskrivelse
     _afvist(db_session, IntegrityError, "saerskilt_kraever_beskrivelse",
-            lambda: _linje(db_session, s, e, uge, "bogfoering", "1", k, billable_separately=True, description=" "))
-    _linje(db_session, s, e, uge, "bogfoering", "1", k, billable_separately=True, description="Ekstra opgave")
+            lambda: _linje(db_session, s, e, uge, "kundearbejde", "1", k, billable_separately=True, description=" "))
+    _linje(db_session, s, e, uge, "kundearbejde", "1", k, billable_separately=True, description="Ekstra opgave")
     # 6. 'Ikke på arbejde' med timer
     _afvist(db_session, DBAPIError, "altid med 0 timer", lambda: _linje(db_session, s, e, uge, "ikke_paa_arbejde", "1"))
     _linje(db_session, s, e, uge, "ikke_paa_arbejde", "0")
@@ -104,7 +107,7 @@ def test_registrering_regler(db_session, grund):
     _afvist(db_session, DBAPIError, "ikke i brug", lambda: _linje(db_session, s, e, uge, "salg", "1"))
     # Linjen skal ligge i ugen
     _afvist(db_session, DBAPIError, "ikke i ugen",
-            lambda: _linje(db_session, s, e, uge, "bogfoering", "1", k, dag=date(2026, 10, 19)))
+            lambda: _linje(db_session, s, e, uge, "kundearbejde", "1", k, dag=date(2026, 10, 19)))
 
 
 def test_7_ferie_afvises_for_timeloennet(db_session, grund):
@@ -128,7 +131,7 @@ def test_7_ferie_afvises_for_timeloennet(db_session, grund):
 
 def test_25_27_godkendt_uge_er_laast(db_session, grund):
     s, k, e, uge = grund
-    linje = _linje(db_session, s, e, uge, "bogfoering", "2", k)
+    linje = _linje(db_session, s, e, uge, "kundearbejde", "2", k)
     uge.status = "godkendt"
     db_session.flush()
     _afvist(db_session, DBAPIError, "er godkendt og kan ikke ændres",
@@ -136,7 +139,7 @@ def test_25_27_godkendt_uge_er_laast(db_session, grund):
     _afvist(db_session, DBAPIError, "er godkendt og kan ikke ændres",
             lambda: db_session.execute(text("DELETE FROM time_entries WHERE id = :i"), {"i": linje.id}))
     _afvist(db_session, DBAPIError, "er godkendt og kan ikke ændres",
-            lambda: _linje(db_session, s, e, uge, "bogfoering", "1", k))
+            lambda: _linje(db_session, s, e, uge, "kundearbejde", "1", k))
     # En linje kan heller ikke flyttes ud af den godkendte uge.
     ny = TimeWeek(employee_id=e.id, iso_year=2026, iso_week=43, week_start=date(2026, 10, 19))
     db_session.add(ny)
@@ -145,7 +148,7 @@ def test_25_27_godkendt_uge_er_laast(db_session, grund):
             lambda: db_session.execute(text("UPDATE time_entries SET week_id = :u, work_date = '2026-10-19' "
                                             "WHERE id = :i"), {"u": ny.id, "i": linje.id}))
     # 28 (forberedt): en korrektionslinje i en åben uge går igennem.
-    _linje(db_session, s, e, ny, "bogfoering", "0.5", k, dag=date(2026, 10, 19),
+    _linje(db_session, s, e, ny, "kundearbejde", "0.5", k, dag=date(2026, 10, 19),
            is_correction=True, corrects_entry_id=linje.id)
 
 
@@ -169,7 +172,7 @@ def test_41_kun_godkendte_uger_til_loen(db_session, grund):
 
 def test_23_36_historik_kan_ikke_aendres(db_session, grund):
     s, k, e, uge = grund
-    linje = _linje(db_session, s, e, uge, "bogfoering", "2", k)
+    linje = _linje(db_session, s, e, uge, "kundearbejde", "2", k)
     note = TimeEntryNote(entry_id=linje.id, week_id=uge.id, author_id=s.id, note="Mangler beskrivelse")
     bev = TimeToilMovement(employee_id=e.id, movement_date=MANDAG, kind="optjent", hours=Decimal("2"))
     db_session.add_all([note, bev])
@@ -210,7 +213,7 @@ def test_11_satsperioder_kan_ikke_overlappe_eller_slettes(db_session, grund):
 
 def test_aendringer_logges_med_aktoer_og_fra_til(db_session, grund):
     s, k, e, uge = grund
-    linje = _linje(db_session, s, e, uge, "bogfoering", "2", k)
+    linje = _linje(db_session, s, e, uge, "kundearbejde", "2", k)
     linje.hours = Decimal("2.5")
     db_session.flush()
     log = db_session.scalars(select(TimeAudit).where(TimeAudit.table_name == "time_entries",

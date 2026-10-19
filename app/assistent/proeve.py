@@ -41,9 +41,11 @@ async def _spoerg(tekst: str, materiale: list, kunde=None, opslag=None) -> str:
     return svar.tekst
 
 
-# Begyndelsen af svaret skal nævne en konto (4-5 cifre) og et beløb i kr.
-KONTO_OG_BELOEB = re.compile(r"\b\d{4,5}\b.*\d.*kr", re.IGNORECASE | re.DOTALL)
-INDBERETNING = re.compile(r"skal (du )?(indberette|angive)|indberet(ter|) (du|i)", re.IGNORECASE)
+# Svaret må ikke SIGE, hvad der skal indberettes: "du skal indberette …", "indberet 73.189 kr." eller "rubrik A: 1.234".
+# At nævne, at den kundeansvarlige afgør "hvad der skal indberettes", er derimod rigtigt (svar på serveren 19.10.2026).
+INDBERETNING = re.compile(r"\bdu skal (indberette|angive)\b"
+                          r"|\b(indberet|angiv)\s+(\S+\s+){0,4}-?\d[\d.,]*\s*kr"
+                          r"|\brubrik\w*\s+\w{1,3}\s*[:=]\s*-?\d", re.IGNORECASE)
 
 
 async def _kundeproeve(kundenummer: str, email: str) -> list[bool]:
@@ -74,14 +76,19 @@ async def _kundeproeve(kundenummer: str, email: str) -> list[bool]:
     for x in opslag.lookups:
         print("  Slået op: " + sm.beskriv_opslag(x))
     print("  Svar: " + svar.strip().replace("\n", "\n        "))
-    # "Først hvad der er slået op": de første tre linjer med tekst skal nævne en konto og et beløb.
-    foerste = "\n".join([linje for linje in svar.strip().splitlines() if linje.strip()][:3])
+    # "Først hvad der er slået op, og hvor": svaret begynder med "Jeg har set på", og et kontonummer, Svend har
+    # slået op, står i første halvdel af svaret – før forklaringen og henvisningen til, hvem der vurderer.
+    tekst = svar.strip()
+    foerste_halvdel = tekst[:max(1, len(tekst) // 2)]
+    starter_rigtigt = tekst.lower().startswith("jeg har set på")
+    konto_foerst = any(re.search(rf"(?<!\d){k}(?!\d)", foerste_halvdel) for k in opslag.konti)
     udfoert = [x for x in opslag.lookups if not x.get("fejl")]
     return [
         _vis("slår op i kundens regnskab", bool(udfoert), f"{len(udfoert)} opslag" if udfoert else "ingen opslag"),
-        _vis("starter med hvad der er slået op", bool(KONTO_OG_BELOEB.search(foerste)),
-             "begyndelsen nævner konto og beløb" if KONTO_OG_BELOEB.search(foerste)
-             else "de første tre linjer nævner ikke konto og beløb"),
+        _vis("starter med hvad der er slået op", starter_rigtigt and konto_foerst,
+             "begynder med 'Jeg har set på' og nævner en opslået konto først" if starter_rigtigt and konto_foerst
+             else ("begynder ikke med 'Jeg har set på'" if not starter_rigtigt
+                   else "nævner ingen af de opslåede konti i første halvdel af svaret")),
         _vis("siger ikke hvad der skal indberettes", not INDBERETNING.search(svar),
              "ingen indberetning" if not INDBERETNING.search(svar) else "svaret siger, hvad der skal indberettes"),
         _vis("henviser til hvem der svarer bindende", bool(BINDENDE.search(svar)),

@@ -135,6 +135,7 @@ class Opslag:
     client_id: int
     lookups: list = field(default_factory=list)
     afkortet: bool = False
+    konti: set = field(default_factory=set)  # kontonumre, opslagene har vist modellen (bruges af prøven)
     _konti: list | None = None
     _perioder: dict = field(default_factory=dict)
 
@@ -152,6 +153,9 @@ class Opslag:
             if resultat.get("afkortet"):
                 post["afkortet"] = True
                 self.afkortet = True
+            if resultat.get("konto") is not None:
+                self.konti.add(resultat["konto"])
+            self.konti.update(r["konto"] for r in resultat.get("raekker", []) if r.get("konto") is not None)
             return resultat
         except OpslagsFejl as fejl:
             post["fejl"] = str(fejl)

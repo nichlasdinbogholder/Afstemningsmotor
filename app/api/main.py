@@ -21,6 +21,7 @@ from app.api.opkraevning import router as opkraevning_router
 from app.api.login import db, nuvaerende_medarbejder
 from app.api.login import router as login_router
 from app.api.medarbejdere import router as medarbejdere_router
+from app.api.tid import router as tid_router
 from app.api.videnbase import router as videnbase_router
 from app.config import get_settings
 from app.db import get_engine
@@ -47,6 +48,7 @@ app.include_router(opkraevning_router)
 app.include_router(medarbejdere_router)
 app.include_router(assistent_router)
 app.include_router(videnbase_router)
+app.include_router(tid_router)
 
 
 @app.get("/", response_class=HTMLResponse)

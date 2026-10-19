@@ -549,6 +549,10 @@ selskabsdimension). Fire faser; ét trin ad gangen med PR og merge.
 - Den gamle, ubrugte timetabel fra CRM-starten er fjernet (migreringen stopper, hvis den har rækker).
 - Ejer = administrator: en administrators egen uge godkendes ved aflevering (self_approved); administratorer godkender.
 - Salgsprisen 699,00 kr. ekskl. moms gælder fra 18.10.2026.
+- Kundevilkår (19.10.2026, valgt B): afregningsformen (timeafregning/abonnement + pris) vælges, når kunden OPRETTES –
+  på siden "Kunde", når den bygges. KUN administratorer kan rette den på kundeniveau. Indtil da lægges vilkår ind med
+  `python -m app.timeregistrering.satser vilkaar … --af <admin>` (kræver allerede admin). En kunde uden vilkår kan ikke
+  få kundetid registreret (ugegitteret i trin 3 siger det tydeligt) – systemet gætter ikke.
 - Zenergy-lønoverførslen (fase 3) skriver til et andet system – bygges først efter udtrykkelig tilladelse.
 
 ## Afvigelser fra spec'ens SQL (bevidste)
@@ -576,4 +580,23 @@ selskabsdimension). Fire faser; ét trin ad gangen med PR og merge.
   `placer_periode`, også brugt af kostprissatsen). Kommando: `python -m app.timeregistrering.satser vis|salgspris|vilkaar`
   (ændringer kræver `--af <admin-e-mail>`, logges i time_audit og audit_log). Kundevilkår har endnu ingen side i
   webdelen (siden Kunde er en pladsholder) – kun kommandoen. Tests: `tests/test_timeregistrering_satser.py` (spec 12–14).
+- **Fase 1, trin 3 (19.10.2026):** ugegitteret – siden Timeregistrering (`web/app/timeregistrering/`), API `/api/tid`
+  (`uge`, `afregning`, `linje`, `linje/slet`; app/api/tid.py) og logikken i `registrering.py`. Syv dage mandag–søndag;
+  en linje = opgavetype + kunde + beskrivelse + "faktureres særskilt" med timer pr. dag (én række pr. dag i
+  time_entries). Tilføj/ret/slet kun i kladde eller afvist uge. Afregningsformen slås op og skrives på rækken, når den
+  oprettes, og ændres aldrig siden; skiftes kunden på en linje, oprettes rækkerne forfra. Timer i kvarte timer som
+  decimaltal (komma eller punktum), højst 24 timer pr. dag i alt; to linjer med samme kunde/opgavetype/beskrivelse
+  afvises (de ville løbe sammen). Summer pr. linje/dag/uge regnes på serveren. Kunde uden vilkår: tydelig besked om, at
+  en administrator skal sætte afregningsformen. Medarbejder uden ansættelsesform: besked om at kontakte en admin.
+  Start fra en opgave/kunde: `/timeregistrering/?dato=&kunde=&opgavetype=` (bruges, når Opgavestyring/Kunde bygges).
+  BEKRÆFTET (bygherren 19.10.2026): afregningsformen gælder den dag, ARBEJDET UDFØRES (linjens dato) – ikke den dag,
+  linjen tastes.
+  Tests: `tests/test_timeregistrering_registrering.py` (spec 8–10, ret/slet, låste uger, kun egne linjer).
+- Opgavetyper (bygherren 19.10.2026, migrering e2a0a9a2bed1): Afstemning → **Controlling** (kode `controlling`),
+  Bogføring → **Kundearbejde** (kode `kundearbejde`), Øvrigt kundearbejde taget ud af brug (ikke slettet).
+- Beslutning (bygherren 19.10.2026) til trin 4: på linjer for ABONNEMENTSKUNDER erstattes fluebenet "faktureres
+  særskilt" af valget **Afregning**: "Indeholdt i abonnementet" (standard) / "Timeafregning – uden for abonnementet"
+  (kræver beskrivelse). Gemmes som `billable_separately` – kundens aftale (billing_model) på linjen ændres ikke. Vises
+  ikke for timeafregningskunder (alle timer faktureres dér). DEN ENKELTE MEDARBEJDER må vælge det. Linjerne står øverst
+  ved godkendelsen (fase 2).
 
