@@ -45,6 +45,7 @@ AFSPADSERING = ("optjent", "afholdt", "udbetalt", "korrektion")
 BATCHSTATUS = ("kladde", "sendt", "fejl", "bekraeftet")
 LOENARTER = ("timeloen", "afspadsering_udbetalt")
 HANDLINGER = ("INSERT", "UPDATE", "DELETE")
+PAAMINDELSE = ("sendt", "toerloeb", "fejl")
 
 _PERIODE = "daterange(valid_from, valid_to, '[)')"
 
@@ -167,6 +168,10 @@ class TimeTaskType(Base):
     reduces_toil: Mapped[bool] = mapped_column(Boolean, server_default=false())
     zero_hours: Mapped[bool] = mapped_column(Boolean, server_default=false())
     blocked_for_hourly: Mapped[bool] = mapped_column(Boolean, server_default=false())
+    # Kun timelønnede kan vælge den (fx "Ikke på arbejde") – databasen afviser den for fastlønnede.
+    only_hourly: Mapped[bool] = mapped_column(Boolean, server_default=false())
+    # En "død" type (fx "Ikke på arbejde"): tæller ALDRIG med i rapporter og statistikker.
+    excluded_from_reports: Mapped[bool] = mapped_column(Boolean, server_default=false())
     sort_order: Mapped[int] = mapped_column(Integer, server_default="0")
     active: Mapped[bool] = mapped_column(Boolean, server_default=true())
 
@@ -324,6 +329,28 @@ class TimePayrollLine(Base):
     kind: Mapped[str] = mapped_column(Text)
     hours: Mapped[Decimal] = mapped_column(Numeric(7, 2))
     idempotency_key: Mapped[str] = mapped_column(Text, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# --- Påmindelser ----------------------------------------------------------------
+
+
+class TimeReminder(Base):
+    """Én påmindelse pr. medarbejder pr. dag (kl. 16.05), når dagen ikke er udfyldt. Unik, så ingen får den to gange.
+    'toerloeb' = afsendelse ikke slået til endnu – kun registreret. Fejlbeskeden indeholder aldrig nøgler."""
+
+    __tablename__ = "time_reminders"
+    __table_args__ = (
+        UniqueConstraint("employee_id", "work_date", name="uq_time_reminders_medarbejder_dag"),
+        kun_vaerdier("status", PAAMINDELSE),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    employee_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("time_employees.id", ondelete="RESTRICT"))
+    work_date: Mapped[date] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(Text)
+    email: Mapped[str] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

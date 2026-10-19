@@ -600,10 +600,23 @@ selskabsdimension). Fire faser; ét trin ad gangen med PR og merge.
   beskrivelse ved "uden for"), markeres; alle regler kontrolleres på serveren og databasen. Tests:
   `tests/test_timeregistrering_registrering.py` (trin 4), browsertest 9/9.
 - Fravær (bygherren 19.10.2026, migrering 80cc17832d74): timelønnede kan IKKE se/registrere ferie, barns første
-  sygedag, afspadsering afholdt, barsel og skoleophold (kun sygdom) – skjult på siden og afvist af databasen.
-  "Ikke på arbejde" bruges ikke og er taget ud af brug for alle (ikke slettet).
-  ÅBENT til fase 2 (aflevering): hvordan skal en timelønnets dage uden arbejde behandles, når "Ikke på arbejde" ikke
-  findes? (Spec'en kræver timer eller fravær på hver arbejdsdag, før ugen kan afleveres.)
+  sygedag, afspadsering afholdt, barsel og skoleophold – skjult på siden og afvist af databasen.
+- "Ikke på arbejde" (bygherren 19.10.2026, migrering b126f54ea532): genindsat som **"Ikke på arbejde (kun for
+  timelønnede)"** – kun synlig for og tilladt for timelønnede (`only_hourly`, håndhævet i databasen), altid 0 timer,
+  og en "død" type, der ALDRIG tæller med i rapporter/statistikker (`excluded_from_reports` – skal respekteres af
+  rapportgrundlaget i fase 4). Svar på fase 2-spørgsmålet: timelønnede markerer dage uden arbejde med den.
+- **Fase 1, trin 5 (19.10.2026):** påmindelse kl. **16.05** på arbejdsdage (mandag–fredag, ikke helligdage/banklukkedage)
+  til aktive medarbejdere uden en eneste linje på dagen – fra **info@dinbogholder.dk** til medarbejderens egen adresse,
+  med link til ugen. Dagen låses aldrig. `app/timeregistrering/paamindelse.py` (jobtype `tid_paamindelse`, planlagt af
+  natkørslens scheduler; højst én pr. medarbejder pr. dag – `time_reminders`, unik og kun tilføjelser).
+  `app/mail.py`: Microsoft Graph sendMail (httpx + tenacity) med EGEN app-registrering (kun Mail.Send, begrænset til
+  info@) – MAIL_TENANT_ID/MAIL_CLIENT_ID/MAIL_CLIENT_SECRET. `TIME_REMINDER_SEND=false` (standard) = tørløb: registreres
+  som 'toerloeb', intet sendes. Se hvem der mangler: `python -m app.timeregistrering.paamindelse vis [--dato]`.
+  Tests: `tests/test_timeregistrering_paamindelse.py`.
+  OPSÆTNING (bygherren, før TIME_REMINDER_SEND=true): app-registrering i Entra ("Hub – udgående mail"), klienthemmelighed,
+  og Exchange "RBAC for Applications": rollen *Application Mail.Send* tildelt appen med et scope, der KUN omfatter
+  info@dinbogholder.dk (bevis: `Test-ServicePrincipalAuthorization` → InScope True kun for info@). Nøglerne lægges i
+  serverens .env (hemmeligheden med `read -rsp`, aldrig i chatten).
 - Opgavetyper (bygherren 19.10.2026, migrering e2a0a9a2bed1): Afstemning → **Controlling** (kode `controlling`),
   Bogføring → **Kundearbejde** (kode `kundearbejde`), Øvrigt kundearbejde taget ud af brug (ikke slettet).
 - Beslutning (bygherren 19.10.2026) til trin 4: på linjer for ABONNEMENTSKUNDER erstattes fluebenet "faktureres

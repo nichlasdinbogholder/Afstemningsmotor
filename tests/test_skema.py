@@ -25,7 +25,7 @@ TABELLER = {
     "assistant_conversations", "assistant_messages", "assistant_feedback", "kb_documents", "kb_rate_checks",
     "time_employees", "time_employee_rates", "time_client_terms", "time_sales_rates", "time_task_types",
     "time_weeks", "time_entry_notes", "time_toil_settlements", "time_toil_movements", "time_payroll_batches",
-    "time_payroll_lines", "time_audit",
+    "time_payroll_lines", "time_audit", "time_reminders",
 }
 
 
@@ -163,6 +163,7 @@ def test_alle_staff_kolonner_peger_paa_staff(inspektor):
         ("time_payroll_batches", "status"),
         ("time_payroll_lines", "kind"),
         ("time_audit", "action"),
+        ("time_reminders", "status"),
     ],
 )
 def test_statusfelter_er_laast_til_faste_vaerdier(inspektor, tabel, kolonne):

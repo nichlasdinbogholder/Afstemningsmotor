@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 # Moduler med jobtyper. Tilføj nye moduler her, så workeren kender dem.
 JOBTYPE_MODULER = ("app.jobs.typer", "app.synk.jobs", "app.rules.jobs", "app.natkoersel.job",
-                   "app.opkraevning.jobs", "app.assistent.jobs")
+                   "app.opkraevning.jobs", "app.assistent.jobs", "app.timeregistrering.paamindelse")
 
 
 class UkendtJobtype(Exception):

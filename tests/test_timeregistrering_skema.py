@@ -73,7 +73,8 @@ def test_stamdata_er_lagt_ind(db_session):
     assert koder["oplaering"].excluded_from_efficiency and koder["ferie"].blocked_for_hourly
     assert koder["afspadsering"].reduces_toil
     assert koder["ikke_paa_arbejde"].zero_hours and not koder["ikke_paa_arbejde"].payable
-    assert not koder["ikke_paa_arbejde"].active  # bruges ikke (bygherren 19.10.2026)
+    i = koder["ikke_paa_arbejde"]  # bygherren 19.10.2026: kun timelønnede, aldrig i statistikkerne
+    assert i.active and i.only_hourly and i.excluded_from_reports and i.name == "Ikke på arbejde (kun for timelønnede)"
     assert {k for k, t in koder.items() if t.blocked_for_hourly} == {"ferie", "barn_syg", "afspadsering", "barsel",
                                                                      "skoleophold"}
     assert not koder["salg"].active  # venter på pipelinen
@@ -104,11 +105,9 @@ def test_registrering_regler(db_session, grund):
             lambda: _linje(db_session, s, e, uge, "kundearbejde", "1", k, billable_separately=True, description=" "))
     _linje(db_session, s, e, uge, "kundearbejde", "1", k, billable_separately=True, description="Ekstra opgave")
     # 6. 'Ikke på arbejde' med timer
-    # Reglen om 0 timer gælder stadig i databasen, hvis arten tages i brug igen.
-    _type(db_session, "ikke_paa_arbejde").active = True
-    db_session.flush()
-    _afvist(db_session, DBAPIError, "altid med 0 timer", lambda: _linje(db_session, s, e, uge, "ikke_paa_arbejde", "1"))
-    _linje(db_session, s, e, uge, "ikke_paa_arbejde", "0")
+    # "Ikke på arbejde" afvises for en fastlønnet af databasen.
+    _afvist(db_session, DBAPIError, "kun registreres af timelønnede",
+            lambda: _linje(db_session, s, e, uge, "ikke_paa_arbejde", "0"))
     # 3. 'salg' kan ikke bruges, før pipeline-emner findes
     _afvist(db_session, DBAPIError, "ikke i brug", lambda: _linje(db_session, s, e, uge, "salg", "1"))
     # Linjen skal ligge i ugen
@@ -133,6 +132,9 @@ def test_7_ferie_afvises_for_timeloennet(db_session, grund):
     _afvist(db_session, DBAPIError, "kan ikke registreres for timelønnede",
             lambda: _linje(db_session, t, e, uge, "ferie", "7.5"))
     _linje(db_session, t, e, uge, "sygdom", "7.5")
+    # "Ikke på arbejde": kun for timelønnede og altid 0 timer.
+    _afvist(db_session, DBAPIError, "altid med 0 timer", lambda: _linje(db_session, t, e, uge, "ikke_paa_arbejde", "1"))
+    _linje(db_session, t, e, uge, "ikke_paa_arbejde", "0", dag=date(2026, 10, 13))
 
 
 def test_25_27_godkendt_uge_er_laast(db_session, grund):
