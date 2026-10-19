@@ -432,6 +432,19 @@ def test_14_proeven_kontrollerer_svarets_opbygning(db_session, samme_session, pr
     monkeypatch.setattr(sm, "_klient", lambda: model)
     assert asyncio.run(proeve._kundeproeve("OPS-1", medarbejder.email)) == [True, True, True, True]
     assert "Slået op: Momskonti · 01.07.2026–30.09.2026 · 2 rækker" in capsys.readouterr().out
+    # En tabel efter indledningen (som Svend skrev på serveren 19.10.2026) er også rigtig.
+    tabel = ("Jeg har set på kundens momskonti for perioden:\n\n| Konto | Navn | Bevægelse |\n|---|---|---|\n"
+             "| 14240 | Købsmoms | 1.000,00 kr. |\n| 14260 | Salgsmoms | -2.500,00 kr. |\n\n"
+             "Reglen er, at momsen skal afstemmes først.\n\nDen kundeansvarlige skal godkende.")
+    model = FalskModel([([_kald(1, "get_moms", client_id=kunde.id, **Q3)], "tool_use"), ([_tekst(tabel)], "end_turn")])
+    monkeypatch.setattr(sm, "_klient", lambda: model)
+    assert asyncio.run(proeve._kundeproeve("OPS-1", medarbejder.email)) == [True, True, True, True]
+    # Begynder med reglen og nævner kontoen sidst -> fejl.
+    omvendt = ("Reglen er, at momsen skal afstemmes, før den indberettes, og det gælder både salgs- og købsmoms "
+               "for hele kvartalet.\n\nDen kundeansvarlige skal godkende. Konto 14260.")
+    model = FalskModel([([_kald(1, "get_moms", client_id=kunde.id, **Q3)], "tool_use"), ([_tekst(omvendt)], "end_turn")])
+    monkeypatch.setattr(sm, "_klient", lambda: model)
+    assert asyncio.run(proeve._kundeproeve("OPS-1", medarbejder.email))[1] is False
     daarligt = "Ja, du skal indberette -2.500 kr. i salgsmoms."
     model = FalskModel([([_tekst(daarligt)], "end_turn")])
     monkeypatch.setattr(sm, "_klient", lambda: model)
