@@ -254,6 +254,11 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   'ikke på arbejde' = 0 timer, noter/afspadseringsbevægelser/time_audit kun tilføjelser, satser slettes aldrig og
   overlapper aldrig (EXCLUDE, btree_gist), alt logges i time_audit (aktør via `stamdata.saet_aktoer()`).
   Opgavetypen `salg` er inaktiv, indtil pipeline-emner bygges. Beløb/timer NUMERIC; priser ekskl. moms.
+  - `satser.py` (trin 2): PERIODEOPSLAG – `satser_paa(session, dato, employee_id=, client_id=)` og SQL-funktionerne
+    time_salgspris/time_kostpris/time_normtid/time_afregning/time_abonnementspris. ALLE rapporter slår satser op
+    her på registreringsdatoen – aldrig now()/date.today(). Mangler en sats: `ManglerSats` (aldrig 0).
+    `python -m app.timeregistrering.satser vis --dato … | salgspris --fra --pris --af | vilkaar --kundenummer --fra
+    --model abonnement|timeafregning [--pris] --af`.
 - `app/bilag/` – BILAGSINDBAKKEN (spec v3; trin 1 bygget, se RESUME.md): mail + upload → én pipeline. Tabeller
   `inbox_*` + `supplier_account_map` (`models.py`). DATABASEN håndhæver: levering af faktura/kreditnota/kontoudtog
   til Corpay kræver godkendelse af præcis den fil (trigger `inbox_require_approval`; rykker undtaget);

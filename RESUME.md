@@ -568,4 +568,12 @@ selskabsdimension). Fire faser; ét trin ad gangen med PR og merge.
   kostpris, produktive timer, note). API: `POST /api/medarbejdere/{id}/ansaettelse`, `GET …/satser`, `POST …/sats`.
   Tests: `tests/test_timeregistrering_skema.py` (spec 1–7, 10, 11, 23, 25–27, 36, 41 + revisionsspor),
   `tests/test_api_medarbejdere.py`.
+- **Fase 1, trin 2 (19.10.2026):** periodeopslag. SQL-funktionerne `time_salgspris(d)`, `time_kostpris(medarbejder, d)`,
+  `time_normtid(…)`, `time_afregning(kunde, d)`, `time_abonnementspris(…)` (migrering fb5a83b87ff1) – altid med datoen
+  som argument, aldrig dags dato; ingen sats = NULL (aldrig 0). Python: `satser.satser_paa(session, dato,
+  employee_id, client_id)` rejser `ManglerSats` med tydelig dansk besked. Alle rapporter skal gå gennem dem.
+  Nye priser/vilkår: `ny_salgspris`, `nye_vilkaar` (ny periode afslutter den forrige, samme dato = rettelse; fælles
+  `placer_periode`, også brugt af kostprissatsen). Kommando: `python -m app.timeregistrering.satser vis|salgspris|vilkaar`
+  (ændringer kræver `--af <admin-e-mail>`, logges i time_audit og audit_log). Kundevilkår har endnu ingen side i
+  webdelen (siden Kunde er en pladsholder) – kun kommandoen. Tests: `tests/test_timeregistrering_satser.py` (spec 12–14).
 
