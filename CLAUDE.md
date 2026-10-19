@@ -230,7 +230,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `web/` – WEBDELEN (Next.js 16, TypeScript, Tailwind). KUN TIL PC (bygherren 16.10.2026) – byg ikke til telefon.
   Opbygning (`components/Ramme.tsx`): topmenu Dashboard · Timeregistrering · Afstemning · Debitorstyring;
   venstre kolonne med bokse Kunde · AI Planlægning · Opgavestyring · Controlling · Lønadministration · Salg · Tickets
-  (`DELE`); INDSTILLINGER nederst til venstre (Svend; Medarbejdere – kun admin). Timeregistrering og de 7 bokse er PLADSHOLDERE
+  (`DELE`); INDSTILLINGER nederst til venstre (Svend; Medarbejdere – kun admin). De 7 bokse er PLADSHOLDERE (Timeregistrering er bygget)
   (`components/Pladsholder.tsx`) – indholdet aftales senere. Bygges til statiske filer (`output: "export"`), som
   Caddy udleverer (`deploy/Dockerfile.caddy`); intet Node-program i drift. Henter kun fra `/api`
   (`web/lib/api.ts`, `send()` sætter X-Afstemning). Sider: `/` dashboard (første side efter login; indhold
@@ -259,6 +259,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     her på registreringsdatoen – aldrig now()/date.today(). Mangler en sats: `ManglerSats` (aldrig 0).
     `python -m app.timeregistrering.satser vis --dato … | salgspris --fra --pris --af | vilkaar --kundenummer --fra
     --model abonnement|timeafregning [--pris] --af`.
+  - `registrering.py` + `app/api/tid.py` (trin 3): UGEGITTERET `/api/tid/uge|afregning|linje|linje/slet` og siden
+    `web/app/timeregistrering/` (7 dage; kun egne timer; kun kladde/afvist kan rettes; afregningsform låses på rækken ved
+    oprettelse; summer regnes på serveren). Åbn fra en opgave: `/timeregistrering/?dato=&kunde=&opgavetype=`.
 - `app/bilag/` – BILAGSINDBAKKEN (spec v3; trin 1 bygget, se RESUME.md): mail + upload → én pipeline. Tabeller
   `inbox_*` + `supplier_account_map` (`models.py`). DATABASEN håndhæver: levering af faktura/kreditnota/kontoudtog
   til Corpay kræver godkendelse af præcis den fil (trigger `inbox_require_approval`; rykker undtaget);

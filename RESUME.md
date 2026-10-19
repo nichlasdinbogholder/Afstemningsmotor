@@ -580,4 +580,16 @@ selskabsdimension). Fire faser; ét trin ad gangen med PR og merge.
   `placer_periode`, også brugt af kostprissatsen). Kommando: `python -m app.timeregistrering.satser vis|salgspris|vilkaar`
   (ændringer kræver `--af <admin-e-mail>`, logges i time_audit og audit_log). Kundevilkår har endnu ingen side i
   webdelen (siden Kunde er en pladsholder) – kun kommandoen. Tests: `tests/test_timeregistrering_satser.py` (spec 12–14).
+- **Fase 1, trin 3 (19.10.2026):** ugegitteret – siden Timeregistrering (`web/app/timeregistrering/`), API `/api/tid`
+  (`uge`, `afregning`, `linje`, `linje/slet`; app/api/tid.py) og logikken i `registrering.py`. Syv dage mandag–søndag;
+  en linje = opgavetype + kunde + beskrivelse + "faktureres særskilt" med timer pr. dag (én række pr. dag i
+  time_entries). Tilføj/ret/slet kun i kladde eller afvist uge. Afregningsformen slås op og skrives på rækken, når den
+  oprettes, og ændres aldrig siden; skiftes kunden på en linje, oprettes rækkerne forfra. Timer i kvarte timer som
+  decimaltal (komma eller punktum), højst 24 timer pr. dag i alt; to linjer med samme kunde/opgavetype/beskrivelse
+  afvises (de ville løbe sammen). Summer pr. linje/dag/uge regnes på serveren. Kunde uden vilkår: tydelig besked om, at
+  en administrator skal sætte afregningsformen. Medarbejder uden ansættelsesform: besked om at kontakte en admin.
+  Start fra en opgave/kunde: `/timeregistrering/?dato=&kunde=&opgavetype=` (bruges, når Opgavestyring/Kunde bygges).
+  FORTOLKNING (bør bekræftes): "kundens vilkår på dagens dato" = på ARBEJDSDAGEN (linjens dato), ikke den dag,
+  linjen tastes – i tråd med fast regel 6 (satser på registreringsdatoen) og spec-test 9.
+  Tests: `tests/test_timeregistrering_registrering.py` (spec 8–10, ret/slet, låste uger, kun egne linjer).
 
