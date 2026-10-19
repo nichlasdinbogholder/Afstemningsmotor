@@ -77,6 +77,15 @@ class Settings(BaseSettings):
     assistant_max_rows: int = 200
     assistant_max_tool_calls: int = 5
 
+    # Udgående mail (fx påmindelser i timeregistreringen) via Microsoft Graph fra én fast afsender.
+    # Egen app-registrering med KUN Mail.Send, begrænset til netop MAIL_AFSENDER. Uden nøgler sendes intet.
+    mail_afsender: str = "info@dinbogholder.dk"
+    mail_tenant_id: str | None = None
+    mail_client_id: str | None = None
+    mail_client_secret: SecretStr | None = None
+    # Timeregistreringens påmindelse kl. 16.05: false = tørløb (registreres, men sendes ikke).
+    time_reminder_send: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -100,6 +100,8 @@ def _kontroller_linje(session: Session, e: TimeEmployee, linje: Linje) -> TimeTa
         raise RegistreringsFejl("Intern tid og fravær registreres uden kunde")
     if t.blocked_for_hourly and e.employment == "timeloennet":
         raise RegistreringsFejl("Denne fraværsart kan ikke registreres for timelønnede")
+    if t.only_hourly and e.employment != "timeloennet":
+        raise RegistreringsFejl(f"'{t.name}' kan kun registreres af timelønnede")
     if linje.saerskilt and t.kind != "kunde":
         raise RegistreringsFejl("Kun kundearbejde kan afregnes uden for abonnementet")
     if linje.saerskilt and not (linje.beskrivelse or "").strip():

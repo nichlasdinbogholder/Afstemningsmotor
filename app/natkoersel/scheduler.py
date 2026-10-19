@@ -116,6 +116,15 @@ def koer_assistentplanlaegning(type_: str) -> int:
     return nye
 
 
+def koer_tidspaamindelse() -> int:
+    from app.timeregistrering.paamindelse import planlaeg
+
+    with ny_session() as session:
+        nye = planlaeg(session, datetime.now(TIDSZONE))
+        session.commit()
+    return nye
+
+
 def lav_scheduler() -> BlockingScheduler:
     from app.opkraevning.jobs import KOE, KONTROL
 
@@ -141,6 +150,11 @@ def lav_scheduler() -> BlockingScheduler:
     # Forældede satser (sikkerhedsnettet): hver dag kl. 06.30 – efter mandagens kontrol.
     scheduler.add_job(koer_assistentplanlaegning, CronTrigger(hour=6, minute=30, timezone=TIDSZONE),
                       args=[FORAELDELSE], id="satsforaeldelse", name="Forældede satser", misfire_grace_time=6 * 3600,
+                      coalesce=True, max_instances=1, replace_existing=True)
+    # Timeregistrering: påmindelse kl. 16.05 mandag–fredag til dem, der ikke har udfyldt dagen (helligdage springes
+    # over i jobbet).
+    scheduler.add_job(koer_tidspaamindelse, CronTrigger(day_of_week=UGEDAGE, hour=16, minute=5, timezone=TIDSZONE),
+                      id="tid_paamindelse", name="Påmindelse om timeregistrering", misfire_grace_time=3600,
                       coalesce=True, max_instances=1, replace_existing=True)
     return scheduler
 

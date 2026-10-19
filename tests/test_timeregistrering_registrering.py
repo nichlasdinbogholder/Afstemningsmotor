@@ -107,7 +107,7 @@ def test_validering_ved_gem(db_session, klient, grund):
     assert "Vælg kunden" in fejl(_gem(klient, timer={MANDAG: "1"}))[1]
     assert "uden kunde" in fejl(_gem(klient, "sygdom", kunde=k, timer={MANDAG: "7,5"}))[1]
     assert "beskrivelse" in fejl(_gem(klient, kunde=k, timer={MANDAG: "1"}, saerskilt=True))[1]
-    assert "ikke i brug" in fejl(_gem(klient, "ikke_paa_arbejde", timer={MANDAG: "0"}))[1]  # bruges ikke (19.10.2026)
+    assert "kun registreres af timelønnede" in fejl(_gem(klient, "ikke_paa_arbejde", timer={MANDAG: "0"}))[1]
     assert "ikke i brug" in fejl(_gem(klient, "salg", timer={MANDAG: "1"}))[1]
     assert "ikke i ugen" in fejl(_gem(klient, kunde=k, timer={date(2027, 3, 1): "1"}))[1]
     _gem(klient, kunde=k, timer={MANDAG: "20"})
@@ -183,12 +183,16 @@ def test_kraever_login_og_header(db_session, grund):
 
 def test_trin4_ferie_skjules_for_timeloennede(db_session, klient, grund):
     m, *_ = grund
-    assert "ferie" in [t["kode"] for t in klient.get(f"/api/tid/uge?dato={MANDAG}").json()["opgavetyper"]]
+    koder = [t["kode"] for t in klient.get(f"/api/tid/uge?dato={MANDAG}").json()["opgavetyper"]]
+    assert "ferie" in koder and "ikke_paa_arbejde" not in koder  # fastlønnet
     stamdata.saet_ansaettelse(db_session, m.id, "timeloennet", False, None)
     koder = [t["kode"] for t in klient.get(f"/api/tid/uge?dato={MANDAG}").json()["opgavetyper"]]
     # Bygherren 19.10.2026: timelønnede ser kun sygdom af fraværsarterne.
     assert [k for k in koder if k in ("sygdom", "ferie", "barn_syg", "afspadsering", "barsel", "skoleophold",
-                                      "ikke_paa_arbejde")] == ["sygdom"]
+                                      "ikke_paa_arbejde")] == ["sygdom", "ikke_paa_arbejde"]
+    # "Ikke på arbejde (kun for timelønnede)": 0 timer, markeres pr. dag.
+    assert "registreres uden timer" in _gem(klient, "ikke_paa_arbejde", timer={MANDAG: "1"}).json()["detail"]
+    assert _gem(klient, "ikke_paa_arbejde", timer={MANDAG: "0"}).status_code == 200
     for kode in ("barn_syg", "afspadsering", "barsel", "skoleophold"):
         assert _gem(klient, kode, timer={MANDAG: "7,5"}).status_code == 422
     # Skulle nogen alligevel sende ferie, afvises det (7).

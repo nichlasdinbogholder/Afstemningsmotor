@@ -264,6 +264,12 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     oprettelse; summer regnes på serveren). Åbn fra en opgave: `/timeregistrering/?dato=&kunde=&opgavetype=`.
     Trin 4: ferie skjules for timelønnede; kolonnen "Afregning" (abonnementskunder: indeholdt / uden for abonnementet –
     timer = billable_separately, kræver beskrivelse); nul-timer-arter markeres med flueben.
+    Fravær: timelønnede ser kun sygdom og "Ikke på arbejde (kun for timelønnede)" (`only_hourly`, aldrig i statistikker:
+    `excluded_from_reports`).
+  - `paamindelse.py` (trin 5): kl. 16.05 på arbejdsdage, fra info@ (MAIL_AFSENDER), højst én pr. medarbejder pr. dag
+    (`time_reminders`); `TIME_REMINDER_SEND=false` = tørløb. `python -m app.timeregistrering.paamindelse vis [--dato]`.
+- `app/mail.py` – udgående mail via Microsoft Graph (egen app med KUN Mail.Send til MAIL_AFSENDER; MAIL_TENANT_ID/
+  MAIL_CLIENT_ID/MAIL_CLIENT_SECRET). Fejl indeholder kun statuskoden – aldrig nøgler.
 - `app/bilag/` – BILAGSINDBAKKEN (spec v3; trin 1 bygget, se RESUME.md): mail + upload → én pipeline. Tabeller
   `inbox_*` + `supplier_account_map` (`models.py`). DATABASEN håndhæver: levering af faktura/kreditnota/kontoudtog
   til Corpay kræver godkendelse af præcis den fil (trigger `inbox_require_approval`; rykker undtaget);
