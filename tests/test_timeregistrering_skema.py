@@ -73,6 +73,9 @@ def test_stamdata_er_lagt_ind(db_session):
     assert koder["oplaering"].excluded_from_efficiency and koder["ferie"].blocked_for_hourly
     assert koder["afspadsering"].reduces_toil
     assert koder["ikke_paa_arbejde"].zero_hours and not koder["ikke_paa_arbejde"].payable
+    assert not koder["ikke_paa_arbejde"].active  # bruges ikke (bygherren 19.10.2026)
+    assert {k for k, t in koder.items() if t.blocked_for_hourly} == {"ferie", "barn_syg", "afspadsering", "barsel",
+                                                                     "skoleophold"}
     assert not koder["salg"].active  # venter på pipelinen
     # Bygherren 19.10.2026: Afstemning -> Controlling, Bogføring -> Kundearbejde, Øvrigt kundearbejde ude af brug.
     assert (koder["controlling"].name, koder["kundearbejde"].name) == ("Controlling", "Kundearbejde")
@@ -101,6 +104,9 @@ def test_registrering_regler(db_session, grund):
             lambda: _linje(db_session, s, e, uge, "kundearbejde", "1", k, billable_separately=True, description=" "))
     _linje(db_session, s, e, uge, "kundearbejde", "1", k, billable_separately=True, description="Ekstra opgave")
     # 6. 'Ikke på arbejde' med timer
+    # Reglen om 0 timer gælder stadig i databasen, hvis arten tages i brug igen.
+    _type(db_session, "ikke_paa_arbejde").active = True
+    db_session.flush()
     _afvist(db_session, DBAPIError, "altid med 0 timer", lambda: _linje(db_session, s, e, uge, "ikke_paa_arbejde", "1"))
     _linje(db_session, s, e, uge, "ikke_paa_arbejde", "0")
     # 3. 'salg' kan ikke bruges, før pipeline-emner findes
