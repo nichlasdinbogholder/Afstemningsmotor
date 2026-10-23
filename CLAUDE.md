@@ -229,7 +229,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/rules/visning.py` – aktuelle fund (`NOT EXISTS` nyere regelkørsel – bruger indekset), regelnavne.
 - `web/` – WEBDELEN (Next.js 16, TypeScript, Tailwind). KUN TIL PC (bygherren 16.10.2026) – byg ikke til telefon.
   Opbygning (`components/Ramme.tsx`): topmenu Dashboard · Timeregistrering · Afstemning · Debitorstyring;
-  venstre kolonne med bokse Kunde · AI Planlægning · Opgavestyring · Controlling · Lønadministration · Salg · Tickets · Partneradgang (KUN admin)
+  venstre kolonne med bokse Kunde (dropdown: Kundeoversigt · Arkiverede kunder) · AI Planlægning · Opgavestyring · Controlling · Lønadministration · Salg · Tickets · Partneradgang (KUN admin)
   (`DELE`); INDSTILLINGER nederst til venstre (Svend; Medarbejdere – kun admin). De 8 bokse er PLADSHOLDERE (Timeregistrering er bygget)
   (`components/Pladsholder.tsx`) – indholdet aftales senere. Bygges til statiske filer (`output: "export"`), som
   Caddy udleverer (`deploy/Dockerfile.caddy`); intet Node-program i drift. Henter kun fra `/api`
@@ -242,6 +242,13 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   på FastAPI og `/dev-login?email=` (virker aldrig med APP_ENV=production). Læs `web/AGENTS.md` før
   ændringer (Next.js 16 adskiller sig fra ældre versioner).
 - Kapacitet (målt, DEPLOY.md): 500 kunder / 20 samtidige medarbejdere; 4 workers, 3 API-processer.
+- `app/kunder/kartotek.py` + `app/api/kundekartotek.py` – KUNDEKARTOTEKET (bygherren 23.10.2026): boksen Kunde i venstre side er en
+  dropdown med `/kunder/` Kundeoversigt og `/kunder/arkiverede/` Arkiverede kunder. Alle ser listerne; KUN admin opretter
+  (startdato for samarbejdet + afregningsform, som gælder fra startdatoen), skifter ansvarlig (= hvem der kan spørge Svend om
+  kunden), arkiverer (årsag `clients.arkiv_aarsag`: pris_for_hoej/engangsopgave/uoverensstemmelse/egen_bogholder + ophørsdato
+  i `opsagt_dato`, `arkiveret_af`) og genaktiverer. Arkiveret = status 'opsagt' = stoppet helt (ingen synk, rykkere,
+  timeregistrering eller Svend). CHECK: årsag kun på opsagt. audit_log `kunde_oprettet|_ansvarlig|_arkiveret|_genaktiveret`.
+  Token lægges stadig ind med `python -m app.kunder.gem_token`.
 - `app/personale/bruger.py` – `python -m app.personale.bruger vis|opret|rolle|deaktiver|aktiver`.
 - `app/api/medarbejdere.py` + siden `web/app/medarbejdere/` – det samme fra websiden (KUN admin, menupunktet ses kun af
   admins): `GET/POST /api/medarbejdere`, `POST /api/medarbejdere/{id}` (navn/rolle/aktiv). Ingen sletning, e-mail kan

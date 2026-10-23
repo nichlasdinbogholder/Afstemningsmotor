@@ -625,3 +625,12 @@ selskabsdimension). Fire faser; ét trin ad gangen med PR og merge.
   ikke for timeafregningskunder (alle timer faktureres dér). DEN ENKELTE MEDARBEJDER må vælge det. Linjerne står øverst
   ved godkendelsen (fase 2).
 
+# Kundekartotek (bygherren 23.10.2026)
+- Menuen Kunde har to undermenuer: **Kundeoversigt** (alle ikke-arkiverede kunder) og **Arkiverede kunder**.
+- Kun administratorer opretter, skifter ansvarlig, arkiverer og genaktiverer. Medarbejdere kan se listerne.
+- Oprettelse kræver startdato for samarbejdet og afregningsform (abonnement med pris eller timeafregning); afregningsformen
+  gælder fra startdatoen.
+- Arkivering kræver årsag (Prisen for høj, Engangsopgave, Uoverensstemmelse, Har ansat egen bogholder) og dato for
+  samarbejdets ophør. En arkiveret kunde stoppes HELT (status 'opsagt'): ingen hentning, ingen rykkere, kan ikke vælges i
+  timeregistreringen eller hos Svend. Intet slettes. Genaktivering af en administrator er muligt.
+- Den ansvarlige medarbejder i Kundeoversigten afgør, hvilke kunder medarbejderen kan spørge Svend om.

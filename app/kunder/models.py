@@ -35,6 +35,8 @@ KUNDE_STATUSSER = ("aktiv", "pause", "opsagt")
 OPGAVE_FREKVENSER = ("maanedligt", "kvartalsvis", "aarligt")
 MOMSPERIODER = ("maaned", "kvartal", "halvaar")
 AFTALETYPER = ("fast_pris", "timer")
+# Årsager til at arkivere en kunde (bygherren 23.10.2026) – vælges, når en administrator arkiverer.
+ARKIV_AARSAGER = ("pris_for_hoej", "engangsopgave", "uoverensstemmelse", "egen_bogholder")
 ADGANG_STATUSSER = ("aktiv", "udloebet", "tilbagekaldt")
 
 
@@ -46,6 +48,9 @@ class Client(Base):
         kun_vaerdier("opgave_frekvens", OPGAVE_FREKVENSER),
         kun_vaerdier("momsperiode", MOMSPERIODER),
         kun_vaerdier("aftaletype", AFTALETYPER),
+        kun_vaerdier("arkiv_aarsag", ARKIV_AARSAGER),
+        # En årsag giver kun mening på en arkiveret (opsagt) kunde.
+        CheckConstraint("arkiv_aarsag IS NULL OR status = 'opsagt'", name="arkiv_aarsag_kun_paa_opsagt"),
         CheckConstraint("cvr ~ '^[0-9]{8}$'", name="cvr_8_cifre"),
         # Regnskabsårets slutning som dag-måned, fx '31-12' eller '30-06'.
         CheckConstraint(
@@ -88,6 +93,9 @@ class Client(Base):
     status: Mapped[str] = mapped_column(String(20), server_default="aktiv")
     startdato: Mapped[date | None] = mapped_column(Date)
     opsagt_dato: Mapped[date | None] = mapped_column(Date)
+    # Arkivering (siden Kunde → Kundeoversigt, kun administratorer): årsag og hvem. Datoen er opsagt_dato.
+    arkiv_aarsag: Mapped[str | None] = mapped_column(String(30))
+    arkiveret_af: Mapped[int | None] = mapped_column(ForeignKey("staff.id", ondelete="SET NULL"), index=True)
     ansvarlig_medarbejder_id: Mapped[int | None] = mapped_column(
         ForeignKey("staff.id", ondelete="SET NULL"), index=True
     )

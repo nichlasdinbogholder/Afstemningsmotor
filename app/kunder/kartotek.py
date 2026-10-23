@@ -1,0 +1,158 @@
+"""Kundekartoteket i hub'en (siden Kunde → Kundeoversigt / Arkiverede kunder), bygherren 23.10.2026.
+
+- Oprettelse (KUN administratorer): navn, kundenummer, CVR, regnskabssystem, ansvarlig medarbejder, STARTDATO for
+  samarbejdet og afregningsform (timeafregning eller abonnement med pris) – afregningsformen gælder fra startdatoen.
+  Kundens adgang (token) lægges stadig ind med `python -m app.kunder.gem_token` (skjult indtastning).
+- Arkivering (KUN administratorer): årsag (pris for høj, engangsopgave, uoverensstemmelse, har ansat egen bogholder)
+  og dato for samarbejdets OPHØR. Kunden får status 'opsagt' og stoppes helt – ingen hentning fra regnskabssystemet,
+  ingen rykkere, kan ikke vælges i timeregistreringen eller hos Svend. Intet slettes; historikken bevares.
+- Ansvarlig medarbejder (KUN administratorer) kan skiftes i oversigten. Det er den, der afgør, hvilke kunder en
+  medarbejder kan spørge Svend om.
+- Genaktivering (KUN administratorer): kunden bliver aktiv igen. Arkiveringen står stadig i loggen.
+- Alt logges i audit_log (kunde_oprettet, kunde_ansvarlig, kunde_arkiveret, kunde_genaktiveret) med hvem og fra/til.
+"""
+
+from datetime import date
+from decimal import Decimal
+
+from sqlalchemy import or_, select, text
+from sqlalchemy.orm import Session
+
+from app.audit.models import AuditLog
+from app.kunder.models import ARKIV_AARSAGER, SYSTEMER, Client
+from app.personale.models import Staff
+from app.timeregistrering.satser import ManglerSats, nye_vilkaar
+from app.timeregistrering.stamdata import saet_aktoer
+
+AARSAG_TEKST = {
+    "pris_for_hoej": "Prisen for høj",
+    "engangsopgave": "Engangsopgave",
+    "uoverensstemmelse": "Uoverensstemmelse",
+    "egen_bogholder": "Har ansat egen bogholder",
+}
+SYSTEM_TEKST = {"economic": "e-conomic", "dinero": "Dinero"}
+
+
+class KartotekFejl(Exception):
+    """Fejl ved indtastning. Beskeden er dansk og kan vises direkte."""
+
+
+def liste(session: Session, arkiverede: bool, dag: date) -> list[dict]:
+    """Kundeoversigten (aktive og på pause) eller de arkiverede (opsagte) kunder, sorteret efter navn.
+
+    Afregningsformen vises på dagen – eller på startdatoen, hvis samarbejdet ikke er begyndt endnu. For en arkiveret
+    kunde vises den, der gjaldt ved ophøret."""
+    betingelse = Client.status == "opsagt" if arkiverede else Client.status != "opsagt"
+    ud = []
+    for k in session.scalars(select(Client).where(betingelse).order_by(Client.navn)):
+        ansvarlig = session.get(Staff, k.ansvarlig_medarbejder_id) if k.ansvarlig_medarbejder_id else None
+        af = session.get(Staff, k.arkiveret_af) if k.arkiveret_af else None
+        paa = dag
+        if k.startdato and k.startdato > paa:
+            paa = k.startdato
+        if arkiverede and k.opsagt_dato:
+            paa = k.opsagt_dato
+        afregning = session.execute(text("SELECT time_afregning(:k, :d), time_abonnementspris(:k, :d)"),
+                                    {"k": k.id, "d": paa}).one()
+        ud.append({
+            "id": k.id, "navn": k.navn, "kundenummer": k.kundenummer, "cvr": k.cvr, "status": k.status,
+            "system": SYSTEM_TEKST.get(k.regnskabssystem, k.regnskabssystem),
+            "ansvarlig": ansvarlig.navn if ansvarlig else None, "ansvarlig_id": k.ansvarlig_medarbejder_id,
+            "startdato": k.startdato.isoformat() if k.startdato else None,
+            "afregning": afregning[0], "abonnementspris": None if afregning[1] is None else str(afregning[1]),
+            "ophoersdato": k.opsagt_dato.isoformat() if k.opsagt_dato else None,
+            "aarsag": AARSAG_TEKST.get(k.arkiv_aarsag) if k.arkiv_aarsag else None,
+            "arkiveret_af": af.navn if af else None,
+        })
+    return ud
+
+
+def opret(session: Session, af: Staff, navn: str, kundenummer: str, cvr: str | None, system: str,
+          ansvarlig_id: int | None, startdato: date, afregning: str, abonnementspris: Decimal | None) -> Client:
+    navn, kundenummer = (navn or "").strip(), (kundenummer or "").strip()
+    cvr = (cvr or "").replace(" ", "") or None
+    if not navn or not kundenummer:
+        raise KartotekFejl("Skriv kundens navn og kundenummer")
+    if cvr and not (cvr.isdigit() and len(cvr) == 8):
+        raise KartotekFejl("CVR skal være 8 cifre")
+    if system not in SYSTEMER:
+        raise KartotekFejl("Vælg kundens regnskabssystem")
+    if startdato is None:
+        raise KartotekFejl("Vælg startdatoen for samarbejdet")
+    findes = session.scalars(select(Client).where(or_(
+        Client.kundenummer == kundenummer, Client.cvr == cvr if cvr else False))).first()
+    if findes is not None:
+        raise KartotekFejl(f"Kunden findes allerede ({findes.navn}, kundenr. {findes.kundenummer})"
+                           + (" – den er arkiveret og kan genaktiveres" if findes.status == "opsagt" else ""))
+    if ansvarlig_id is not None:
+        m = session.get(Staff, ansvarlig_id)
+        if m is None or not m.aktiv:
+            raise KartotekFejl("Den ansvarlige skal være en aktiv medarbejder")
+    saet_aktoer(session, af.id)
+    kunde = Client(navn=navn, kundenummer=kundenummer, cvr=cvr, regnskabssystem=system, status="aktiv",
+                   startdato=startdato, ansvarlig_medarbejder_id=ansvarlig_id)
+    session.add(kunde)
+    session.flush()
+    try:
+        nye_vilkaar(session, kunde.id, startdato, afregning, abonnementspris, af.id)
+    except ManglerSats as fejl:  # fx abonnement uden pris
+        raise KartotekFejl(str(fejl)) from None
+    session.add(AuditLog(client_id=kunde.id, staff_id=af.id, handling="kunde_oprettet", detaljer={
+        "udfoert_af": af.email, "system": system, "startdato": startdato.isoformat(), "afregning": afregning,
+        "abonnementspris": None if abonnementspris is None else str(abonnementspris)}))
+    session.flush()
+    return kunde
+
+
+def saet_ansvarlig(session: Session, af: Staff, client_id: int, ansvarlig_id: int | None) -> Client:
+    kunde = session.get(Client, client_id)
+    if kunde is None:
+        raise KartotekFejl("Kunden findes ikke")
+    if kunde.status == "opsagt":
+        raise KartotekFejl("Kunden er arkiveret – genaktivér den først")
+    if ansvarlig_id is not None:
+        m = session.get(Staff, ansvarlig_id)
+        if m is None or not m.aktiv:
+            raise KartotekFejl("Den ansvarlige skal være en aktiv medarbejder")
+    fra = kunde.ansvarlig_medarbejder_id
+    if fra == ansvarlig_id:
+        return kunde
+    kunde.ansvarlig_medarbejder_id = ansvarlig_id
+    session.add(AuditLog(client_id=kunde.id, staff_id=af.id, handling="kunde_ansvarlig", detaljer={
+        "udfoert_af": af.email, "fra_staff_id": fra, "til_staff_id": ansvarlig_id}))
+    session.flush()
+    return kunde
+
+
+def arkiver(session: Session, af: Staff, client_id: int, aarsag: str, ophoersdato: date) -> Client:
+    kunde = session.get(Client, client_id)
+    if kunde is None:
+        raise KartotekFejl("Kunden findes ikke")
+    if kunde.status == "opsagt":
+        raise KartotekFejl("Kunden er allerede arkiveret")
+    if aarsag not in ARKIV_AARSAGER:
+        raise KartotekFejl("Vælg årsagen til, at kunden arkiveres")
+    if ophoersdato is None:
+        raise KartotekFejl("Vælg datoen for samarbejdets ophør")
+    if kunde.startdato and ophoersdato < kunde.startdato:
+        raise KartotekFejl(f"Ophørsdatoen ligger før startdatoen ({kunde.startdato:%d.%m.%Y})")
+    fra = kunde.status
+    kunde.status, kunde.opsagt_dato, kunde.arkiv_aarsag, kunde.arkiveret_af = "opsagt", ophoersdato, aarsag, af.id
+    session.add(AuditLog(client_id=kunde.id, staff_id=af.id, handling="kunde_arkiveret", detaljer={
+        "udfoert_af": af.email, "fra_status": fra, "aarsag": aarsag, "ophoersdato": ophoersdato.isoformat()}))
+    session.flush()
+    return kunde
+
+
+def genaktiver(session: Session, af: Staff, client_id: int) -> Client:
+    kunde = session.get(Client, client_id)
+    if kunde is None:
+        raise KartotekFejl("Kunden findes ikke")
+    if kunde.status != "opsagt":
+        raise KartotekFejl("Kunden er ikke arkiveret")
+    detaljer = {"udfoert_af": af.email, "tidligere_aarsag": kunde.arkiv_aarsag,
+                "tidligere_ophoersdato": kunde.opsagt_dato.isoformat() if kunde.opsagt_dato else None}
+    kunde.status, kunde.opsagt_dato, kunde.arkiv_aarsag, kunde.arkiveret_af = "aktiv", None, None, None
+    session.add(AuditLog(client_id=kunde.id, staff_id=af.id, handling="kunde_genaktiveret", detaljer=detaljer))
+    session.flush()
+    return kunde
