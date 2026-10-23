@@ -22,8 +22,13 @@ function Menupunkt({ href, aktiv, children }: { href: string; aktiv: boolean; ch
 }
 
 // Hub'ens dele i venstre side – én boks pr. del. Siderne er pladsholdere, indtil indholdet er aftalt.
+// Kunde har undermenuer (bygherren 23.10.2026) – de vises i en dropdown under boksen.
+const KUNDE_UNDERMENU = [
+  { href: "/kunder/", tekst: "Kundeoversigt" },
+  { href: "/kunder/arkiverede/", tekst: "Arkiverede kunder" },
+];
+
 const DELE = [
-  { href: "/kunder/", tekst: "Kunde" },
   { href: "/ai-planlaegning/", tekst: "AI Planlægning" },
   { href: "/opgavestyring/", tekst: "Opgavestyring" },
   { href: "/controlling/", tekst: "Controlling" },
@@ -34,9 +39,41 @@ const DELE = [
   { href: "/partneradgang/", tekst: "Partneradgang", kunAdmin: true },
 ];
 
+// Boksen "Kunde" folder sig ud med undermenuerne. Den står åben, når man er på en af kundesiderne.
+function Kundemenu({ sti }: { sti: string }) {
+  const paaSiden = sti.startsWith("/kunder");
+  const [klikket, setKlikket] = useState<boolean | null>(null);
+  const aaben = klikket ?? paaSiden;
+  return (
+    <div className={`rounded-lg border bg-white text-sm ${paaSiden ? "border-brand-600 shadow-sm" : "border-slate-200"}`}>
+      <button type="button" onClick={() => setKlikket(!aaben)} aria-expanded={aaben}
+              className={`flex w-full items-center justify-between px-3 py-2.5 text-left ${paaSiden ? "font-medium text-slate-900" : "text-slate-700 hover:text-slate-900"}`}>
+        Kunde
+        <span aria-hidden className={`text-xs text-slate-400 transition-transform ${aaben ? "rotate-180" : ""}`}>▾</span>
+      </button>
+      {aaben && (
+        <ul className="border-t border-slate-100 px-2 py-1.5 text-xs">
+          {KUNDE_UNDERMENU.map((u) => {
+            const aktiv = sti.replace(/\/$/, "") === u.href.replace(/\/$/, "");
+            return (
+              <li key={u.href}>
+                <Link href={u.href}
+                      className={`block rounded-md border-l-2 px-2 py-1.5 ${aktiv ? "border-brand-600 bg-slate-50 font-medium text-slate-900" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}>
+                  {u.tekst}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function Venstremenu({ sti, admin }: { sti: string; admin: boolean }) {
   return (
     <nav aria-label="Hub'ens dele" className="sticky top-4 space-y-2 px-4 pt-6">
+      <Kundemenu sti={sti} />
       {DELE.filter((d) => admin || !("kunAdmin" in d)).map((d) => {
         const aktiv = sti.startsWith(d.href.replace(/\/$/, ""));
         return (
@@ -117,7 +154,7 @@ export default function Ramme({ children }: { children: React.ReactNode }) {
             <nav className="flex gap-1 text-sm">
               <Menupunkt href="/" aktiv={sti === "/"}>Dashboard</Menupunkt>
               <Menupunkt href="/timeregistrering/" aktiv={sti.startsWith("/timeregistrering")}>Timeregistrering</Menupunkt>
-              <Menupunkt href="/afstemning/" aktiv={sti.startsWith("/afstemning") || sti.startsWith("/kunde")}>Afstemning</Menupunkt>
+              <Menupunkt href="/afstemning/" aktiv={sti.startsWith("/afstemning") || /^\/kunde\/?$/.test(sti)}>Afstemning</Menupunkt>
               <Menupunkt href="/debitorstyring/" aktiv={sti.startsWith("/debitorstyring")}>Debitorstyring</Menupunkt>
             </nav>
           </div>

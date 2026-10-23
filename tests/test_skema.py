@@ -67,7 +67,7 @@ def test_alle_client_id_er_relationer_med_indeks(inspektor):
 
 def test_alle_staff_kolonner_peger_paa_staff(inspektor):
     forventet = {
-        "clients": {"ansvarlig_medarbejder_id", "daglig_medarbejder_id"},
+        "clients": {"ansvarlig_medarbejder_id", "daglig_medarbejder_id", "arkiveret_af"},
         "tasks": {"ansvarlig_id"},
         "time_entries": {"created_by"},
         "notes": {"staff_id"},
@@ -107,6 +107,7 @@ def test_alle_staff_kolonner_peger_paa_staff(inspektor):
         ("clients", "opgave_frekvens"),
         ("clients", "momsperiode"),
         ("clients", "aftaletype"),
+        ("clients", "arkiv_aarsag"),
         ("credentials", "system"),
         ("credentials", "status"),
         ("tasks", "status"),
