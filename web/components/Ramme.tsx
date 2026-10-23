@@ -52,7 +52,7 @@ function Kundemenu({ sti }: { sti: string }) {
         <span aria-hidden className={`text-xs text-slate-400 transition-transform ${aaben ? "rotate-180" : ""}`}>▾</span>
       </button>
       {aaben && (
-        <ul className="border-t border-slate-100 px-2 py-1.5">
+        <ul className="border-t border-slate-100 px-2 py-1.5 text-xs">
           {KUNDE_UNDERMENU.map((u) => {
             const aktiv = sti.replace(/\/$/, "") === u.href.replace(/\/$/, "");
             return (

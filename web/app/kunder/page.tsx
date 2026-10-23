@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { useMig } from "@/components/Ramme";
 import { hent, send } from "@/lib/api";
@@ -42,13 +41,6 @@ export default function Side() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Kundeoversigt</h1>
-          <p className="mt-1 max-w-3xl text-sm text-slate-600">
-            Alle vores kunder, der ikke er arkiveret. En arkiveret kunde stoppes helt: der hentes ikke længere data
-            fra regnskabssystemet, der sendes ingen rykkere, og kunden kan ikke vælges i timeregistreringen eller hos
-            Svend. Intet slettes – arkiverede kunder står under <Link href="/kunder/arkiverede/" className="text-brand-700 underline">Arkiverede kunder</Link>.
-            {" "}Den ansvarlige medarbejder er den, der kan spørge Svend om kunden.
-            {!admin && " Kun administratorer kan oprette, arkivere og skifte ansvarlig."}
-          </p>
         </div>
         {admin && !visOpret && (
           <button onClick={() => setVisOpret(true)}
