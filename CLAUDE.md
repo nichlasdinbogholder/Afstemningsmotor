@@ -229,8 +229,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/rules/visning.py` – aktuelle fund (`NOT EXISTS` nyere regelkørsel – bruger indekset), regelnavne.
 - `web/` – WEBDELEN (Next.js 16, TypeScript, Tailwind). KUN TIL PC (bygherren 16.10.2026) – byg ikke til telefon.
   Opbygning (`components/Ramme.tsx`): topmenu Dashboard · Timeregistrering · Afstemning · Debitorstyring;
-  venstre kolonne med bokse Kunde · AI Planlægning · Opgavestyring · Controlling · Lønadministration · Salg · Tickets
-  (`DELE`); INDSTILLINGER nederst til venstre (Svend; Medarbejdere – kun admin). De 7 bokse er PLADSHOLDERE (Timeregistrering er bygget)
+  venstre kolonne med bokse Kunde · AI Planlægning · Opgavestyring · Controlling · Lønadministration · Salg · Tickets · Partneradgang
+  (`DELE`); INDSTILLINGER nederst til venstre (Svend; Medarbejdere – kun admin). De 8 bokse er PLADSHOLDERE (Timeregistrering er bygget)
   (`components/Pladsholder.tsx`) – indholdet aftales senere. Bygges til statiske filer (`output: "export"`), som
   Caddy udleverer (`deploy/Dockerfile.caddy`); intet Node-program i drift. Henter kun fra `/api`
   (`web/lib/api.ts`, `send()` sætter X-Afstemning). Sider: `/` dashboard (første side efter login; indhold

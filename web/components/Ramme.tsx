@@ -30,6 +30,7 @@ const DELE = [
   { href: "/loenadministration/", tekst: "Lønadministration" },
   { href: "/salg/", tekst: "Salg" },
   { href: "/tickets/", tekst: "Tickets" },
+  { href: "/partneradgang/", tekst: "Partneradgang" },
 ];
 
 function Venstremenu({ sti }: { sti: string }) {
