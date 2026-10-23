@@ -30,12 +30,14 @@ const DELE = [
   { href: "/loenadministration/", tekst: "Lønadministration" },
   { href: "/salg/", tekst: "Salg" },
   { href: "/tickets/", tekst: "Tickets" },
+  // Kun for administratorer (bygherren 23.10.2026) – vises ikke for andre; siden tjekker det også.
+  { href: "/partneradgang/", tekst: "Partneradgang", kunAdmin: true },
 ];
 
-function Venstremenu({ sti }: { sti: string }) {
+function Venstremenu({ sti, admin }: { sti: string; admin: boolean }) {
   return (
     <nav aria-label="Hub'ens dele" className="sticky top-4 space-y-2 px-4 pt-6">
-      {DELE.map((d) => {
+      {DELE.filter((d) => admin || !("kunAdmin" in d)).map((d) => {
         const aktiv = sti.startsWith(d.href.replace(/\/$/, ""));
         return (
           <Link key={d.href} href={d.href}
@@ -128,7 +130,7 @@ export default function Ramme({ children }: { children: React.ReactNode }) {
       <AssistentProvider>
         <div className="flex">
           {/* Venstre kolonne: hub'ens dele øverst; INDSTILLINGER-boksen er fastgjort i hjørnet nederst. */}
-          <div className="w-52 shrink-0"><Venstremenu sti={sti} /></div>
+          <div className="w-52 shrink-0"><Venstremenu sti={sti} admin={mig?.rolle === "admin"} /></div>
           {/* pb-28: så det nederste på siden ikke skjules bag Svends knap */}
           <main className="mx-auto min-w-0 max-w-7xl flex-1 px-4 pb-28 pt-6">{children}</main>
         </div>
