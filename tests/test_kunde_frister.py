@@ -47,17 +47,18 @@ def _perioder(svar):
 
 def test_valgene_er_skats_ordninger(klient, kunde):
     d = klient.get(f"/api/kundekort/{kunde.id}/frister").json()
-    assert _perioder(d) == {"moms": None, "loensumsafgift": None}
+    assert _perioder(d) == {"moms": None, "loensumsafgift": None, "aarsafslutning": None}
     assert [v["tekst"] for v in d["frister"][0]["valg"]] == ["Månedligt", "Kvartalsvis", "Halvårligt", "Ikke tilmeldt"]
     assert [v["tekst"] for v in d["frister"][1]["valg"]] == [
         "Metode 1", "Metode 2", "Metode 3", "Metode 4", "Ikke tilmeldt"]
+    assert [v["tekst"] for v in d["frister"][2]["valg"]] == ["Årsregnskab + oplysningsskema", "Årsopgørelse"]
 
 
 def test_admin_vaelger_og_det_logges(klient, kunde, db_session):
     klient.post(f"/api/kundekort/{kunde.id}/frister", headers=H, json={"frist": "moms", "periode": "kvartal"})
     d = klient.post(f"/api/kundekort/{kunde.id}/frister", headers=H,
                     json={"frist": "loensumsafgift", "periode": "metode_2"}).json()
-    assert _perioder(d) == {"moms": "kvartal", "loensumsafgift": "metode_2"}
+    assert _perioder(d) == {"moms": "kvartal", "loensumsafgift": "metode_2", "aarsafslutning": None}
     o = db_session.get(KundeObligations, kunde.id)
     assert (o.vat_period, o.loensumsafgift_metode) == ("kvartal", "metode_2")
     log = db_session.scalars(select(KundeLog.detail).where(KundeLog.client_id == kunde.id).order_by(KundeLog.id)).all()

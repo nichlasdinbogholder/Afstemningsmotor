@@ -127,3 +127,40 @@ def test_periodeteksten():
     assert periode_tekst(date(2026, 6, 1), date(2026, 6, 30)) == "juni 2026"
     assert periode_tekst(date(2026, 1, 1), date(2026, 6, 30)) == "1. halvår 2026"
     assert periode_tekst(date(2026, 1, 5), date(2026, 2, 3)) == "05.01.2026–03.02.2026"
+
+
+# Årsafslutningen (bygherren 26.10.2026): regnet ud fra kundens regnskabsår efter den godkendte regeltabel.
+def test_aarsafslutningens_regler():
+    from app.frister.aarsafslutning import frister
+
+    def f(valg, slut):
+        return [(x.hvad, x.frist) for x in frister(valg, slut)]
+    assert f("aarsregnskab_oplysningsskema", date(2026, 12, 31)) == [
+        ("aarsregnskab", date(2027, 6, 30)), ("oplysningsskema", date(2027, 6, 30))]
+    # Regnskabsår slut 31.03: årsregnskab 30.09, oplysningsskema 1. august (lørdag 2026 → mandag 3. august).
+    assert f("aarsregnskab_oplysningsskema", date(2026, 3, 31)) == [
+        ("aarsregnskab", date(2026, 9, 30)), ("oplysningsskema", date(2026, 8, 3))]
+    # 30.06 + 6 måneder = 31.12 – nytårsaftensdag er ikke en helligdag, så fristen bliver.
+    assert f("aarsregnskab_oplysningsskema", date(2026, 6, 30))[0] == ("aarsregnskab", date(2026, 12, 31))
+    # 31.07.2026 + 6 = 31.01.2027 (søndag) → mandag 1. februar.
+    assert f("aarsregnskab_oplysningsskema", date(2026, 7, 31))[0] == ("aarsregnskab", date(2027, 2, 1))
+    # Årsopgørelse: altid 20. maj året efter – også når den falder i en weekend (20.05.2028 er en lørdag).
+    assert f("aarsopgoerelse", date(2026, 12, 31)) == [("aarsopgoerelse", date(2027, 5, 20))]
+    assert f("aarsopgoerelse", date(2027, 12, 31)) == [("aarsopgoerelse", date(2028, 5, 20))]
+    assert f(None, date(2026, 12, 31)) == []
+
+
+def test_aarsafslutning_i_listen(klient, kunder, db_session):
+    from app.regnskab.models import AccountingYearCache
+    a, b, c = kunder
+    db_session.get(KundeObligations, a.id).aarsafslutning = "aarsregnskab_oplysningsskema"
+    db_session.get(KundeObligations, b.id).aarsafslutning = "aarsopgoerelse"
+    db_session.add(AccountingYearCache(client_id=a.id, navn="2026", fra=date(2026, 1, 1), til=date(2026, 12, 31)))
+    db_session.flush()
+    d = klient.get("/api/planlaegning/frister", params={"fra": "2026-10-26", "til": "2027-07-31",
+                                                        "afgift": "aarsafslutning"}).json()
+    egne = [(r["kunde"], r["ordning_tekst"], r["periode"], r["frist"]) for r in d["raekker"] if r["kunde"].startswith("Pla")]
+    assert sorted(egne) == [("Pla A ApS", "Oplysningsskema", "regnskabsår 2026", "2027-06-30"),
+                            ("Pla A ApS", "Årsregnskab", "regnskabsår 2026", "2027-06-30")]
+    # B har valgt årsopgørelse, men der er ikke hentet regnskabsår – det står som advarsel.
+    assert any("Pla B ApS" in x and "regnskabsår" in x for x in d["advarsler"])

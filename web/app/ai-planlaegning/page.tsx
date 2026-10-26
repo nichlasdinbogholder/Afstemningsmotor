@@ -7,8 +7,9 @@ import AdminLaas from "@/components/AdminLaas";
 import { hent, send } from "@/lib/api";
 import { type Valg } from "@/lib/kartotek";
 
-// AI Planlægning (bygherren 26.10.2026): kommende frister for moms og lønsumsafgift. Kundens ordning vælges på
-// kundekortets fane Frister; datoerne kommer fra Skats fristkalender (godkendt af en administrator) – de beregnes aldrig.
+// AI Planlægning (bygherren 26.10.2026): kommende frister for moms, lønsumsafgift og årsafslutning. Kundens ordning vælges
+// på kundekortets fane Frister. Moms/lønsumsafgift: Skats fristkalender (godkendt af admin, beregnes aldrig).
+// Årsafslutning: regnet på serveren ud fra kundens regnskabsår efter den godkendte regeltabel.
 type Raekke = {
   kunde_id: number; kunde: string; kundenummer: string; ansvarlig: string | null; assistent: string | null;
   afgift: string; afgift_tekst: string; ordning_tekst: string; periode: string; frist: string; dage_til: number;
@@ -61,9 +62,10 @@ function KommendeFrister() {
   return (
     <div className="space-y-4 text-sm">
       <div className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-4">
-        <label className="flex flex-col gap-1"><span className="text-xs font-medium text-slate-500">Afgift</span>
+        <label className="flex flex-col gap-1"><span className="text-xs font-medium text-slate-500">Frist</span>
           <select value={filtre.afgift} onChange={(e) => setFiltre({ ...filtre, afgift: e.target.value })} className={felt}>
-            <option value="">Moms og lønsumsafgift</option><option value="moms">Moms</option><option value="loensumsafgift">Lønsumsafgift</option>
+            <option value="">Alle frister</option><option value="moms">Moms</option><option value="loensumsafgift">Lønsumsafgift</option>
+            <option value="aarsafslutning">Årsafslutning</option>
           </select>
         </label>
         <label className="flex flex-col gap-1"><span className="text-xs font-medium text-slate-500">Ansvarlig</span>
@@ -91,7 +93,7 @@ function KommendeFrister() {
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
           <table className="w-full">
             <thead className="border-b border-slate-200 text-left text-xs font-semibold text-slate-600">
-              <tr><th className="px-3 py-2">Frist</th><th className="px-3 py-2">Kunde</th><th className="px-3 py-2">Afgift</th>
+              <tr><th className="px-3 py-2">Frist</th><th className="px-3 py-2">Kunde</th><th className="px-3 py-2">Hvad</th>
                 <th className="px-3 py-2">Periode</th><th className="px-3 py-2">Ansvarlig</th></tr>
             </thead>
             <tbody>

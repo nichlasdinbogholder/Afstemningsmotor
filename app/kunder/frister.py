@@ -1,7 +1,9 @@
 """Fanen Frister (bygherren 26.10.2026): kundens ordning hos Skat for MOMS og LØNSUMSAFGIFT.
 
 - Moms: månedligt, kvartalsvis eller halvårligt (Skat har ingen årlig moms). Lønsumsafgift: Skats metode 1-4.
-  Begge kan være "ikke tilmeldt". Tomt = ikke valgt endnu.
+  Begge kan være "ikke tilmeldt". ÅRSAFSLUTNING: årsregnskab + oplysningsskema ELLER årsopgørelse – fristerne regnes
+  ud fra regnskabsåret (app/frister/aarsafslutning.py).
+  Tomt = ikke valgt endnu.
 - Gemmes i kunde_obligations (ét sted). Fristdatoerne slås op i Skats fristkalender (app/frister) og vises i
   AI Planlægning – de beregnes aldrig.
 - KUN ADMINISTRATORER retter (bygherren 26.10.2026 – det styrer planlægningen af kunderne). Alle ser. Hver ændring
@@ -11,15 +13,17 @@
 from sqlalchemy.orm import Session
 
 from app.kunder.models import Client
-from app.kunder.tabeller import LOENSUM_METODER, MOMSPERIODER, KundeLog, KundeObligations
+from app.kunder.tabeller import AARSAFSLUTNINGER, LOENSUM_METODER, MOMSPERIODER, KundeLog, KundeObligations
 from app.personale.models import Staff
 
 PERIODE_TEKST = {"maaned": "Månedligt", "kvartal": "Kvartalsvis", "halvaar": "Halvårligt",
                  "metode_1": "Metode 1", "metode_2": "Metode 2", "metode_3": "Metode 3", "metode_4": "Metode 4",
+                 "aarsregnskab_oplysningsskema": "Årsregnskab + oplysningsskema", "aarsopgoerelse": "Årsopgørelse",
                  "ingen": "Ikke tilmeldt", None: "Ikke valgt"}
 # Felterne på fanen: kode -> (dansk navn, kolonne i kunde_obligations, tilladte værdier).
 FRISTER = {"moms": ("Moms", "vat_period", MOMSPERIODER),
-           "loensumsafgift": ("Lønsumsafgift", "loensumsafgift_metode", LOENSUM_METODER)}
+           "loensumsafgift": ("Lønsumsafgift", "loensumsafgift_metode", LOENSUM_METODER),
+           "aarsafslutning": ("Årsafslutning", "aarsafslutning", AARSAFSLUTNINGER)}
 
 
 class FristFejl(Exception):

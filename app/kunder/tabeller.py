@@ -47,6 +47,8 @@ FULDMAGT_STATUSSER = ("aktiv", "udloebet", "tilbagekaldt")
 MOMSPERIODER = ("maaned", "kvartal", "halvaar", "ingen")
 # Lønsumsafgift: Skats metode 1-4 (bygherren 26.10.2026). Perioder og frister pr. metode står i Skats fristkalender.
 LOENSUM_METODER = ("metode_1", "metode_2", "metode_3", "metode_4", "ingen")
+# Årsafslutning (bygherren 26.10.2026): årsregnskab + oplysningsskema ELLER årsopgørelse (app/frister/aarsafslutning).
+AARSAFSLUTNINGER = ("aarsregnskab_oplysningsskema", "aarsopgoerelse")
 LOEN_FREKVENSER = ("maaned", "14_dage", "ingen")
 RISIKONIVEAUER = ("lav", "mellem", "hoej")
 TJEKLISTER = ("onboarding", "offboarding")
@@ -231,6 +233,7 @@ class KundeObligations(Base):
         kun_vaerdier("vat_period", MOMSPERIODER),
         kun_vaerdier("payroll_frequency", LOEN_FREKVENSER),
         kun_vaerdier("loensumsafgift_metode", LOENSUM_METODER),
+        kun_vaerdier("aarsafslutning", AARSAFSLUTNINGER),
         # Regnskabsårets slutning som dag-måned, fx '31-12' eller '30-06' (gentager sig hvert år).
         CheckConstraint("fiscal_year_end ~ '^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])$'",
                         name="regnskabsaar_slut_dd_mm"),
@@ -244,6 +247,7 @@ class KundeObligations(Base):
     payroll_day: Mapped[int | None] = mapped_column(SmallInteger)
     has_a_skat: Mapped[bool] = mapped_column(Boolean, server_default=false())
     loensumsafgift_metode: Mapped[str | None] = mapped_column(Text)
+    aarsafslutning: Mapped[str | None] = mapped_column(Text)
 
 
 class KundeTaskType(Base):
