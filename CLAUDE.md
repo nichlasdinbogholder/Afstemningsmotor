@@ -315,6 +315,11 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   'ikke på arbejde' = 0 timer, noter/afspadseringsbevægelser/time_audit kun tilføjelser, satser slettes aldrig og
   overlapper aldrig (EXCLUDE, btree_gist), alt logges i time_audit (aktør via `stamdata.saet_aktoer()`).
   Opgavetypen `salg` er inaktiv, indtil pipeline-emner bygges. Beløb/timer NUMERIC; priser ekskl. moms.
+  AFREGNINGSFORMER (`AFREGNINGER`): abonnement · timeafregning · INTERN (bygherren 26.10.2026) = vores eget firma (Din
+  Bogholder): faktureres ALDRIG og indgår ikke i fakturering/omsætning, men timerne tæller i løn, normtid og afspadsering.
+  DATABASEN håndhæver: intern kun på kunder med `kun_admin` (og kun_admin kan ikke fjernes, mens intern gælder), aldrig
+  pris, aldrig "uden for abonnementet" (migrering a7c41e9d2b30). Opret med Intern → kunden bliver automatisk kun_admin.
+  Fremtidige fakturerings-/omsætningsrapporter SKAL udelade billing_model = 'intern'.
   - `satser.py` (trin 2): PERIODEOPSLAG – `satser_paa(session, dato, employee_id=, client_id=)` og SQL-funktionerne
     time_salgspris/time_kostpris/time_normtid/time_afregning/time_abonnementspris. ALLE rapporter slår satser op
     her på registreringsdatoen – aldrig now()/date.today(). Mangler en sats: `ManglerSats` (aldrig 0).
