@@ -296,6 +296,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     KUN ansvarlig/assistent/admin uploader, alle ser. DATABASEN: slettes/ændres aldrig – ny version arkiverer den gamle;
     én gældende pr. kunde. ALARMKLOKKE ved fanen, når der ikke er et gældende (`mangler_aftale` i kundekortets hoved) –
     ikke for interne kunder (afregning 'intern').
+  - `frister.py` + fanen Frister (bygherren 26.10.2026): MOMS (`kunde_obligations.vat_period`) og LØNSUMSAFGIFT
+    (`loensumsafgift_period`, erstatter has_loensumsafgift) – hver især maaned/kvartal/halvaar/aar/ingen (= ikke tilmeldt);
+    NULL = ikke valgt. Grundlaget for planlægningen senere. Kun ansvarlig/assistent/admin retter; hver ændring i kunde_log
+    med fra/til. `GET/POST /api/kundekort/{id}/frister` ({frist: moms|loensumsafgift, periode}).
   - `oversigt.py` (trin 4): listen i Kundeoversigten – `GET /api/kundekartotek?mine=&ansvarlig_id=&afregning=&system=&status=
     &doede_forbindelser=&mangler_hvidvask=`; "mine" = ansvarlig ELLER assistent (standard i webdelen); sorteret
     efter navn. Kolonner (bygherren 26.10.2026): Kunde (kun navn) · Kundenr. · CVR · Ansvarlig (kun visning – status,

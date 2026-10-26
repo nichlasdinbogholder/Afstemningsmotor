@@ -15,6 +15,8 @@ Alle medarbejdere ser kortet og kontaktpersonerne. Kun kundens ansvarlige, assis
 - `GET  /api/kundekort/{id}/aftale`                  aftalegrundlaget (gældende + tidligere versioner)
 - `POST /api/kundekort/{id}/aftale`                  upload PDF (filen sendes direkte; navnet i headeren X-Filnavn)
 - `GET  /api/kundekort/{id}/aftale/{did}/pdf`        åbn PDF'en
+- `GET  /api/kundekort/{id}/frister`                 moms og lønsumsafgift: hvor ofte der indberettes til Skat
+- `POST /api/kundekort/{id}/frister`                 {frist: moms|loensumsafgift, periode} – ansvarlig/assistent/admin
 - `GET  /api/kundekort/{id}/stamdata`                navn, CVR, virksomhedsform (CVR) + regnskabsperiode (regnskabssystemet)
 """
 
@@ -27,7 +29,7 @@ from sqlalchemy.orm import Session
 
 from app.api.data import kraev_header
 from app.api.login import db, kraev_admin, nuvaerende_medarbejder
-from app.kunder import aftale, kartotek, kontakter, stamdata
+from app.kunder import aftale, frister, kartotek, kontakter, stamdata
 from app.kunder.models import Client
 from app.kunder.tabeller import KundeAftaleDokument
 from app.personale.models import Staff
@@ -194,3 +196,30 @@ def aftale_pdf(kunde_id: int, dokument_id: int, session: Session = Depends(db)) 
     return Response(content=d.indhold, media_type="application/pdf", headers={
         "Content-Disposition": f"inline; filename*=UTF-8''{quote(d.filnavn)}", "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff"})
+
+
+# --- Frister: moms og lønsumsafgift (bygherren 26.10.2026) ------------------------------------------------------
+
+@router.get("/{kunde_id}/frister")
+def frister_vis(kunde_id: int, m: Staff = Depends(nuvaerende_medarbejder), session: Session = Depends(db)) -> dict:
+    return frister.json(session, _kunde(session, kunde_id), m)
+
+
+class Frist(BaseModel):
+    frist: str
+    periode: str | None = None
+
+
+@router.post("/{kunde_id}/frister", dependencies=[Depends(kraev_header)])
+def frister_saet(kunde_id: int, data: Frist, m: Staff = Depends(nuvaerende_medarbejder),
+                 session: Session = Depends(db)) -> dict:
+    try:
+        with session.begin_nested():
+            k = frister.saet(session, m, kunde_id, data.frist, data.periode)
+    except frister.IkkeTilladt:
+        raise HTTPException(status_code=403, detail="Kun kundens ansvarlige, assistent eller en administrator kan "
+                                                    "rette fristerne") from None
+    except frister.FristFejl as fejl:
+        raise HTTPException(status_code=422, detail=str(fejl)) from None
+    session.commit()
+    return frister.json(session, k, m)

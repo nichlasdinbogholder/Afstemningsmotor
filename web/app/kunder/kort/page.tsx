@@ -122,6 +122,7 @@ function Kundekort() {
       {fane === "kontakter" ? <Kontakter hoved={hoved} />
         : fane === "stamdata" ? <StamdataFane hoved={hoved} />
         : fane === "aftale" ? <AftaleFane hoved={hoved} opdateret={hentHoved} />
+        : fane === "frister" ? <FristerFane hoved={hoved} />
         : <p className="text-sm text-slate-500">Denne fane bygges i et senere trin.</p>}
     </div>
   );
@@ -586,6 +587,57 @@ function AftaleFane({ hoved, opdateret }: { hoved: Hoved; opdateret: () => void 
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+type FristerSvar = {
+  frister: { kode: string; navn: string; periode: string | null; valg: { kode: string; tekst: string }[] }[];
+  kan_rette: boolean;
+};
+
+// Frister (bygherren 26.10.2026): hvor ofte kunden indberetter moms og lønsumsafgift til Skat. Gemmes med det samme.
+// Grundlaget for planlægningen senere – fristdatoerne beregnes på serveren ud fra dette.
+function FristerFane({ hoved }: { hoved: Hoved }) {
+  const [d, setD] = useState<FristerSvar | null>(null);
+  const [besked, setBesked] = useState<{ tekst: string; fejl?: boolean } | null>(null);
+  useEffect(() => { hent<FristerSvar>(`/api/kundekort/${hoved.id}/frister`).then(setD); }, [hoved.id]);
+  if (!d) return <p className="text-slate-500">Henter …</p>;
+
+  async function vaelg(frist: string, navn: string, periode: string, tekst: string) {
+    try {
+      setD(await send<FristerSvar>(`/api/kundekort/${hoved.id}/frister`, { frist, periode }));
+      setBesked({ tekst: `${navn}: ${tekst} er gemt` });
+    } catch (e) { setBesked({ tekst: e instanceof Error ? e.message : "Det lykkedes ikke", fejl: true }); }
+  }
+
+  return (
+    <div className="space-y-4 text-sm">
+      <p className="text-slate-600">Hvor ofte indberetter kunden til Skat? Valget bruges senere til planlægningen af kundens frister.</p>
+      {besked && <p className={`rounded-md px-3 py-2 ${besked.fejl ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>{besked.tekst}</p>}
+      {d.frister.map((f) => (
+        <div key={f.kode} className="rounded-lg border border-slate-200 bg-white p-4">
+          <div className="flex items-baseline justify-between">
+            <p className="text-base font-medium text-slate-900">{f.navn}</p>
+            {f.periode === null && <span className="text-xs font-medium text-amber-700">Ikke valgt endnu</span>}
+          </div>
+          <div role="radiogroup" aria-label={f.navn} className="mt-3 flex flex-wrap gap-2">
+            {f.valg.map((v) => {
+              const valgt = f.periode === v.kode;
+              return (
+                <button key={v.kode} type="button" role="radio" aria-checked={valgt} disabled={!d.kan_rette}
+                        onClick={() => !valgt && vaelg(f.kode, f.navn, v.kode, v.tekst)}
+                        className={`rounded-full border px-4 py-1.5 ${valgt
+                          ? "border-brand-600 bg-brand-600 font-medium text-white"
+                          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:hover:bg-white"} disabled:cursor-not-allowed`}>
+                  {valgt ? "✓ " : ""}{v.tekst}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      {!d.kan_rette && <p className="text-slate-500">Kun kundens ansvarlige, assistent eller en administrator kan rette fristerne.</p>}
     </div>
   );
 }
