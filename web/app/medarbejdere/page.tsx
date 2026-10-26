@@ -202,7 +202,19 @@ function TidRet({ m, udfoer }: { m: Medarbejder; udfoer: (h: () => Promise<unkno
   const [normtid, setNormtid] = useState("");
   const [kostpris, setKostpris] = useState("");
   const [produktive, setProduktive] = useState("1.400");
+  // Forslaget (1.400 × normtid / 37) regnes på serveren; retter man selv tallet, bliver det stående.
+  const [produktiveRettet, setProduktiveRettet] = useState(false);
   const timeloennet = m.tid.ansaettelse === "timeloennet";
+
+  function skiftNormtid(v: string) {
+    setNormtid(v);
+    if (timeloennet || produktiveRettet) return;
+    const n = v.trim() ? danskTal(v) : null;
+    if (v.trim() && n === null) return;
+    hent<{ produktive_timer_aar: string }>(`/api/medarbejdere/standard-produktive-timer${n ? `?normtid=${n}` : ""}`)
+      .then((r) => setProduktive(tal(r.produktive_timer_aar)))
+      .catch(() => {});
+  }
   const [note, setNote] = useState("");
   const [fejl, setFejl] = useState<string | null>(null);
 
@@ -225,7 +237,7 @@ function TidRet({ m, udfoer }: { m: Medarbejder; udfoer: (h: () => Promise<unkno
     if (await udfoer(() => send(`/api/medarbejdere/${m.id}/sats`, {
       gyldig_fra: fra, normtid: n, kostpris_pr_time: k, produktive_timer_aar: p, note: note.trim() || null }),
       `Satsen for ${m.navn} er gemt (gælder fra ${dato(fra)})`)) {
-      setNormtid(""); setKostpris(""); setProduktive("1.400"); setNote("");
+      setNormtid(""); setKostpris(""); setProduktive("1.400"); setProduktiveRettet(false); setNote("");
     }
   }
 
@@ -263,7 +275,7 @@ function TidRet({ m, udfoer }: { m: Medarbejder; udfoer: (h: () => Promise<unkno
             <input type="date" value={fra} onChange={(e) => setFra(e.target.value)} className={felt} />
           </label>
           <label className="flex flex-col">Normtid (timer/uge)
-            <input value={normtid} onChange={(e) => setNormtid(e.target.value)} inputMode="decimal" placeholder="fx 37"
+            <input value={normtid} onChange={(e) => skiftNormtid(e.target.value)} inputMode="decimal" placeholder="fx 37"
                    className={`${felt} w-28`} />
           </label>
           <label className="flex flex-col">{timeloennet ? "Kostpris pr. time ud fra timelønnen (kr.)" : "Kostpris pr. time (kr.)"}
@@ -274,9 +286,9 @@ function TidRet({ m, udfoer }: { m: Medarbejder; udfoer: (h: () => Promise<unkno
             <p className="max-w-56 pb-1.5 text-xs text-slate-500">Timelønnede har ingen produktive timer – kostprisen tager udgangspunkt i timelønnen.</p>
           ) : (
             <label className="flex flex-col">Produktive timer pr. år
-              <input value={produktive} onChange={(e) => setProduktive(e.target.value)} inputMode="decimal" placeholder="1.400"
-                     className={`${felt} w-32`} />
-              <span className="mt-0.5 text-xs text-slate-400">Standard 1.400</span>
+              <input value={produktive} onChange={(e) => { setProduktive(e.target.value); setProduktiveRettet(true); }}
+                     inputMode="decimal" placeholder="1.400" className={`${felt} w-32`} />
+              <span className="mt-0.5 text-xs text-slate-400">{produktiveRettet ? "Rettet af dig" : "Standard: 1.400 × normtid / 37"}</span>
             </label>
           )}
           <label className="flex flex-col">Note

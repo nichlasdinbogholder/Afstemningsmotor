@@ -199,3 +199,23 @@ def test_produktive_timer_kun_for_fastloennede(db_session, klient):
     assert klient.get(f"/api/medarbejdere/{f.id}/satser").json()[0]["produktive_timer_aar"] == "1400.00"
     klient.post(f"/api/medarbejdere/{f.id}/sats", headers=H, json=sats | {"produktive_timer_aar": "1300"})
     assert klient.get(f"/api/medarbejdere/{f.id}/satser").json()[0]["produktive_timer_aar"] == "1300.00"
+
+
+# Bygherren 26.10.2026: standarden følger normtiden – 1.400 × normtid / 37, afrundet til hele timer.
+def test_produktive_timer_foelger_normtiden(db_session, klient):
+    from decimal import Decimal
+
+    from app.timeregistrering.stamdata import standard_produktive_timer
+
+    assert standard_produktive_timer(Decimal(37)) == Decimal(1400)
+    assert standard_produktive_timer(Decimal(20)) == Decimal(757)
+    assert standard_produktive_timer(None) == standard_produktive_timer(Decimal(0)) == Decimal(1400)
+    assert klient.get("/api/medarbejdere/standard-produktive-timer?normtid=20").json() == {"produktive_timer_aar": "757"}
+    assert klient.get("/api/medarbejdere/standard-produktive-timer").json() == {"produktive_timer_aar": "1400"}
+    d = Staff(navn="Dorte", email="dorte-sats@dinbogholder.dk", rolle="medarbejder", aktiv=True)
+    db_session.add(d)
+    db_session.flush()
+    klient.post(f"/api/medarbejdere/{d.id}/ansaettelse", headers=H, json={"ansaettelse": "fastloennet", "flexjob": False})
+    klient.post(f"/api/medarbejdere/{d.id}/sats", headers=H,
+                json={"gyldig_fra": "2026-11-01", "normtid": "20", "kostpris_pr_time": "390"})
+    assert klient.get(f"/api/medarbejdere/{d.id}/satser").json()[0]["produktive_timer_aar"] == "757.00"
