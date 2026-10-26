@@ -169,8 +169,10 @@ def gem_linje(session: Session, e: TimeEmployee, staff_id: int, dag_i_ugen: date
                 try:
                     afregning = satser_paa(session, dag, client_id=linje.client_id).afregning
                 except ManglerSats:
-                    raise RegistreringsFejl("Kunden har ingen afregningsform (abonnement eller timeafregning) "
+                    raise RegistreringsFejl("Kunden har ingen afregningsform (abonnement, timeafregning eller intern) "
                                             f"for {dag:%d.%m.%Y} – en administrator skal sætte den på kunden") from None
+            if linje.saerskilt and afregning == "intern":
+                raise RegistreringsFejl(f"Kunden er intern {dag:%d.%m.%Y} – interne timer faktureres aldrig")
             if linje.saerskilt and afregning == "timeafregning":
                 raise RegistreringsFejl(f"Kunden er på timeafregning {dag:%d.%m.%Y} – alle timer faktureres allerede; "
                                         "valget 'uden for abonnementet' gælder kun abonnementskunder")
@@ -179,6 +181,8 @@ def gem_linje(session: Session, e: TimeEmployee, staff_id: int, dag_i_ugen: date
                                          hours=v, billing_model=afregning, billable_separately=linje.saerskilt,
                                          created_by=staff_id))
         else:
+            if linje.saerskilt and r.billing_model == "intern":
+                raise RegistreringsFejl(f"Kunden er intern {dag:%d.%m.%Y} – interne timer faktureres aldrig")
             if linje.saerskilt and r.billing_model == "timeafregning":
                 raise RegistreringsFejl(f"Kunden er på timeafregning {dag:%d.%m.%Y} – alle timer faktureres allerede; "
                                         "valget 'uden for abonnementet' gælder kun abonnementskunder")

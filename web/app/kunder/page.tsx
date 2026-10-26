@@ -7,6 +7,7 @@ import AdminLaas from "@/components/AdminLaas";
 import { hent, send } from "@/lib/api";
 import { type KartotekKunde, type Valg } from "@/lib/kartotek";
 
+const AFREGNING = { abonnement: "Abonnement", timeafregning: "Timeafregning", intern: "Intern" };
 const STATUS = { emne: "Emne", onboarding: "Onboarding", aktiv: "Aktiv", pause: "Pause", opsagt: "Arkiveret" };
 
 // Kun dansk skrivemåde: 1500 · 1.500 · 1.500,50 – "1500.5" afvises, så et beløb aldrig gættes.
@@ -90,7 +91,7 @@ export default function Side() {
           <Valgfelt titel="Ansvarlig" vaerdi={filtre.ansvarlig_id} skift={(v) => setFiltre({ ...filtre, ansvarlig_id: v })}
                     muligheder={[["", "Alle"], ...(valg?.medarbejdere ?? []).map((m) => [String(m.id), m.navn] as [string, string])]} />
           <Valgfelt titel="Afregning" vaerdi={filtre.afregning} skift={(v) => setFiltre({ ...filtre, afregning: v })}
-                    muligheder={[["", "Alle"], ["abonnement", "Abonnement"], ["timeafregning", "Timeafregning"]]} />
+                    muligheder={[["", "Alle"], ["abonnement", "Abonnement"], ["timeafregning", "Timeafregning"], ["intern", "Intern"]]} />
           <Valgfelt titel="System" vaerdi={filtre.system} skift={(v) => setFiltre({ ...filtre, system: v })}
                     muligheder={[["", "Alle"], ...(valg?.systemer ?? []).map((x) => [x.kode, x.navn] as [string, string])]} />
           <Valgfelt titel="Status" vaerdi={filtre.status} skift={(v) => setFiltre({ ...filtre, status: v })}
@@ -147,8 +148,7 @@ export default function Side() {
                     </td>
                     <td className="px-3 py-2">
                       {/* Kun afregningsformen – ikke prisen (bygherren 26.10.2026). */}
-                      {k.afregning === "abonnement" ? "Abonnement" : k.afregning === "timeafregning" ? "Timeafregning"
-                        : <span className="text-slate-400">Ikke sat</span>}
+                      {k.afregning ? AFREGNING[k.afregning] : <span className="text-slate-400">Ikke sat</span>}
                     </td>
                     <td className="px-3 py-2">
                       {k.system}
@@ -260,6 +260,7 @@ function NyKunde({ valg, gem, luk }: { valg: Valg; gem: (d: NyData) => Promise<b
             <option value="">Vælg …</option>
             <option value="abonnement">Abonnement</option>
             <option value="timeafregning">Timeafregning</option>
+            <option value="intern">Intern – vores eget firma</option>
           </select>
         </label>
         {afregning === "abonnement" && (
@@ -269,7 +270,8 @@ function NyKunde({ valg, gem, luk }: { valg: Valg; gem: (d: NyData) => Promise<b
         )}
       </div>
       <p className="mt-3 text-xs text-slate-500">
-        Afregningsformen gælder fra startdatoen. Kundens adgang til e-conomic lægges ind på serveren med
+        Afregningsformen gælder fra startdatoen. Intern = vores eget firma: timerne faktureres aldrig og tæller ikke i
+        omsætningen, men tæller i løn og arbejdstid – og kunden bliver automatisk &quot;Kun admin hos Svend&quot;. Kundens adgang til e-conomic lægges ind på serveren med
         kommandoen gem_token (koden indtastes skjult).
       </p>
       {fejl && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">{fejl}</p>}

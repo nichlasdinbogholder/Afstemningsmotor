@@ -38,7 +38,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db import Base, kun_vaerdier
 
 ANSAETTELSER = ("fastloennet", "timeloennet")
-AFREGNINGER = ("abonnement", "timeafregning")
+# "intern" = vores eget firma (fx Din Bogholder) – faktureres aldrig og indgår ikke i omsætningen, men timerne er
+# arbejdstid (løn, normtid, afspadsering). Kun på kunder med kun_admin (trigger i databasen, bygherren 26.10.2026).
+AFREGNINGER = ("abonnement", "timeafregning", "intern")
 OPGAVEARTER = ("kunde", "intern", "fravaer")
 UGESTATUS = ("kladde", "afleveret", "afvist", "godkendt")
 AFSPADSERING = ("optjent", "afholdt", "udbetalt", "korrektion")
@@ -121,6 +123,7 @@ class TimeClientTerms(Base):
         CheckConstraint("billing_model <> 'abonnement' OR subscription_price IS NOT NULL",
                         name="abonnement_kraever_pris"),
         CheckConstraint("subscription_price IS NULL OR subscription_price >= 0", name="pris_ikke_negativ"),
+        CheckConstraint("billing_model <> 'intern' OR subscription_price IS NULL", name="intern_uden_pris"),
         CheckConstraint("valid_to IS NULL OR valid_to > valid_from", name="periode_gyldig"),
     )
 
@@ -216,6 +219,7 @@ class TimeRegistration(Base):
         kun_vaerdier("billing_model", AFREGNINGER),
         CheckConstraint("hours >= 0 AND hours <= 24", name="timer_0_til_24"),
         CheckConstraint("hours = round(hours * 4) / 4", name="kvarte_timer"),
+        CheckConstraint("billing_model IS DISTINCT FROM 'intern' OR NOT billable_separately", name="intern_aldrig_faktureret"),
         CheckConstraint("(task_kind = 'kunde' AND client_id IS NOT NULL) OR (task_kind <> 'kunde' AND client_id IS NULL)",
                         name="kunde_kun_paa_kundetid"),
         CheckConstraint("NOT billable_separately OR (description IS NOT NULL AND btrim(description) <> '')",
