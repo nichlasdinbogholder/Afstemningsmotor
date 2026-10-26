@@ -16,6 +16,24 @@ function danskTal(v: string): string | null {
   return t.replace(/\./g, "").replace(",", ".");
 }
 
+// Filtrene (trin 4). Standard: mine kunder.
+const STANDARD_FILTRE = { mine: true, ansvarlig_id: "", afregning: "", system: "", status: "",
+  doede_forbindelser: false, mangler_hvidvask: false };
+
+function Valgfelt({ titel, vaerdi, skift, muligheder }: {
+  titel: string; vaerdi: string; skift: (v: string) => void; muligheder: [string, string][];
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-slate-500">{titel}</span>
+      <select value={vaerdi} onChange={(e) => skift(e.target.value)}
+              className={`rounded-md border px-2 py-1.5 ${vaerdi ? "border-brand-600 bg-brand-50" : "border-slate-300"}`}>
+        {muligheder.map(([v, tekst]) => <option key={v} value={v}>{tekst}</option>)}
+      </select>
+    </label>
+  );
+}
+
 export default function Side() {
   const mig = useMig();
   const admin = mig?.rolle === "admin";
@@ -25,9 +43,8 @@ export default function Side() {
   const [besked, setBesked] = useState<{ tekst: string; fejl?: boolean } | null>(null);
   const [arkiverer, setArkiverer] = useState<number | null>(null);
   const [visOpret, setVisOpret] = useState(false);
-  // Filtrene (trin 4). Standard: mine kunder. Selve filtreringen og sorteringen sker på serveren.
-  const [filtre, setFiltre] = useState({ mine: true, ansvarlig_id: "", afregning: "", system: "", status: "",
-    doede_forbindelser: false, mangler_hvidvask: false });
+  // Selve filtreringen og sorteringen sker på serveren.
+  const [filtre, setFiltre] = useState(STANDARD_FILTRE);
   const hentListe = useCallback(() => {
     const q = new URLSearchParams();
     for (const [n, v] of Object.entries(filtre)) if (v) q.set(n, String(v));
@@ -65,43 +82,40 @@ export default function Side() {
 
       {besked && <p className={`rounded-md px-3 py-2 text-sm ${besked.fejl ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>{besked.tekst}</p>}
 
-      <div className="flex flex-wrap items-center gap-3 text-sm">
-        <input value={soeg} onChange={(e) => setSoeg(e.target.value)} placeholder="Søg på navn, kundenr., CVR eller ansvarlig"
-               className="w-80 rounded-md border border-slate-300 px-3 py-1.5" />
-        <label className="flex items-center gap-1.5 font-medium">
-          <input type="checkbox" checked={filtre.mine} onChange={(e) => setFiltre({ ...filtre, mine: e.target.checked })} />
-          Mine kunder
-        </label>
-        <select aria-label="Ansvarlig" value={filtre.ansvarlig_id} onChange={(e) => setFiltre({ ...filtre, ansvarlig_id: e.target.value })}
-                className="rounded-md border border-slate-300 px-2 py-1.5">
-          <option value="">Alle ansvarlige</option>
-          {valg?.medarbejdere.map((m) => <option key={m.id} value={m.id}>{m.navn}</option>)}
-        </select>
-        <select aria-label="Afregning" value={filtre.afregning} onChange={(e) => setFiltre({ ...filtre, afregning: e.target.value })}
-                className="rounded-md border border-slate-300 px-2 py-1.5">
-          <option value="">Alle afregningsformer</option>
-          <option value="abonnement">Abonnement</option>
-          <option value="timeafregning">Timeafregning</option>
-        </select>
-        <select aria-label="System" value={filtre.system} onChange={(e) => setFiltre({ ...filtre, system: e.target.value })}
-                className="rounded-md border border-slate-300 px-2 py-1.5">
-          <option value="">Alle systemer</option>
-          {valg?.systemer.map((s) => <option key={s.kode} value={s.kode}>{s.navn}</option>)}
-        </select>
-        <select aria-label="Livscyklus" value={filtre.status} onChange={(e) => setFiltre({ ...filtre, status: e.target.value })}
-                className="rounded-md border border-slate-300 px-2 py-1.5">
-          <option value="">Alle statusser</option>
-          <option value="onboarding">Onboarding</option>
-          <option value="aktiv">Aktiv</option>
-          <option value="pause">Pause</option>
-        </select>
-        {([["doede_forbindelser", "Døde forbindelser"],
-           ["mangler_hvidvask", "Mangler hvidvask"]] as const).map(([n, tekst]) => (
-          <label key={n} className="flex items-center gap-1.5">
-            <input type="checkbox" checked={filtre[n]} onChange={(e) => setFiltre({ ...filtre, [n]: e.target.checked })} />
-            {tekst}
-          </label>
-        ))}
+      <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 text-sm">
+        <input type="search" value={soeg} onChange={(e) => setSoeg(e.target.value)}
+               placeholder="Søg på navn, kundenr., CVR eller ansvarlig"
+               className="w-full rounded-md border border-slate-300 px-3 py-2 text-base" />
+        <div className="grid grid-cols-4 gap-3">
+          <Valgfelt titel="Ansvarlig" vaerdi={filtre.ansvarlig_id} skift={(v) => setFiltre({ ...filtre, ansvarlig_id: v })}
+                    muligheder={[["", "Alle"], ...(valg?.medarbejdere ?? []).map((m) => [String(m.id), m.navn] as [string, string])]} />
+          <Valgfelt titel="Afregning" vaerdi={filtre.afregning} skift={(v) => setFiltre({ ...filtre, afregning: v })}
+                    muligheder={[["", "Alle"], ["abonnement", "Abonnement"], ["timeafregning", "Timeafregning"]]} />
+          <Valgfelt titel="System" vaerdi={filtre.system} skift={(v) => setFiltre({ ...filtre, system: v })}
+                    muligheder={[["", "Alle"], ...(valg?.systemer ?? []).map((x) => [x.kode, x.navn] as [string, string])]} />
+          <Valgfelt titel="Status" vaerdi={filtre.status} skift={(v) => setFiltre({ ...filtre, status: v })}
+                    muligheder={[["", "Alle"], ["onboarding", "Onboarding"], ["aktiv", "Aktiv"], ["pause", "Pause"]]} />
+        </div>
+        <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+          <span className="mr-1 text-xs font-medium text-slate-500">Vis kun:</span>
+          {([["mine", "Mine kunder", "Kunder, hvor du er ansvarlig eller assistent"],
+             ["doede_forbindelser", "Døde forbindelser", "Forbindelsen til regnskabet er afvist eller fejler"],
+             ["mangler_hvidvask", "Mangler hvidvask", "Ingen risikovurdering efter hvidvaskloven"]] as const).map(([n, tekst, forklaring]) => (
+            <button key={n} type="button" title={forklaring} aria-pressed={filtre[n]}
+                    onClick={() => setFiltre({ ...filtre, [n]: !filtre[n] })}
+                    className={`rounded-full border px-3 py-1 ${filtre[n]
+                      ? "border-brand-600 bg-brand-600 text-white"
+                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`}>
+              {filtre[n] ? "✓ " : ""}{tekst}
+            </button>
+          ))}
+          <span className="ml-auto text-slate-500">{liste ? `${viste.length} ${viste.length === 1 ? "kunde" : "kunder"}` : ""}</span>
+          {(soeg || filtre.ansvarlig_id || filtre.afregning || filtre.system || filtre.status || !filtre.mine
+            || filtre.doede_forbindelser || filtre.mangler_hvidvask) && (
+            <button type="button" onClick={() => { setSoeg(""); setFiltre(STANDARD_FILTRE); }}
+                    className="text-brand-700 hover:underline">Nulstil</button>
+          )}
+        </div>
       </div>
 
       {!liste ? <p className="text-slate-500">Henter …</p> : (
