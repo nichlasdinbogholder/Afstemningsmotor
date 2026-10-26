@@ -719,7 +719,7 @@ Nyt modul i hub'en – fire faser, ét trin ad gangen (PR + merge pr. trin). Kun
 - **Fase 1, trin 4 (26.10.2026):** listevisningen (`app/kunder/oversigt.py`): "Mine kunder" som standard (ansvarlig
   eller assistent), sorteret efter nærmeste frist, kolonner kunde/CVR, ansvarlig/assistent, afregning/pris,
   system/forbindelse, næste frist med dage til; filtrene ansvarlig, afregning, system, livscyklus, forfaldne frister,
-  døde forbindelser, manglende hvidvask. Bygherrens definitioner (26.10.2026):
+  døde forbindelser (hvidvask er senere FJERNET – Pingo Documents kan ikke integreres). Bygherrens definitioner (26.10.2026):
   - Bilagsdækning = andel af månedens BANKPOSTERINGER AF TYPEN FINANS, der har et bilag. Leverandørbetalinger tæller
     IKKE (de har intet bilag). NB: e-conomic sender ikke med på posteringen, om der er bilag – det skal slås op pr.
     bilag (læsning). Bygges som eget trin, når opslaget er efterprøvet mod Din Bogholders rigtige e-conomic.

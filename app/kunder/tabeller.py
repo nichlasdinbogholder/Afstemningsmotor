@@ -50,7 +50,6 @@ LOENSUM_METODER = ("metode_1", "metode_2", "metode_3", "metode_4", "ingen")
 # Årsafslutning (bygherren 26.10.2026): årsregnskab + oplysningsskema ELLER årsopgørelse (app/frister/aarsafslutning).
 AARSAFSLUTNINGER = ("aarsregnskab_oplysningsskema", "aarsopgoerelse")
 LOEN_FREKVENSER = ("maaned", "14_dage", "ingen")
-RISIKONIVEAUER = ("lav", "mellem", "hoej")
 TJEKLISTER = ("onboarding", "offboarding")
 
 
@@ -280,21 +279,6 @@ class KundeTask(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_by: Mapped[int | None] = _medarbejder()
 
-
-class KundeAml(Base):
-    """Hvidvask: status og datoer – ikke et vedhæftet dokument (trin 15)."""
-
-    __tablename__ = "kunde_aml"
-    __table_args__ = (kun_vaerdier("risk_level", RISIKONIVEAUER),)
-
-    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="RESTRICT"), primary_key=True)
-    risk_level: Mapped[str | None] = mapped_column(Text)
-    assessed_on: Mapped[date | None] = mapped_column(Date)
-    assessed_by: Mapped[int | None] = _medarbejder()
-    id_verified_on: Mapped[date | None] = mapped_column(Date)
-    beneficial_owners_checked_on: Mapped[date | None] = mapped_column(Date)
-    next_review_on: Mapped[date | None] = mapped_column(Date)
-    notes: Mapped[str | None] = mapped_column(Text)
 
 
 class KundeChecklist(Base):

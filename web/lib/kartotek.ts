@@ -8,7 +8,7 @@ export type KartotekKunde = {
   ophoersdato: string | null; aarsag: string | null; arkiveret_af: string | null; kun_admin: boolean;
   // Kun i Kundeoversigten (trin 4) – regnet på serveren.
   assistent?: string | null; forbindelse?: string | null; forbindelse_tekst?: string;
-  hvidvask_ok?: boolean; min_kunde?: boolean;
+  min_kunde?: boolean;
 };
 export type Valg = {
   medarbejdere: { id: number; navn: string }[];

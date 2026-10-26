@@ -19,7 +19,7 @@ function danskTal(v: string): string | null {
 
 // Filtrene (trin 4). Standard: mine kunder.
 const STANDARD_FILTRE = { mine: true, ansvarlig_id: "", afregning: "", system: "", status: "",
-  doede_forbindelser: false, mangler_hvidvask: false };
+  doede_forbindelser: false };
 
 function Valgfelt({ titel, vaerdi, skift, muligheder }: {
   titel: string; vaerdi: string; skift: (v: string) => void; muligheder: [string, string][];
@@ -100,8 +100,7 @@ export default function Side() {
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
           <span className="mr-1 text-xs font-medium text-slate-500">Vis kun:</span>
           {([["mine", "Mine kunder", "Kunder, hvor du er ansvarlig eller assistent"],
-             ["doede_forbindelser", "Døde forbindelser", "Forbindelsen til regnskabet er afvist eller fejler"],
-             ["mangler_hvidvask", "Mangler hvidvask", "Ingen risikovurdering efter hvidvaskloven"]] as const).map(([n, tekst, forklaring]) => (
+             ["doede_forbindelser", "Døde forbindelser", "Forbindelsen til regnskabet er afvist eller fejler"]] as const).map(([n, tekst, forklaring]) => (
             <button key={n} type="button" title={forklaring} aria-pressed={filtre[n]}
                     onClick={() => setFiltre({ ...filtre, [n]: !filtre[n] })}
                     className={`rounded-full border px-3 py-1 ${filtre[n]
@@ -112,7 +111,7 @@ export default function Side() {
           ))}
           <span className="ml-auto text-slate-500">{liste ? `${viste.length} ${viste.length === 1 ? "kunde" : "kunder"}` : ""}</span>
           {(soeg || filtre.ansvarlig_id || filtre.afregning || filtre.system || filtre.status || !filtre.mine
-            || filtre.doede_forbindelser || filtre.mangler_hvidvask) && (
+            || filtre.doede_forbindelser) && (
             <button type="button" onClick={() => { setSoeg(""); setFiltre(STANDARD_FILTRE); }}
                     className="text-brand-700 hover:underline">Nulstil</button>
           )}

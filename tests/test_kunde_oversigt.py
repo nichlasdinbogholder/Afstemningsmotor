@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from app.api import login
 from app.api.main import app
 from app.kunder.models import Client
-from app.kunder.tabeller import KundeAml, KundeLedger, KundeTask, KundeTaskType
+from app.kunder.tabeller import KundeLedger, KundeTask, KundeTaskType
 from app.personale.models import Staff
 from app.timeregistrering import satser
 
@@ -41,7 +41,6 @@ def kunder(db_session, folk):
     db_session.add_all([KundeLedger(client_id=a.id, system="economic", label="e-conomic", status="aktiv"),
                         KundeLedger(client_id=c.id, system="economic", label="e-conomic", status="aktiv"),
                         KundeLedger(client_id=c.id, system="economic", label="Datter", status="afvist")])
-    db_session.add(KundeAml(client_id=a.id, risk_level="lav", assessed_on=I_DAG))
     tt = KundeTaskType(code="ovs_test", name="Ovs test", workday_number=5)
     db_session.add(tt)
     db_session.flush()
@@ -80,7 +79,6 @@ def test_filtrene(klient, kunder, folk):
     assert _navne(klient, system="dinero") == ["Ovs B ApS"]
     assert _navne(klient, status="pause") == ["Ovs B ApS"]
     assert _navne(klient, doede_forbindelser=True) == ["Ovs C ApS"]   # én af to aftaler er afvist
-    assert _navne(klient, mangler_hvidvask=True) == ["Ovs B ApS", "Ovs C ApS"]
     assert _navne(klient, mine=True, system="economic") == ["Ovs A ApS"]
 
 
