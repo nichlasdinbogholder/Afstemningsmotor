@@ -123,7 +123,8 @@ def tilknyttede_kunder(session: Session, medarbejder: Staff) -> list[Client]:
     aldrig kun i brugerfladen."""
     q = select(Client).where(Client.status == "aktiv")
     if medarbejder.rolle != "admin":
-        q = q.where(Client.ansvarlig_medarbejder_id == medarbejder.id)
+        # Interne kunder (fx Din Bogholder selv) er kun for administratorer – også hvis man er ansvarlig.
+        q = q.where(Client.ansvarlig_medarbejder_id == medarbejder.id, Client.kun_admin.is_(False))
     return session.scalars(q.order_by(Client.navn)).all()
 
 
@@ -131,7 +132,17 @@ def er_tilknyttet(session: Session, medarbejder: Staff, client_id: int) -> bool:
     k = session.get(Client, client_id)
     if k is None or k.status != "aktiv":
         return False
-    return medarbejder.rolle == "admin" or k.ansvarlig_medarbejder_id == medarbejder.id
+    if medarbejder.rolle == "admin":
+        return True
+    return k.ansvarlig_medarbejder_id == medarbejder.id and not k.kun_admin
+
+
+def maa_se_samtale(session: Session, medarbejder: Staff, samtale: AssistantConversation) -> bool:
+    """Samtaler om en intern kunde (kun_admin) vises kun for administratorer – heller ikke i ens egen historik."""
+    if medarbejder.rolle == "admin" or samtale.client_id is None:
+        return True
+    k = session.get(Client, samtale.client_id)
+    return k is None or not k.kun_admin
 
 
 def kundetekst(kunde: Client | None) -> str:

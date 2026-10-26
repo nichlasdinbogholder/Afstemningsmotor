@@ -153,3 +153,16 @@ def test_skift_ansvarlig_styrer_svend(db_session, klient, folk):
     _som(folk[1])
     assert klient.post(f"/api/kundekartotek/{kid}/ansvarlig", headers=H, json={"ansvarlig_id": None}
                        ).status_code == 403
+
+
+def test_kun_admin_hos_svend(db_session, klient, folk):
+    kid = klient.post("/api/kundekartotek", headers=H, json=NY).json()["id"]
+    assert [r["kun_admin"] for r in klient.get("/api/kundekartotek").json() if r["id"] == kid] == [False]
+    assert klient.post(f"/api/kundekartotek/{kid}/kun-admin", headers=H, json={"kun_admin": True}
+                       ).json()["kun_admin"] is True
+    log = db_session.scalars(select(AuditLog).where(AuditLog.client_id == kid,
+                                                    AuditLog.handling == "kunde_kun_admin")).one()
+    assert log.detaljer == {"udfoert_af": folk[0].email, "kun_admin": True}
+    _som(folk[1])
+    assert klient.post(f"/api/kundekartotek/{kid}/kun-admin", headers=H, json={"kun_admin": False}
+                       ).status_code == 403

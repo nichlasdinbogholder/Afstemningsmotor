@@ -9,7 +9,9 @@
 - Ansvarlig medarbejder (KUN administratorer) kan skiftes i oversigten. Det er den, der afgør, hvilke kunder en
   medarbejder kan spørge Svend om.
 - Genaktivering (KUN administratorer): kunden bliver aktiv igen. Arkiveringen står stadig i loggen.
-- Alt logges i audit_log (kunde_oprettet, kunde_ansvarlig, kunde_arkiveret, kunde_genaktiveret) med hvem og fra/til.
+- "Kun admin hos Svend" (KUN administratorer): en intern kunde som Din Bogholder selv kan kun administratorer spørge
+  Svend om (bygherren 26.10.2026).
+- Alt logges i audit_log (kunde_oprettet, kunde_ansvarlig, kunde_kun_admin, kunde_arkiveret, kunde_genaktiveret) med hvem og fra/til.
 """
 
 from datetime import date
@@ -62,7 +64,7 @@ def liste(session: Session, arkiverede: bool, dag: date) -> list[dict]:
             "afregning": afregning[0], "abonnementspris": None if afregning[1] is None else str(afregning[1]),
             "ophoersdato": k.opsagt_dato.isoformat() if k.opsagt_dato else None,
             "aarsag": AARSAG_TEKST.get(k.arkiv_aarsag) if k.arkiv_aarsag else None,
-            "arkiveret_af": af.navn if af else None,
+            "arkiveret_af": af.navn if af else None, "kun_admin": k.kun_admin,
         })
     return ud
 
@@ -120,6 +122,20 @@ def saet_ansvarlig(session: Session, af: Staff, client_id: int, ansvarlig_id: in
     kunde.ansvarlig_medarbejder_id = ansvarlig_id
     session.add(AuditLog(client_id=kunde.id, staff_id=af.id, handling="kunde_ansvarlig", detaljer={
         "udfoert_af": af.email, "fra_staff_id": fra, "til_staff_id": ansvarlig_id}))
+    session.flush()
+    return kunde
+
+
+def saet_kun_admin(session: Session, af: Staff, client_id: int, kun_admin: bool) -> Client:
+    """Intern kunde: kun administratorer kan spørge Svend om den og se samtalerne om den."""
+    kunde = session.get(Client, client_id)
+    if kunde is None:
+        raise KartotekFejl("Kunden findes ikke")
+    if kunde.kun_admin == kun_admin:
+        return kunde
+    kunde.kun_admin = kun_admin
+    session.add(AuditLog(client_id=kunde.id, staff_id=af.id, handling="kunde_kun_admin", detaljer={
+        "udfoert_af": af.email, "kun_admin": kun_admin}))
     session.flush()
     return kunde
 

@@ -644,3 +644,7 @@ selskabsdimension). Fire faser; ét trin ad gangen med PR og merge.
 - Øverst i Svend-vinduet står fast: "Kun vejledende".
 - Medarbejdere kan kun spørge om de kunder, de er ansvarlige for i Kundeoversigten (administratorer: alle aktive).
 - Videnbasen og den ugentlige satskontrol findes stadig; en godkendt sats i videnbasen bruges før nettet.
+- Kunden Din Bogholder (og andre interne kunder med "Kun admin hos Svend" i Kundeoversigten) kan KUN administratorer
+  spørge Svend om – heller ikke i chathistorikken eller loggen kan medarbejdere se den. Gælder også, hvis en
+  medarbejder står som ansvarlig.
+- Kunden vælges i Svend med et søgefelt (navn eller kundenummer) i stedet for en rullemenu.
