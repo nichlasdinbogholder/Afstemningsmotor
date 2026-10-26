@@ -259,6 +259,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   (status sendt/fejl/ikke_slaaet_til).
   Timeregistreringens stamdata (kun admin): ansættelsesform/flexjob/lønnummer og satser (normtid, kostpris pr. time,
   produktive timer pr. år, gyldig fra) – `POST /api/medarbejdere/{id}/ansaettelse`, `GET …/satser`, `POST …/sats`.
+  PRODUKTIVE TIMER (bygherren 26.10.2026): KUN fastlønnede – standard 1.400/år (`stamdata.STANDARD_PRODUKTIVE_TIMER`, kan rettes);
+  timelønnede har INGEN (NULL – kostprisen tager udgangspunkt i timelønnen; angives et tal, afvises det).
 - `app/timeregistrering/` – TIMEREGISTRERING (spec 18.10.2026, se RESUME.md; fase 1 trin 1 bygget). Tabeller `time_*`
   (`models.py`, bygger på staff/clients). DATABASEN håndhæver: godkendt uge låst (kun korrektionslinjer i åben uge), kun
   godkendte uger til løn, ferie blokeret for timelønnede, timelønnede optjener ikke afspadsering, kvarte timer,

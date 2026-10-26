@@ -81,7 +81,8 @@ class TimeEmployee(Base):
 
 class TimeEmployeeRate(Base):
     """Normtid og kostpris for en periode – indtastes manuelt. productive_hours_year gemmes, så kostprisen kan
-    dokumenteres bagud (der beregnes ingenting automatisk)."""
+    dokumenteres bagud (der beregnes ingenting automatisk). Bygherren 26.10.2026: TIMELØNNEDE har ingen produktive
+    timer (NULL – kostprisen tager udgangspunkt i timelønnen); fastlønnede har standard 1.400 timer om året."""
 
     __tablename__ = "time_employee_rates"
     __table_args__ = (
@@ -90,7 +91,7 @@ class TimeEmployeeRate(Base):
         CheckConstraint("valid_to IS NULL OR valid_to > valid_from", name="periode_gyldig"),
         CheckConstraint("weekly_norm IS NULL OR (weekly_norm >= 0 AND weekly_norm <= 168)", name="normtid_gyldig"),
         CheckConstraint("cost_per_hour >= 0", name="kostpris_ikke_negativ"),
-        CheckConstraint("productive_hours_year > 0", name="produktive_timer_positive"),
+        CheckConstraint("productive_hours_year IS NULL OR productive_hours_year > 0", name="produktive_timer_positive"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -99,7 +100,7 @@ class TimeEmployeeRate(Base):
     valid_to: Mapped[date | None] = mapped_column(Date)
     weekly_norm: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     cost_per_hour: Mapped[Decimal] = mapped_column(Numeric(15, 2))
-    productive_hours_year: Mapped[Decimal] = mapped_column(Numeric(7, 2))
+    productive_hours_year: Mapped[Decimal | None] = mapped_column(Numeric(7, 2))
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     created_by: Mapped[int | None] = _medarbejder()
