@@ -64,7 +64,7 @@ def test_rolle_og_lukket_adgang(db_session, klient):
     assert db_session.get(Staff, mid).aktiv is False
     handlinger = db_session.scalars(select(AuditLog.handling).where(
         AuditLog.detaljer["medarbejder_id"].as_integer() == mid).order_by(AuditLog.id)).all()
-    assert handlinger == ["medarbejder_opret", "medarbejder_rolle", "medarbejder_deaktiver"]
+    assert handlinger == ["medarbejder_opret", "medarbejder_invitation", "medarbejder_rolle", "medarbejder_deaktiver"]
 
 
 def test_ingen_kan_laase_alle_ude(db_session, klient, admin):
@@ -140,3 +140,42 @@ def test_tidligere_kostpris_vises_til_den_er_tastet_igen(db_session, klient, adm
     rad = klient.post(f"/api/medarbejdere/{m.id}/sats", headers=H, json={
         "gyldig_fra": "2026-10-18", "kostpris_pr_time": "425.50", "produktive_timer_aar": "1450"}).json()
     assert rad["tid"]["tidligere_kostpris"] is None
+
+
+# Invitation (bygherren 26.10.2026): velkomstmail ved oprettelse – og "Send invitation igen" fra listen.
+def test_invitation_uden_mail_slaaet_til(db_session, klient):
+    ny = klient.post("/api/medarbejdere", headers=H, json={"email": "ny-inv@dinbogholder.dk", "navn": "Ny"}).json()
+    assert ny["invitation_sendt"]["status"] == "ikke_slaaet_til"     # oprettelsen lykkes alligevel
+    raekke = [m for m in klient.get("/api/medarbejdere").json() if m["id"] == ny["id"]][0]
+    assert raekke["invitation"]["status"] == "ikke_slaaet_til"
+    svar = klient.post(f"/api/medarbejdere/{ny['id']}/invitation", headers=H)
+    assert svar.status_code == 503 and "ikke slået til" in svar.json()["detail"]
+    assert klient.post(f"/api/medarbejdere/{ny['id']}/invitation").status_code == 403   # mangler header
+
+
+def test_invitation_sendes_og_kan_sendes_igen(db_session, klient, admin, monkeypatch):
+    from app.mail import MailFejl
+    from app.personale import invitation
+
+    sendt = []
+    monkeypatch.setattr(invitation, "mail_slaaet_til", lambda: True)
+    monkeypatch.setattr(invitation, "send_mail", lambda til, emne, tekst: sendt.append((til, emne, tekst)))
+    ny = klient.post("/api/medarbejdere", headers=H, json={"email": "Gen-Inv@dinbogholder.dk", "navn": "Gitte"}).json()
+    assert ny["invitation_sendt"]["status"] == "sendt"
+    til, emne, tekst = sendt[0]
+    assert til == "gen-inv@dinbogholder.dk" and "adgang" in emne
+    assert "Hej Gitte" in tekst and "Log ind med Microsoft" in tekst and "udløber ikke" in tekst
+    assert klient.post(f"/api/medarbejdere/{ny['id']}/invitation", headers=H).status_code == 200
+    assert len(sendt) == 2
+    logs = db_session.scalars(select(AuditLog).where(AuditLog.handling == "medarbejder_invitation",
+                                                     AuditLog.detaljer["medarbejder_id"].as_integer() == ny["id"])).all()
+    assert [l.detaljer["status"] for l in logs] == ["sendt", "sendt"] and logs[0].detaljer["udfoert_af"] == admin.email
+
+    def fejler(*a):
+        raise MailFejl("Microsoft afviste mailen (status 403)")
+    monkeypatch.setattr(invitation, "send_mail", fejler)
+    svar = klient.post(f"/api/medarbejdere/{ny['id']}/invitation", headers=H)
+    assert svar.status_code == 502 and "status 403" in svar.json()["detail"]
+    # Lukket adgang -> ingen invitation.
+    klient.post(f"/api/medarbejdere/{ny['id']}", headers=H, json={"aktiv": False})
+    assert klient.post(f"/api/medarbejdere/{ny['id']}/invitation", headers=H).status_code == 409

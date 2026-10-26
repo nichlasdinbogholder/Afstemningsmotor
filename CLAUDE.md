@@ -253,6 +253,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/api/medarbejdere.py` + siden `web/app/medarbejdere/` – det samme fra websiden (KUN admin, menupunktet ses kun af
   admins): `GET/POST /api/medarbejdere`, `POST /api/medarbejdere/{id}` (navn/rolle/aktiv). Ingen sletning, e-mail kan
   ikke ændres, man kan ikke fjerne sin egen admin-adgang, altid mindst én aktiv admin. audit_log `medarbejder_*`. Ligger under INDSTILLINGER.
+  INVITATION (bygherren 26.10.2026, `app/personale/invitation.py`): velkomstmail fra info@ (MAIL_AFSENDER) med link til hub'en
+  sendes ved oprettelse; "Send invitation igen" (`POST /api/medarbejdere/{id}/invitation`) for aktive, der aldrig har logget
+  ind. Udløber aldrig (login = Microsoft-kontoen). Uden mail slået til: intet sendes (503). audit_log `medarbejder_invitation`
+  (status sendt/fejl/ikke_slaaet_til).
   Timeregistreringens stamdata (kun admin): ansættelsesform/flexjob/lønnummer og satser (normtid, kostpris pr. time,
   produktive timer pr. år, gyldig fra) – `POST /api/medarbejdere/{id}/ansaettelse`, `GET …/satser`, `POST …/sats`.
 - `app/timeregistrering/` – TIMEREGISTRERING (spec 18.10.2026, se RESUME.md; fase 1 trin 1 bygget). Tabeller `time_*`

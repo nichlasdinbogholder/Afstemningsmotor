@@ -648,3 +648,10 @@ selskabsdimension). Fire faser; ét trin ad gangen med PR og merge.
   spørge Svend om – heller ikke i chathistorikken eller loggen kan medarbejdere se den. Gælder også, hvis en
   medarbejder står som ansvarlig.
 - Kunden vælges i Svend med et søgefelt (navn eller kundenummer) i stedet for en rullemenu.
+
+# Invitation til nye medarbejdere (bygherren 26.10.2026)
+- Når en administrator opretter en medarbejder på siden Medarbejdere, sendes en velkomstmail fra info@dinbogholder.dk
+  med link til hub'en og besked om at logge ind med Microsoft-kontoen.
+- Kan mailen ikke findes, trykker man "Send invitation igen" ud for medarbejderen (vises, indtil personen har logget ind).
+- Invitationen udløber aldrig – der er ingen kode i den. Adgangen styres af listen over medarbejdere.
+- Virker først, når udgående mail fra info@ er sat op (afventer Christopher); indtil da står der "ikke sendt".
