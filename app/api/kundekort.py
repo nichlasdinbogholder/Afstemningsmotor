@@ -9,6 +9,9 @@ Alle medarbejdere ser kortet og kontaktpersonerne. Kun kundens ansvarlige, assis
 - `POST /api/kundekort/kontakter/{kid}`              ret
 - `POST /api/kundekort/kontakter/{kid}/primaer`      gør til primær
 - `POST /api/kundekort/kontakter/{kid}/arkiver`      arkivér (slettes aldrig)
+- `POST /api/kundekort/{id}/raadgiver`               tilknyt revisor/bankrådgiver fra registret (eller opret ny)
+- `GET  /api/raadgivere?type=revisor|bank&q=`        rådgiverregistret (alle ser)
+- `POST /api/raadgivere/{rid}`                       ret en rådgiver – KUN admin (gælder alle kunder med rådgiveren)
 - `GET  /api/kundekort/{id}/stamdata`                navn, CVR, virksomhedsform (CVR) + regnskabsperiode (regnskabssystemet)
 """
 
@@ -19,13 +22,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.data import kraev_header
-from app.api.login import db, nuvaerende_medarbejder
+from app.api.login import db, kraev_admin, nuvaerende_medarbejder
 from app.kunder import kartotek, kontakter, stamdata
 from app.kunder.models import Client
 from app.personale.models import Staff
 from app.tid import TIDSZONE
 
 router = APIRouter(prefix="/api/kundekort", dependencies=[Depends(nuvaerende_medarbejder)])
+raadgiver_router = APIRouter(prefix="/api/raadgivere", dependencies=[Depends(nuvaerende_medarbejder)])
 IKKE_TILLADT = "Kun kundens ansvarlige, assistent eller en administrator kan rette kontaktpersoner"
 
 
@@ -61,8 +65,6 @@ class Kontakt(BaseModel):
     email: str | None = Field(default=None, max_length=255)
     underskriver: bool = False
     maa_kontaktes_af: str = "alle"
-    er_revisor: bool = False                                  # kundens revisor (bygherren 26.10.2026)
-    firma: str | None = Field(default=None, max_length=255)   # revisionsfirmaet
 
 
 class NyKontakt(Kontakt):
@@ -86,15 +88,14 @@ def opret(kunde_id: int, data: NyKontakt, m: Staff = Depends(nuvaerende_medarbej
           session: Session = Depends(db)) -> dict:
     return _udfoer(session, lambda: kontakter.opret(session, m, kunde_id, data.navn, data.rolle, data.telefon,
                                                     data.email, data.primaer, data.underskriver,
-                                                    data.maa_kontaktes_af, data.er_revisor, data.firma))
+                                                    data.maa_kontaktes_af))
 
 
 @router.post("/kontakter/{kontakt_id}", dependencies=[Depends(kraev_header)])
 def ret(kontakt_id: int, data: Kontakt, m: Staff = Depends(nuvaerende_medarbejder),
         session: Session = Depends(db)) -> dict:
     return _udfoer(session, lambda: kontakter.ret(session, m, kontakt_id, data.navn, data.rolle, data.telefon,
-                                                  data.email, data.underskriver, data.maa_kontaktes_af,
-                                                  data.er_revisor, data.firma))
+                                                  data.email, data.underskriver, data.maa_kontaktes_af))
 
 
 @router.post("/kontakter/{kontakt_id}/primaer", dependencies=[Depends(kraev_header)])
@@ -110,3 +111,46 @@ def arkiver(kontakt_id: int, m: Staff = Depends(nuvaerende_medarbejder), session
 @router.get("/{kunde_id}/stamdata")
 def stamdata_vis(kunde_id: int, session: Session = Depends(db)) -> dict:
     return stamdata.json(session, _kunde(session, kunde_id), datetime.now(TIDSZONE).date())
+
+
+# --- Rådgiverregistret: revisorer og bankrådgivere (bygherren 26.10.2026) -----------------------------------------
+
+class NyRaadgiver(BaseModel):
+    navn: str = Field(max_length=255)
+    firma: str = Field(max_length=255)
+    telefon: str | None = Field(default=None, max_length=50)
+    email: str | None = Field(default=None, max_length=255)
+
+
+class Tilknytning(BaseModel):
+    type: str                                   # revisor | bank
+    raadgiver_id: int | None = None             # en, der allerede er i registret ...
+    ny: NyRaadgiver | None = None               # ... eller en ny, der oprettes i registret
+    maa_kontaktes_af: str = "alle"
+
+
+@router.post("/{kunde_id}/raadgiver", dependencies=[Depends(kraev_header)])
+def tilknyt(kunde_id: int, data: Tilknytning, m: Staff = Depends(nuvaerende_medarbejder),
+            session: Session = Depends(db)) -> dict:
+    return _udfoer(session, lambda: kontakter.tilknyt_raadgiver(
+        session, m, kunde_id, data.type, data.raadgiver_id, data.ny.model_dump() if data.ny else None,
+        data.maa_kontaktes_af))
+
+
+@raadgiver_router.get("")
+def raadgiverliste(type: str, q: str | None = None, session: Session = Depends(db)) -> list[dict]:
+    return [kontakter.raadgiver_json(r) for r in kontakter.raadgivere(session, type, q)]
+
+
+@raadgiver_router.post("/{raadgiver_id}", dependencies=[Depends(kraev_header)])
+def ret_raadgiver(raadgiver_id: int, data: NyRaadgiver, m: Staff = Depends(kraev_admin),
+                  session: Session = Depends(db)) -> dict:
+    try:
+        with session.begin_nested():
+            r = kontakter.ret_raadgiver(session, m, raadgiver_id, data.navn, data.firma, data.telefon, data.email)
+    except kontakter.IkkeTilladt:
+        raise HTTPException(status_code=403, detail="Kun administratorer kan rette en rådgiver") from None
+    except kontakter.KontaktFejl as fejl:
+        raise HTTPException(status_code=422, detail=str(fejl)) from None
+    session.commit()
+    return kontakter.raadgiver_json(r)

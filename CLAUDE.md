@@ -282,9 +282,13 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     primær; ny primær afløser; primær kan ikke arkiveres, mens der er andre); underskriver og maa_kontaktes_af
     uafhængige; ALLE ser alle (begrænsede vises "Kontaktes kun af den ansvarlige"); KUN ansvarlig, assistent og admin
     retter (`kontakter.maa_rette`); slettes aldrig (arkiveres); alt i kunde_log.
-    KUNDENS REVISOR (bygherren 26.10.2026): kontakt med `er_revisor` + revisionsfirma i `firma` (krævet) – navn, firma,
-    telefon, mail; violet mærke "Revisor" og venstrekant; aldrig primær/underskriver (CHECK i databasen) og tæller ikke
-    med, når den primære vælges/arkiveres. `/api/kundekort/{id}`, `…/kontakter`,
+    REVISOR OG BANKRÅDGIVER (bygherren 26.10.2026): RÅDGIVERREGISTRET `raadgivere` (models.Raadgiver, type revisor|bank,
+    navn, firma = revisionsfirma/bank, telefon, mail; unik på type + navn + firma uden hensyn til store/små bogstaver) er
+    FÆLLES for alle kunder. Kontakten peger på det med `contacts.raadgiver_id` (navn holdes ens). Ansvarlig/assistent/admin
+    vælger fra registret eller opretter ny (`kontakter.tilknyt_raadgiver`, `POST /api/kundekort/{id}/raadgiver`,
+    `GET /api/raadgivere?type=&q=`); KUN admin retter (`POST /api/raadgivere/{id}` – gælder alle kunder, audit_log
+    `raadgiver_aendret`). Aldrig primær/underskriver (CHECK) og tæller ikke med, når den primære vælges/arkiveres. "Fjern" =
+    tilknytningen arkiveres. Farver: revisor violet, bankrådgiver mørkeblå (blue-900); "Send mail i Outlook" = mailto-link. `/api/kundekort/{id}`, `…/kontakter`,
     `POST …/kontakter`, `POST /api/kundekort/kontakter/{kid}[/primaer|/arkiver]`.
   - `oversigt.py` (trin 4): listen i Kundeoversigten – `GET /api/kundekartotek?mine=&ansvarlig_id=&afregning=&system=&status=
     &doede_forbindelser=&mangler_hvidvask=`; "mine" = ansvarlig ELLER assistent (standard i webdelen); sorteret

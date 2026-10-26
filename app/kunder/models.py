@@ -165,8 +165,9 @@ KONTAKTES_AF = ("alle", "ansvarlig")
 
 class Contact(Base):
     """Kontaktpersoner. Slettes aldrig – arkiveres (arkiveret sat). Underskriver og "må kontaktes af" er to
-    uafhængige felter. KUNDENS REVISOR (bygherren 26.10.2026) er en kontaktperson med er_revisor og revisionsfirmaet i
-    `firma` – aldrig primær (den primære er kundens egen kontakt) og aldrig underskriver for kunden."""
+    uafhængige felter. KUNDENS REVISOR OG BANKRÅDGIVER (bygherren 26.10.2026) er kontaktpersoner, der peger på
+    rådgiverregistret (`raadgiver_id`) – aldrig primær (den primære er kundens egen kontakt) og aldrig underskriver for
+    kunden. Navn, firma/bank, telefon og mail står i registret; `navn` holdes ens med registret, så listen kan sorteres."""
 
     __tablename__ = "contacts"
     __table_args__ = (
@@ -178,8 +179,11 @@ class Contact(Base):
             postgresql_where=text("primaer AND arkiveret IS NULL"),
         ),
         kun_vaerdier("maa_kontaktes_af", KONTAKTES_AF),
-        CheckConstraint("NOT er_revisor OR (firma IS NOT NULL AND btrim(firma) <> '')", name="revisor_kraever_firma"),
-        CheckConstraint("NOT (er_revisor AND (primaer OR underskriver))", name="revisor_ikke_primaer_underskriver"),
+        CheckConstraint("NOT (raadgiver_id IS NOT NULL AND (primaer OR underskriver))",
+                        name="raadgiver_ikke_primaer_underskriver"),
+        # Samme rådgiver kan kun være tilknyttet kunden én gang ad gangen.
+        Index("uq_contacts_raadgiver_pr_kunde", "client_id", "raadgiver_id", unique=True,
+              postgresql_where=text("raadgiver_id IS NOT NULL AND arkiveret IS NULL")),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -193,12 +197,39 @@ class Contact(Base):
     primaer: Mapped[bool] = mapped_column(Boolean, server_default=false())
     underskriver: Mapped[bool] = mapped_column(Boolean, server_default=false())
     maa_kontaktes_af: Mapped[str] = mapped_column(String(10), server_default="alle")
-    er_revisor: Mapped[bool] = mapped_column(Boolean, server_default=false())
-    firma: Mapped[str | None] = mapped_column(String(255))          # revisionsfirmaet (kun revisorer)
+    raadgiver_id: Mapped[int | None] = mapped_column(ForeignKey("raadgivere.id", ondelete="RESTRICT"), index=True)
     oprettet: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     arkiveret: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     client: Mapped[Client] = relationship(back_populates="contacts")
+    raadgiver: Mapped["Raadgiver | None"] = relationship()
+
+
+# Rådgivertyper: revisor (firma = revisionsfirmaet) og bankrådgiver (firma = banken).
+RAADGIVER_TYPER = ("revisor", "bank")
+
+
+class Raadgiver(Base):
+    """RÅDGIVERREGISTRET (bygherren 26.10.2026): kundernes revisorer og bankrådgivere – fælles for alle kunder, da mange
+    kunder har samme. Ansvarlig, assistent og administratorer kan oprette en rådgiver, når de tilknytter den til en
+    kunde; KUN administratorer kan rette den (rettelsen gælder alle kunder med rådgiveren). Slettes aldrig. Samme type,
+    navn og firma kun én gang."""
+
+    __tablename__ = "raadgivere"
+    __table_args__ = (
+        kun_vaerdier("type", RAADGIVER_TYPER),
+        Index("uq_raadgivere_type_navn_firma", "type", text("lower(navn)"), text("lower(firma)"), unique=True),
+        CheckConstraint("btrim(navn) <> '' AND btrim(firma) <> ''", name="navn_og_firma_udfyldt"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    type: Mapped[str] = mapped_column(String(10))
+    navn: Mapped[str] = mapped_column(String(255))
+    firma: Mapped[str] = mapped_column(String(255))
+    telefon: Mapped[str | None] = mapped_column(String(50))
+    email: Mapped[str | None] = mapped_column(String(255))
+    oprettet: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    oprettet_af: Mapped[int | None] = mapped_column(ForeignKey("staff.id", ondelete="RESTRICT"), index=True)
 
 
 class Credential(Base):
