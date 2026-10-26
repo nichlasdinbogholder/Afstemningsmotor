@@ -12,19 +12,24 @@ Alle medarbejdere ser kortet og kontaktpersonerne. Kun kundens ansvarlige, assis
 - `POST /api/kundekort/{id}/raadgiver`               tilknyt revisor/bankrådgiver fra registret (eller opret ny)
 - `GET  /api/raadgivere?type=revisor|bank&q=`        rådgiverregistret (alle ser)
 - `POST /api/raadgivere/{rid}`                       ret en rådgiver – KUN admin (gælder alle kunder med rådgiveren)
+- `GET  /api/kundekort/{id}/aftale`                  aftalegrundlaget (gældende + tidligere versioner)
+- `POST /api/kundekort/{id}/aftale`                  upload PDF (filen sendes direkte; navnet i headeren X-Filnavn)
+- `GET  /api/kundekort/{id}/aftale/{did}/pdf`        åbn PDF'en
 - `GET  /api/kundekort/{id}/stamdata`                navn, CVR, virksomhedsform (CVR) + regnskabsperiode (regnskabssystemet)
 """
 
 from datetime import datetime
+from urllib.parse import quote, unquote
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.data import kraev_header
 from app.api.login import db, kraev_admin, nuvaerende_medarbejder
-from app.kunder import kartotek, kontakter, stamdata
+from app.kunder import aftale, kartotek, kontakter, stamdata
 from app.kunder.models import Client
+from app.kunder.tabeller import KundeAftaleDokument
 from app.personale.models import Staff
 from app.tid import TIDSZONE
 
@@ -49,7 +54,8 @@ def hoved(kunde_id: int, m: Staff = Depends(nuvaerende_medarbejder), session: Se
             "status": kartotek.STATUS_TEKST[k.status], "status_kode": k.status,
             "ansvarlig": ansvarlig.navn if ansvarlig else None, "ansvarlig_id": k.ansvarlig_medarbejder_id,
             "assistent": assistent.navn if assistent else None, "assistent_id": k.assistent_id,
-            "kan_rette": kontakter.maa_rette(k, m), "admin": m.rolle == "admin"}
+            "kan_rette": kontakter.maa_rette(k, m), "admin": m.rolle == "admin",
+            "mangler_aftale": aftale.mangler_aftale(session, k, datetime.now(TIDSZONE).date())}
 
 
 @router.get("/{kunde_id}/kontakter")
@@ -154,3 +160,37 @@ def ret_raadgiver(raadgiver_id: int, data: NyRaadgiver, m: Staff = Depends(kraev
         raise HTTPException(status_code=422, detail=str(fejl)) from None
     session.commit()
     return kontakter.raadgiver_json(r)
+
+
+# --- Aftalegrundlaget (PDF) – bygherren 26.10.2026 --------------------------------------------------------------
+
+@router.get("/{kunde_id}/aftale")
+def aftale_vis(kunde_id: int, m: Staff = Depends(nuvaerende_medarbejder), session: Session = Depends(db)) -> dict:
+    return aftale.oversigt(session, _kunde(session, kunde_id), m, datetime.now(TIDSZONE).date())
+
+
+@router.post("/{kunde_id}/aftale", dependencies=[Depends(kraev_header)])
+async def aftale_upload(kunde_id: int, request: Request, x_filnavn: str = Header(default="aftalegrundlag.pdf"),
+                        m: Staff = Depends(nuvaerende_medarbejder), session: Session = Depends(db)) -> dict:
+    """PDF'en sendes som selve indholdet (Content-Type: application/pdf) – så kræves intet ekstra bibliotek."""
+    indhold = await request.body()
+    try:
+        with session.begin_nested():
+            d = aftale.upload(session, m, kunde_id, unquote(x_filnavn), indhold)
+    except aftale.IkkeTilladt:
+        raise HTTPException(status_code=403, detail="Kun kundens ansvarlige, assistent eller en administrator kan "
+                                                    "uploade aftalegrundlaget") from None
+    except aftale.AftaleFejl as fejl:
+        raise HTTPException(status_code=422, detail=str(fejl)) from None
+    session.commit()
+    return aftale.json(session, d)
+
+
+@router.get("/{kunde_id}/aftale/{dokument_id}/pdf")
+def aftale_pdf(kunde_id: int, dokument_id: int, session: Session = Depends(db)) -> Response:
+    d = session.get(KundeAftaleDokument, dokument_id)
+    if d is None or d.client_id != kunde_id:
+        raise HTTPException(status_code=404, detail="Dokumentet findes ikke")
+    return Response(content=d.indhold, media_type="application/pdf", headers={
+        "Content-Disposition": f"inline; filename*=UTF-8''{quote(d.filnavn)}", "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff"})

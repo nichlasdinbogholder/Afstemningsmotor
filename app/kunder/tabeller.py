@@ -24,12 +24,14 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     SmallInteger,
     String,
     Text,
     UniqueConstraint,
     false,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -149,6 +151,30 @@ class KundeAgreement(Base):
     started_on: Mapped[date] = mapped_column(Date)
     ended_on: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = _oprettet()
+
+
+class KundeAftaleDokument(Base):
+    """Det underskrevne aftalegrundlag med kunden som PDF (bygherren 26.10.2026). Gemmes i databasen (kommer med i
+    de krypterede sikkerhedskopier). Slettes aldrig: en ny version arkiverer den gamle, så historikken bevares.
+    Højst én gældende (ikke arkiveret) pr. kunde."""
+
+    __tablename__ = "kunde_aftaledokumenter"
+    __table_args__ = (
+        Index("uq_kunde_aftaledokumenter_en_gaeldende", "client_id", unique=True,
+              postgresql_where=text("arkiveret IS NULL")),
+        CheckConstraint("substring(indhold from 1 for 5) = '\\x255044462d'::bytea", name="kun_pdf"),
+        CheckConstraint("stoerrelse > 0 AND stoerrelse = octet_length(indhold)", name="stoerrelse_passer"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    client_id: Mapped[int] = _kunde()
+    filnavn: Mapped[str] = mapped_column(String(255))
+    indhold: Mapped[bytes] = mapped_column(LargeBinary)
+    stoerrelse: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    uploadet_af: Mapped[int] = _medarbejder(nullable=False)
+    uploadet: Mapped[datetime] = _oprettet()
+    arkiveret: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class KundeLedger(Base):

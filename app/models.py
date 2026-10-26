@@ -25,6 +25,7 @@ from app.jobs.models import Job
 from app.kontoudtog.models import Statement, StatementLine
 from app.kunder.models import Client, Contact, Credential, Raadgiver
 from app.kunder.tabeller import (
+    KundeAftaleDokument,
     KundeAgreement,
     KundeAlias,
     KundeAml,
@@ -120,6 +121,7 @@ __all__ = [
     "KundeCvrChange",
     "KundeCvrSnapshot",
     "KundeGroup",
+    "KundeAftaleDokument",
     "KundeLedger",
     "KundeLog",
     "KundeObligations",
