@@ -1,7 +1,13 @@
 """Kundeoversigtens liste (Kundeoversigten, trin 4): standard "mine kunder", sorteret efter nærmeste frist.
 
 Kolonner: kunde og CVR, ansvarlig og assistent, afregningsform og månedspris, system og forbindelsesstatus, næste frist
-med dage til. Bilagsdækning, månedens status og dækningsgrad afventer bygherrens definition (gættes ikke).
+med dage til, månedens status og dækningsgrad (bygherren 26.10.2026):
+- MÅNEDENS STATUS = fuldførte af denne måneds opgaver (kunde_tasks), fx "6 af 10". Tom, når måneden ingen opgaver har.
+- DÆKNINGSGRAD = KUN for abonnementskunder, seneste HELE måned: (abonnementspris + timer uden for abonnementet ×
+  salgspris − alle registrerede timer på kunden × medarbejderens kostpris) / indtægten. Satser slås op på hver
+  arbejdsdag (time_salgspris/time_kostpris). Mangler en sats, vises "mangler sats" – aldrig et gættet tal.
+- Bilagsdækning (andel af bankposteringer af typen finans med bilag; leverandørbetalinger tæller ikke) bygges i et
+  selvstændigt trin – e-conomic sender ikke med på posteringen, om der er et bilag.
 Filtre: mine, ansvarlig, afregningsform, system, livscyklus (aktiv/pause), forfaldne frister, døde forbindelser,
 manglende hvidvask. Alt regnes her på serveren – webdelen viser kun.
 
@@ -9,9 +15,10 @@ manglende hvidvask. Alt regnes her på serveren – webdelen viser kun.
 """
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
+from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.kunder.kartotek import liste as kartotek_liste
@@ -54,6 +61,51 @@ def _naeste_frister(session: Session, ider: list[int]) -> dict[int, date]:
         KundeTask.client_id.in_(ider), KundeTask.completed_at.is_(None)).group_by(KundeTask.client_id)).all())
 
 
+def _maanedens_status(session: Session, ider: list[int], dag: date) -> dict[int, tuple[int, int]]:
+    """(fuldførte, i alt) af denne måneds opgaver pr. kunde."""
+    periode = dag.replace(day=1)
+    raekker = session.execute(select(KundeTask.client_id, func.count(KundeTask.completed_at), func.count()).where(
+        KundeTask.client_id.in_(ider), KundeTask.period == periode).group_by(KundeTask.client_id)).all()
+    return {r[0]: (r[1], r[2]) for r in raekker}
+
+
+def seneste_hele_maaned(dag: date) -> tuple[date, date]:
+    slut = dag.replace(day=1) - timedelta(days=1)
+    return slut.replace(day=1), slut
+
+
+# Pr. kunde: abonnementsprisen (gældende den 1. i måneden), indtægt for timer uden for abonnementet, omkostning for
+# alle timer – og om en sats mangler. Kun timer med en kunde; satserne slås op på arbejdsdagen.
+DAEKNING_SQL = text("""
+SELECT c.id,
+       time_abonnementspris(c.id, :fra) AS pris,
+       COALESCE(SUM(e.hours * time_salgspris(e.work_date)) FILTER (WHERE e.billable_separately), 0) AS saerskilt,
+       COALESCE(SUM(e.hours * time_kostpris(e.employee_id, e.work_date)), 0) AS omkostning,
+       BOOL_OR(e.billable_separately AND e.hours > 0 AND time_salgspris(e.work_date) IS NULL) AS mangler_salgspris,
+       BOOL_OR(e.hours > 0 AND time_kostpris(e.employee_id, e.work_date) IS NULL) AS mangler_kostpris
+FROM clients c
+LEFT JOIN time_entries e ON e.client_id = c.id AND e.work_date BETWEEN :fra AND :til
+WHERE c.id = ANY(:ider) AND time_afregning(c.id, :fra) = 'abonnement'
+GROUP BY c.id
+""")
+
+
+def _daekningsgrader(session: Session, ider: list[int], dag: date) -> dict[int, dict]:
+    fra, til = seneste_hele_maaned(dag)
+    ud = {}
+    for r in session.execute(DAEKNING_SQL, {"ider": ider, "fra": fra, "til": til}):
+        if r.mangler_kostpris or r.mangler_salgspris:
+            ud[r.id] = {"procent": None, "tekst": "mangler sats"}
+            continue
+        indtaegt = (r.pris or Decimal(0)) + r.saerskilt
+        if indtaegt <= 0:
+            ud[r.id] = {"procent": None, "tekst": "ingen indtægt"}
+            continue
+        procent = ((indtaegt - r.omkostning) / indtaegt * 100).quantize(Decimal("0.1"))
+        ud[r.id] = {"procent": str(procent), "tekst": None}
+    return ud
+
+
 def _hvidvask_ok(session: Session, ider: list[int]) -> set[int]:
     return set(session.scalars(select(KundeAml.client_id).where(
         KundeAml.client_id.in_(ider), KundeAml.risk_level.is_not(None), KundeAml.assessed_on.is_not(None))))
@@ -67,6 +119,9 @@ def liste(session: Session, medarbejder: Staff, dag: date, f: Filtre) -> list[di
     forbindelser = _forbindelser(session, ider)
     frister = _naeste_frister(session, ider)
     hvidvask = _hvidvask_ok(session, ider)
+    status = _maanedens_status(session, ider, dag)
+    daekning = _daekningsgrader(session, ider, dag)
+    daekning_fra, daekning_til = seneste_hele_maaned(dag)
 
     ud = []
     for r in raekker:
@@ -80,6 +135,10 @@ def liste(session: Session, medarbejder: Staff, dag: date, f: Filtre) -> list[di
             "naeste_frist": frist.isoformat() if frist else None,
             "dage_til_frist": (frist - dag).days if frist else None,
             "hvidvask_ok": k.id in hvidvask,
+            "maanedens_opgaver": None if k.id not in status else {"fuldfoert": status[k.id][0],
+                                                                  "i_alt": status[k.id][1]},
+            "daekningsgrad": daekning.get(k.id),
+            "daekning_periode": f"{daekning_fra:%m.%Y}" if k.id in daekning else None,
             "min_kunde": medarbejder.id in (k.ansvarlig_medarbejder_id, k.assistent_id),
         }
         if f.mine and not r["min_kunde"]:

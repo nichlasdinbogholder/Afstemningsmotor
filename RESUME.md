@@ -719,6 +719,11 @@ Nyt modul i hub'en – fire faser, ét trin ad gangen (PR + merge pr. trin). Kun
 - **Fase 1, trin 4 (26.10.2026):** listevisningen (`app/kunder/oversigt.py`): "Mine kunder" som standard (ansvarlig
   eller assistent), sorteret efter nærmeste frist, kolonner kunde/CVR, ansvarlig/assistent, afregning/pris,
   system/forbindelse, næste frist med dage til; filtrene ansvarlig, afregning, system, livscyklus, forfaldne frister,
-  døde forbindelser, manglende hvidvask. AFVENTER definition fra bygherren (spurgt 26.10.2026): bilagsdækning,
-  månedens status, dækningsgrad – forslag: (1) andel bankposteringer med bilag, (2) "x af y" fuldførte månedsopgaver,
-  (3) (indtægt − timer × kostpris) / indtægt for seneste hele måned.
+  døde forbindelser, manglende hvidvask. Bygherrens definitioner (26.10.2026):
+  - Bilagsdækning = andel af månedens BANKPOSTERINGER AF TYPEN FINANS, der har et bilag. Leverandørbetalinger tæller
+    IKKE (de har intet bilag). NB: e-conomic sender ikke med på posteringen, om der er bilag – det skal slås op pr.
+    bilag (læsning). Bygges som eget trin, når opslaget er efterprøvet mod Din Bogholders rigtige e-conomic.
+  - Månedens status = "x af y" fuldførte af denne måneds opgaver (kunde_tasks – fyldes fra trin 11-12).
+  - Dækningsgrad = KUN abonnementskunder, seneste hele måned: (abonnementspris + timer uden for abonnementet ×
+    salgspris − alle registrerede timer × kostpris) / indtægt. Alle registrerede timer tæller (ugegodkendelse er
+    endnu ikke bygget).

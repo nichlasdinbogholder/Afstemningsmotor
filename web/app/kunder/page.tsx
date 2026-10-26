@@ -111,9 +111,9 @@ export default function Side() {
                 <th className="px-3 py-2">Kunde og CVR</th><th className="px-3 py-2">Ansvarlig</th>
                 <th className="px-3 py-2">Afregning</th><th className="px-3 py-2">System</th>
                 <th className="px-3 py-2">Næste frist</th>
-                <th className="px-3 py-2" title="Afventer definition">Bilagsdækning</th>
-                <th className="px-3 py-2" title="Afventer definition">Månedens status</th>
-                <th className="px-3 py-2" title="Afventer definition">Dækningsgrad</th>
+                <th className="px-3 py-2" title="Andel af bankposteringer af typen finans med bilag – bygges i et senere trin">Bilagsdækning</th>
+                <th className="px-3 py-2" title="Fuldførte af denne måneds opgaver">Månedens status</th>
+                <th className="px-3 py-2" title="Kun abonnementskunder – seneste hele måned">Dækningsgrad</th>
                 <th className="px-3 py-2">Status</th>
                 {admin && <th className="px-3 py-2" title="Intern kunde: kun administratorer kan spørge Svend om den">Kun admin hos Svend</th>}
                 {admin && <th className="px-3 py-2" />}
@@ -160,9 +160,20 @@ export default function Side() {
                         </>
                       ) : <span className="text-slate-400">–</span>}
                     </td>
-                    <td className="px-3 py-2 text-xs text-slate-400">afventer definition</td>
-                    <td className="px-3 py-2 text-xs text-slate-400">afventer definition</td>
-                    <td className="px-3 py-2 text-xs text-slate-400">afventer definition</td>
+                    <td className="px-3 py-2 text-xs text-slate-400">kommer senere</td>
+                    <td className="px-3 py-2">
+                      {k.maanedens_opgaver ? `${k.maanedens_opgaver.fuldfoert} af ${k.maanedens_opgaver.i_alt}`
+                        : <span className="text-slate-400">–</span>}
+                    </td>
+                    <td className="px-3 py-2">
+                      {k.daekningsgrad?.procent ? (
+                        <>
+                          {Number(k.daekningsgrad.procent).toLocaleString("da-DK", { minimumFractionDigits: 1 })} %
+                          <div className="text-xs text-slate-500">{k.daekning_periode}</div>
+                        </>
+                      ) : k.daekningsgrad?.tekst ? <span className="text-xs text-amber-700">{k.daekningsgrad.tekst}</span>
+                        : <span className="text-slate-400" title="Kun abonnementskunder">–</span>}
+                    </td>
                     <td className="px-3 py-2">{STATUS[k.status]}</td>
                     {admin && (
                       <td className="px-3 py-2 text-center">

@@ -91,3 +91,49 @@ def test_emner_og_arkiverede_er_ikke_med(klient, kunder, db_session):
     db_session.flush()
     assert "Ovs Emne" not in _navne(klient) and "Ovs Opsagt" not in _navne(klient)
     assert "Ovs Opsagt" in [r["navn"] for r in klient.get("/api/kundekartotek?arkiverede=true").json()]
+
+
+# Bygherren 26.10.2026: månedens status = "x af y" af denne måneds opgaver; dækningsgrad KUN for abonnementskunder,
+# seneste hele måned: (abonnement + særskilte timer × salgspris − timer × kostpris) / indtægt.
+def test_maanedens_status(klient, kunder, db_session):
+    from datetime import datetime, timezone
+
+    a = kunder[0]
+    tt2 = KundeTaskType(code="ovs_test2", name="Ovs test 2", workday_number=10)
+    db_session.add(tt2)
+    db_session.flush()
+    db_session.add(KundeTask(client_id=a.id, task_type_id=tt2.id, period=I_DAG.replace(day=1), due_date=I_DAG,
+                             completed_at=datetime.now(timezone.utc)))
+    db_session.flush()
+    raekke = [r for r in klient.get("/api/kundekartotek").json() if r["navn"] == "Ovs A ApS"][0]
+    assert raekke["maanedens_opgaver"] == {"fuldfoert": 1, "i_alt": 2}
+
+
+def test_daekningsgrad_kun_for_abonnement(klient, kunder, folk, db_session):
+    from decimal import Decimal
+
+    from app.kunder.oversigt import seneste_hele_maaned
+    from app.timeregistrering import registrering, stamdata
+
+    fra, _ = seneste_hele_maaned(I_DAG)
+    mig, anden, admin = folk
+    satser.ny_salgspris(db_session, fra - timedelta(days=60), Decimal(900))
+    e = stamdata.saet_ansaettelse(db_session, mig.id, "fastloennet", False, None)
+    stamdata.ny_sats(db_session, e, fra - timedelta(days=60), Decimal(37), Decimal(300), None, None, admin.id)
+    a, _, c = kunder
+    satser.nye_vilkaar(db_session, a.id, fra - timedelta(days=60), "abonnement", Decimal(2000), admin.id)
+    registrering.gem_linje(db_session, e, mig.id, fra, [], registrering.Linje("kundearbejde", a.id, None, False),
+                           {fra: Decimal(2)})
+    registrering.gem_linje(db_session, e, mig.id, fra, [],
+                           registrering.Linje("kundearbejde", a.id, "Ekstra opgave", True), {fra: Decimal(1)})
+    raekker = {r["navn"]: r for r in klient.get("/api/kundekartotek").json()}
+    # (2.000 + 1 × 900 − 3 × 300) / 2.900 = 68,97 %
+    assert raekker["Ovs A ApS"]["daekningsgrad"] == {"procent": "69.0", "tekst": None}
+    assert raekker["Ovs A ApS"]["daekning_periode"] == f"{fra:%m.%Y}"
+    assert raekker["Ovs C ApS"]["daekningsgrad"] is None        # timeafregning – ingen dækningsgrad
+    # En medarbejder uden kostpris -> "mangler sats" – aldrig et gættet tal.
+    e2 = stamdata.saet_ansaettelse(db_session, anden.id, "fastloennet", False, None)
+    registrering.gem_linje(db_session, e2, anden.id, fra, [], registrering.Linje("kundearbejde", a.id, None, False),
+                           {fra: Decimal(1)})
+    raekke = [r for r in klient.get("/api/kundekartotek").json() if r["navn"] == "Ovs A ApS"][0]
+    assert raekke["daekningsgrad"] == {"procent": None, "tekst": "mangler sats"}

@@ -9,6 +9,8 @@ export type KartotekKunde = {
   // Kun i Kundeoversigten (trin 4) – regnet på serveren.
   assistent?: string | null; forbindelse?: string | null; forbindelse_tekst?: string;
   naeste_frist?: string | null; dage_til_frist?: number | null; hvidvask_ok?: boolean; min_kunde?: boolean;
+  maanedens_opgaver?: { fuldfoert: number; i_alt: number } | null;
+  daekningsgrad?: { procent: string | null; tekst: string | null } | null; daekning_periode?: string | null;
 };
 export type Valg = {
   medarbejdere: { id: number; navn: string }[];

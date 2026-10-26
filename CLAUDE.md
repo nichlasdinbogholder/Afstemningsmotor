@@ -272,8 +272,11 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     `POST …/kontakter`, `POST /api/kundekort/kontakter/{kid}[/primaer|/arkiver]`.
   - `oversigt.py` (trin 4): listen i Kundeoversigten – `GET /api/kundekartotek?mine=&ansvarlig_id=&afregning=&system=&status=
     &forfaldne=&doede_forbindelser=&mangler_hvidvask=`; "mine" = ansvarlig ELLER assistent (standard i webdelen); sorteret
-    efter nærmeste åbne frist (kunde_tasks), uden frist sidst. Forbindelse = dårligste af kundens kunde_ledgers. Kolonnerne
-    bilagsdækning, månedens status og dækningsgrad AFVENTER bygherrens definition (vises "afventer definition").
+    efter nærmeste åbne frist (kunde_tasks), uden frist sidst. Forbindelse = dårligste af kundens kunde_ledgers.
+    MÅNEDENS STATUS = "x af y" af denne måneds kunde_tasks. DÆKNINGSGRAD (kun abonnementskunder, seneste hele måned) =
+    (abonnementspris + særskilte timer × salgspris − alle timer × kostpris) / indtægt; satser på arbejdsdagen; mangler en
+    sats: "mangler sats" (`DAEKNING_SQL`). BILAGSDÆKNING (andel bankposteringer af typen finans med bilag – ikke
+    leverandørbetalinger) kræver opslag af bilag pr. bilagsnummer i e-conomic: eget trin, efterprøves først.
 - `app/notifikationer/` + `app/api/notifikationer.py` – NOTIFIKATIONER (bygherren 26.10.2026): tabellen `notifications`
   (én pr. modtager, kun læst-markering – slettes ikke), `send_notifikation(session, modtagere, alvor, titel, …)`;
   `/api/notifikationer` (kun egne; `POST {id}/laest`, `POST laest`). Klokken i øverste højre hjørne:
