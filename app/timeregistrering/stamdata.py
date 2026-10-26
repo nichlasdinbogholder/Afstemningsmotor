@@ -7,7 +7,7 @@ af databasen i time_audit med aktøren fra `saet_aktoer()`.
 """
 
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -63,19 +63,28 @@ def satser(session: Session, employee_id: int) -> list[TimeEmployeeRate]:
                                 .order_by(TimeEmployeeRate.valid_from.desc())))
 
 
-# Standard for fastlønnede (bygherren 26.10.2026). Kan rettes pr. medarbejder.
+# Standard for fastlønnede på fuld tid (bygherren 26.10.2026). Kan rettes pr. medarbejder.
 STANDARD_PRODUKTIVE_TIMER = Decimal(1400)
+FULD_TID_TIMER_UGE = Decimal(37)
+
+
+def standard_produktive_timer(normtid: Decimal | None) -> Decimal:
+    """Forholdsmæssigt efter normtiden: 1.400 × normtid / 37, afrundet til hele timer (fx 20 t/uge -> 757).
+    Uden normtid (eller 0) bruges fuld tid: 1.400."""
+    if not normtid:
+        return STANDARD_PRODUKTIVE_TIMER
+    return (STANDARD_PRODUKTIVE_TIMER * normtid / FULD_TID_TIMER_UGE).quantize(Decimal(1), rounding=ROUND_HALF_UP)
 
 
 def ny_sats(session: Session, e: TimeEmployee, gyldig_fra: date, normtid: Decimal | None, kostpris: Decimal,
             produktive_timer: Decimal | None, note: str | None, af_staff_id: int) -> TimeEmployeeRate:
     """Timelønnede har ingen produktive timer – kostprisen tager udgangspunkt i timelønnen. Fastlønnede får
-    STANDARD_PRODUKTIVE_TIMER, hvis intet er angivet."""
+    standarden ud fra normtiden (standard_produktive_timer), hvis intet er angivet."""
     if e.employment == "timeloennet":
         if produktive_timer is not None:
             raise StamdataFejl("Timelønnede har ingen produktive timer – kostprisen tager udgangspunkt i timelønnen")
     elif produktive_timer is None:
-        produktive_timer = STANDARD_PRODUKTIVE_TIMER
+        produktive_timer = standard_produktive_timer(normtid)
     if produktive_timer is not None and produktive_timer <= 0:
         raise StamdataFejl("Produktive timer pr. år skal være større end 0")
     if kostpris < 0:

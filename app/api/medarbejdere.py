@@ -199,11 +199,17 @@ def satser(medarbejder_id: int, session: Session = Depends(db)) -> list[dict]:
                                  for r in stamdata.satser(session, e.id)]
 
 
+@router.get("/standard-produktive-timer")
+def standard_produktive_timer(normtid: Decimal | None = None) -> dict:
+    """Forslag til produktive timer pr. år for en fastlønnet ud fra normtiden (1.400 × normtid / 37)."""
+    return {"produktive_timer_aar": str(stamdata.standard_produktive_timer(normtid))}
+
+
 class NySats(BaseModel):
     gyldig_fra: date
     normtid: Decimal | None = Field(default=None, ge=0, le=168, max_digits=5, decimal_places=2)
     kostpris_pr_time: Decimal = Field(ge=0, max_digits=15, decimal_places=2)
-    # Tom for timelønnede; tom for fastlønnede = standarden (1.400).
+    # Tom for timelønnede; tom for fastlønnede = standarden ud fra normtiden (1.400 × normtid / 37).
     produktive_timer_aar: Decimal | None = Field(default=None, gt=0, max_digits=7, decimal_places=2)
     note: str | None = Field(default=None, max_length=500)
 
