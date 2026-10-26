@@ -263,6 +263,13 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     notifikation til ansvarlig + administratorer. Job `kunde_cvr_opdater` ved oprettelse (prioritet 10) og dagligt
     (scheduler, KUNDE_CVR_SYNC_CRON 06.00). `python -m app.kunder.cvr proeve --cvr <nr> [--felter] | opdater
     --kundenummer <nr> | aendringer`. Reelle ejere læses først i trin 15. Opsætning: DEPLOY.md "CVR-registret".
+  - `kontakter.py` + `app/api/kundekort.py` (trin 3): KUNDEKORTET `/kunder/kort/?id=&fane=` (web/app/kunder/kort/; kundenavnet i
+    Kundeoversigten er et link) – faner Stamdata · Kontaktpersoner · Aftale · Frister · Integrationer · Salgsfakturaer ·
+    Dokumenter · Noter · Log · Timer (kun Kontaktpersoner er bygget). Kontakter: præcis én primær (den første bliver
+    primær; ny primær afløser; primær kan ikke arkiveres, mens der er andre); underskriver og maa_kontaktes_af
+    uafhængige; ALLE ser alle (begrænsede vises "Kontaktes kun af den ansvarlige"); KUN ansvarlig, assistent og admin
+    retter (`kontakter.maa_rette`); slettes aldrig (arkiveres); alt i kunde_log. `/api/kundekort/{id}`, `…/kontakter`,
+    `POST …/kontakter`, `POST /api/kundekort/kontakter/{kid}[/primaer|/arkiver]`.
 - `app/notifikationer/` + `app/api/notifikationer.py` – NOTIFIKATIONER (bygherren 26.10.2026): tabellen `notifications`
   (én pr. modtager, kun læst-markering – slettes ikke), `send_notifikation(session, modtagere, alvor, titel, …)`;
   `/api/notifikationer` (kun egne; `POST {id}/laest`, `POST laest`). Klokken i øverste højre hjørne:

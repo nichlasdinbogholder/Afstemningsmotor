@@ -22,6 +22,7 @@ from app.api.login import db, nuvaerende_medarbejder
 from app.api.login import router as login_router
 from app.api.kundekartotek import router as kundekartotek_router
 from app.api.notifikationer import router as notifikationer_router
+from app.api.kundekort import router as kundekort_router
 from app.api.medarbejdere import router as medarbejdere_router
 from app.api.tid import router as tid_router
 from app.api.videnbase import router as videnbase_router
@@ -53,6 +54,7 @@ app.include_router(videnbase_router)
 app.include_router(tid_router)
 app.include_router(kundekartotek_router)
 app.include_router(notifikationer_router)
+app.include_router(kundekort_router)
 
 
 @app.get("/", response_class=HTMLResponse)

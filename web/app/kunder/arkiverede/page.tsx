@@ -64,7 +64,7 @@ export default function Side() {
             <tbody>
               {viste.map((k) => (
                 <tr key={k.id} className="border-b border-slate-100">
-                  <td className="px-3 py-2 font-medium text-slate-900">{k.navn}</td>
+                  <td className="px-3 py-2 font-medium text-slate-900"><Link href={`/kunder/kort/?id=${k.id}`} className="hover:text-brand-700 hover:underline">{k.navn}</Link></td>
                   <td className="px-3 py-2">{k.kundenummer}</td>
                   <td className="px-3 py-2">{k.cvr}</td>
                   <td className="px-3 py-2">{dato(k.startdato)}</td>
