@@ -716,3 +716,9 @@ Nyt modul i hub'en – fire faser, ét trin ad gangen (PR + merge pr. trin). Kun
   medarbejdere ser alle kontakter – "må kun kontaktes af den ansvarlige" vises tydeligt (ingen skjules); kun
   kundens ansvarlige, assistent og administratorer opretter/retter/arkiverer. Kundekortet er lavet nu med alle faner;
   kun Kontaktpersoner virker – resten bygges i trin 5.
+- **Fase 1, trin 4 (26.10.2026):** listevisningen (`app/kunder/oversigt.py`): "Mine kunder" som standard (ansvarlig
+  eller assistent), sorteret efter nærmeste frist, kolonner kunde/CVR, ansvarlig/assistent, afregning/pris,
+  system/forbindelse, næste frist med dage til; filtrene ansvarlig, afregning, system, livscyklus, forfaldne frister,
+  døde forbindelser, manglende hvidvask. AFVENTER definition fra bygherren (spurgt 26.10.2026): bilagsdækning,
+  månedens status, dækningsgrad – forslag: (1) andel bankposteringer med bilag, (2) "x af y" fuldførte månedsopgaver,
+  (3) (indtægt − timer × kostpris) / indtægt for seneste hele måned.

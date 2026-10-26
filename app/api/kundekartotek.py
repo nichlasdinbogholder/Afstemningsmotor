@@ -2,6 +2,7 @@
 arkivere og genaktivere. Logikken ligger i app/kunder/kartotek.py. Ændringer kræver headeren X-Afstemning.
 
 - `GET  /api/kundekartotek?arkiverede=false|true`   Kundeoversigten eller de arkiverede kunder
+      filtre (trin 4): mine, ansvarlig_id, afregning, system, status, forfaldne, doede_forbindelser, mangler_hvidvask
 - `GET  /api/kundekartotek/valg`                    medarbejdere, regnskabssystemer og årsager til formularerne
 - `POST /api/kundekartotek`                         opret en kunde (startdato + afregningsform kræves)
 - `POST /api/kundekartotek/{id}/ansvarlig`          skift ansvarlig medarbejder (styrer adgangen hos Svend)
@@ -20,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.api.data import kraev_header
 from app.api.login import db, kraev_admin, nuvaerende_medarbejder
-from app.kunder import kartotek
+from app.kunder import kartotek, oversigt
 from app.kunder.models import ARKIV_AARSAGER, SYSTEMER
 from app.personale.models import Staff
 from app.tid import TIDSZONE
@@ -33,8 +34,16 @@ def _i_dag() -> date:
 
 
 @router.get("")
-def kunder(arkiverede: bool = False, session: Session = Depends(db)) -> list[dict]:
-    return kartotek.liste(session, arkiverede, _i_dag())
+def kunder(arkiverede: bool = False, mine: bool = False, ansvarlig_id: int | None = None,
+           afregning: str | None = None, system: str | None = None, status: str | None = None,
+           forfaldne: bool = False, doede_forbindelser: bool = False, mangler_hvidvask: bool = False,
+           m: Staff = Depends(nuvaerende_medarbejder), session: Session = Depends(db)) -> list[dict]:
+    """Kundeoversigten (med filtre, sorteret efter nærmeste frist) – eller de arkiverede kunder."""
+    if arkiverede:
+        return kartotek.liste(session, True, _i_dag())
+    return oversigt.liste(session, m, _i_dag(), oversigt.Filtre(
+        mine=mine, ansvarlig_id=ansvarlig_id, afregning=afregning, system=system, status=status,
+        forfaldne=forfaldne, doede_forbindelser=doede_forbindelser, mangler_hvidvask=mangler_hvidvask))
 
 
 @router.get("/valg")

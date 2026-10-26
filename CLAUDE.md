@@ -270,6 +270,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     uafhængige; ALLE ser alle (begrænsede vises "Kontaktes kun af den ansvarlige"); KUN ansvarlig, assistent og admin
     retter (`kontakter.maa_rette`); slettes aldrig (arkiveres); alt i kunde_log. `/api/kundekort/{id}`, `…/kontakter`,
     `POST …/kontakter`, `POST /api/kundekort/kontakter/{kid}[/primaer|/arkiver]`.
+  - `oversigt.py` (trin 4): listen i Kundeoversigten – `GET /api/kundekartotek?mine=&ansvarlig_id=&afregning=&system=&status=
+    &forfaldne=&doede_forbindelser=&mangler_hvidvask=`; "mine" = ansvarlig ELLER assistent (standard i webdelen); sorteret
+    efter nærmeste åbne frist (kunde_tasks), uden frist sidst. Forbindelse = dårligste af kundens kunde_ledgers. Kolonnerne
+    bilagsdækning, månedens status og dækningsgrad AFVENTER bygherrens definition (vises "afventer definition").
 - `app/notifikationer/` + `app/api/notifikationer.py` – NOTIFIKATIONER (bygherren 26.10.2026): tabellen `notifications`
   (én pr. modtager, kun læst-markering – slettes ikke), `send_notifikation(session, modtagere, alvor, titel, …)`;
   `/api/notifikationer` (kun egne; `POST {id}/laest`, `POST laest`). Klokken i øverste højre hjørne:
