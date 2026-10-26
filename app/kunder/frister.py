@@ -1,22 +1,25 @@
-"""Fanen Frister (bygherren 26.10.2026): hvor ofte kunden indberetter MOMS og LØNSUMSAFGIFT til Skat.
+"""Fanen Frister (bygherren 26.10.2026): kundens ordning hos Skat for MOMS og LØNSUMSAFGIFT.
 
-- Hver især: månedligt, kvartalsvis, halvårligt, årligt – eller "ikke tilmeldt". Tomt = ikke valgt endnu.
-- Gemmes i kunde_obligations (ét sted). Grundlaget for planlægningen senere – fristdatoerne BEREGNES ud fra det.
-- Kun kundens ansvarlige, assistent og administratorer retter. Alle ser. Hver ændring skrives i kundens log med fra/til.
+- Moms: månedligt, kvartalsvis eller halvårligt (Skat har ingen årlig moms). Lønsumsafgift: Skats metode 1-4.
+  Begge kan være "ikke tilmeldt". Tomt = ikke valgt endnu.
+- Gemmes i kunde_obligations (ét sted). Fristdatoerne slås op i Skats fristkalender (app/frister) og vises i
+  AI Planlægning – de beregnes aldrig.
+- KUN ADMINISTRATORER retter (bygherren 26.10.2026 – det styrer planlægningen af kunderne). Alle ser. Hver ændring
+  skrives i kundens log med fra/til.
 """
 
 from sqlalchemy.orm import Session
 
-from app.kunder.kontakter import maa_rette
 from app.kunder.models import Client
-from app.kunder.tabeller import LOENSUM_PERIODER, MOMSPERIODER, KundeLog, KundeObligations
+from app.kunder.tabeller import LOENSUM_METODER, MOMSPERIODER, KundeLog, KundeObligations
 from app.personale.models import Staff
 
-PERIODE_TEKST = {"maaned": "Månedligt", "kvartal": "Kvartalsvis", "halvaar": "Halvårligt", "aar": "Årligt",
+PERIODE_TEKST = {"maaned": "Månedligt", "kvartal": "Kvartalsvis", "halvaar": "Halvårligt",
+                 "metode_1": "Metode 1", "metode_2": "Metode 2", "metode_3": "Metode 3", "metode_4": "Metode 4",
                  "ingen": "Ikke tilmeldt", None: "Ikke valgt"}
 # Felterne på fanen: kode -> (dansk navn, kolonne i kunde_obligations, tilladte værdier).
 FRISTER = {"moms": ("Moms", "vat_period", MOMSPERIODER),
-           "loensumsafgift": ("Lønsumsafgift", "loensumsafgift_period", LOENSUM_PERIODER)}
+           "loensumsafgift": ("Lønsumsafgift", "loensumsafgift_metode", LOENSUM_METODER)}
 
 
 class FristFejl(Exception):
@@ -32,14 +35,14 @@ def json(session: Session, kunde: Client, medarbejder: Staff) -> dict:
     return {"frister": [{"kode": kode, "navn": navn, "periode": getattr(o, kolonne) if o else None,
                          "valg": [{"kode": v, "tekst": PERIODE_TEKST[v]} for v in vaerdier]}
                         for kode, (navn, kolonne, vaerdier) in FRISTER.items()],
-            "kan_rette": maa_rette(kunde, medarbejder)}
+            "kan_rette": medarbejder.rolle == "admin"}
 
 
 def saet(session: Session, af: Staff, client_id: int, frist: str, periode: str | None) -> Client:
     kunde = session.get(Client, client_id)
     if kunde is None:
         raise FristFejl("Kunden findes ikke")
-    if not maa_rette(kunde, af):
+    if af.rolle != "admin":
         raise IkkeTilladt()
     if frist not in FRISTER:
         raise FristFejl("Ukendt frist")
