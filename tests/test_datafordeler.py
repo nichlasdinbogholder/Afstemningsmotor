@@ -94,3 +94,44 @@ def test_skemaet_hentes_fra_schema_adressen(slaaet_til):
     assert kald[0].method == "GET" and kald[0].url.path == "/CVR/v2/schema"
     assert "type CVR_Navn {\n  vaerdi: String" in udsnit and "CVR_Person" not in udsnit
     assert "type Query" in udsnit
+
+
+def _cvr_transport(virksomheder, navne, former, kald=None):
+    def h(request):
+        import json as _json
+        q = _json.loads(request.content)
+        if kald is not None:
+            kald.append(q)
+        if "CVR_Virksomhed(" in q["query"]:
+            return httpx.Response(200, json={"data": {"CVR_Virksomhed": {"nodes": virksomheder}}})
+        if "CVR_Navn(" in q["query"]:
+            return httpx.Response(200, json={"data": {"CVR_Navn": {"nodes": navne}}})
+        return httpx.Response(200, json={"data": {"CVR_Virksomhedsform": {"nodes": former}}})
+    return httpx.MockTransport(h)
+
+
+NU = {"virkningTil": None, "registreringTil": None}
+GAMMEL = {"virkningTil": "2020-01-01", "registreringTil": None}
+
+
+def test_slaa_op_bruger_den_gaeldende_vaerdi(slaaet_til):
+    kald = []
+    t = _cvr_transport([{"id": "E1", "CVRNummer": 12345678, "status": "NORMAL", "virksomhedStartdato": "2015-03-01",
+                         "virksomhedOphoersdato": None, **NU}],
+                       [{"vaerdi": "Gammelt Navn ApS", **GAMMEL}, {"vaerdi": "Murer Hansen ApS", **NU}],
+                       [{"vaerdi": "80", "vaerdiTekst": "Anpartsselskab", **NU}], kald)
+    d = datafordeler.slaa_op("12345678", transport=t)
+    assert (d["navn"], d["virksomhedsform"], d["status"]) == ("Murer Hansen ApS", "Anpartsselskab", "NORMAL")
+    assert kald[0]["variables"] == {"cvr": 12345678} and kald[1]["variables"] == {"id": "E1"}
+
+
+def test_slaa_op_gaetter_aldrig(slaaet_til):
+    with pytest.raises(datafordeler.DatafordelerFejl, match="findes ikke"):
+        datafordeler.slaa_op("12345678", transport=_cvr_transport([], [], []))
+    to = [{"id": "E1", "CVRNummer": 12345678, **NU}]
+    with pytest.raises(datafordeler.DatafordelerFejl, match="2 gældende værdier for navnet"):
+        datafordeler.slaa_op("12345678", transport=_cvr_transport(to, [{"vaerdi": "A", **NU}, {"vaerdi": "B", **NU}], []))
+    with pytest.raises(datafordeler.DatafordelerFejl, match="anden virksomhed"):
+        datafordeler.slaa_op("12345678", transport=_cvr_transport([{"id": "E1", "CVRNummer": 87654321, **NU}], [], []))
+    with pytest.raises(datafordeler.DatafordelerFejl, match="8 cifre"):
+        datafordeler.slaa_op("1234")
