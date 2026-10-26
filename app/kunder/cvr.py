@@ -5,7 +5,9 @@
 - Opslag, når en kunde oprettes med CVR (job i kø), og dagligt for alle aktive kunder (KUNDE_CVR_SYNC_CRON).
 - Status med konkurs eller tvangsopløsning er 'kritisk' og sendes samme dag som notifikation til den ansvarlige og
   alle administratorer. Tidligere navne lægges i `kunde_aliases`, så søgningen finder dem.
-- Kun læsning. Uden KUNDE_CVR_API_BRUGER/KUNDE_CVR_API_KODE er opslag slået fra (intet hentes, intet fejler).
+- KILDER: Erhvervsstyrelsen (KUNDE_CVR_API_BRUGER/_KODE – alle felter) eller, indtil den er på plads,
+  Datafordeleren (DATAFORDELER_API_KEY – navn, virksomhedsform og status; app/kunder/datafordeler.py). Uden
+  nogen af dem er opslag slået fra (intet hentes, intet fejler). Kun læsning.
 - Gætter aldrig: et felt, der ikke er i svaret, bliver tomt. Et svar med et andet CVR-nummer eller flere
   virksomheder afvises. Reelle ejere læses først i trin 15 – når der er et rigtigt svar at bygge på.
 
@@ -29,6 +31,7 @@ from tenacity import Retrying, retry_if_exception, stop_after_attempt, wait_expo
 from app.config import get_settings
 from app.jobs.koe import laeg_i_koe
 from app.jobs.register import JobKontekst, jobtype
+from app.kunder import datafordeler
 from app.kunder.models import I_DRIFT, I_OVERSIGTEN, Client
 from app.kunder.tabeller import KundeAlias, KundeCvrChange, KundeCvrSnapshot, KundeLog
 from app.notifikationer.tjeneste import administratorer, send_notifikation
@@ -73,9 +76,15 @@ class CvrData:
         return {f: getattr(self, f) for f in FELTER}
 
 
-def cvr_slaaet_til() -> bool:
+def erst_slaaet_til() -> bool:
+    """Erhvervsstyrelsens system-til-system-adgang (alle felter, også regnskabsåret)."""
     s = get_settings()
     return bool(s.kunde_cvr_api_bruger and s.kunde_cvr_api_kode)
+
+
+def cvr_slaaet_til() -> bool:
+    """CVR-opslag kører, når én af kilderne er sat op: Erhvervsstyrelsen eller Datafordeleren."""
+    return erst_slaaet_til() or datafordeler.slaaet_til()
 
 
 # --- Hentning ---------------------------------------------------------------------------------------------------
@@ -85,7 +94,7 @@ def hent_raat(cvr: str, transport: httpx.BaseTransport | None = None, vent=None)
     if not re.fullmatch(r"[0-9]{8}", cvr or ""):
         raise CvrFejl("CVR-nummeret skal være 8 cifre")
     s = get_settings()
-    if not cvr_slaaet_til():
+    if not erst_slaaet_til():
         raise CvrFejl("CVR-opslag er ikke slået til (KUNDE_CVR_API_BRUGER/KUNDE_CVR_API_KODE mangler)")
     kode = s.kunde_cvr_api_kode.get_secret_value()
     registrer_hemmelighed(kode)
@@ -178,7 +187,18 @@ def laes(svar: dict, cvr: str) -> CvrData | None:
 
 
 def hent(cvr: str, transport: httpx.BaseTransport | None = None, vent=None) -> CvrData | None:
-    return laes(hent_raat(cvr, transport, vent), cvr)
+    """Erhvervsstyrelsen, hvis den er sat op (flest felter) – ellers Datafordeleren (navn, virksomhedsform og
+    status; adresse, branchekode og regnskabsår har Datafordeleren ikke, så de bliver tomme)."""
+    if erst_slaaet_til():
+        return laes(hent_raat(cvr, transport, vent), cvr)
+    try:
+        d = datafordeler.slaa_op(cvr, transport)
+    except datafordeler.DatafordelerFejl as fejl:
+        raise CvrFejl(str(fejl)) from None
+    if d is None:
+        return None
+    return CvrData(cvr=cvr, name=d["navn"], address=None, company_form=d["virksomhedsform"], industry_code=None,
+                   fiscal_year_end=None, status=d["status"])
 
 
 # --- Sammenligning ----------------------------------------------------------------------------------------------
@@ -224,6 +244,10 @@ def sammenlign(session: Session, kunde: Client, data: CvrData | None) -> list[tu
     else:
         for felt, ny in nye.items():
             gammel = getattr(snap, felt)
+            # Et felt, der hidtil var tomt (fx regnskabsåret, når Erhvervsstyrelsens adgang kommer oven på
+            # Datafordeleren), er ikke en ændring – kun en kritisk status meldes altid.
+            if gammel is None and _alvor(felt, ny) != "kritisk":
+                continue
             if gammel != ny:
                 _registrer(session, kunde, felt, gammel, ny, _alvor(felt, ny), fund)
                 if felt == "name" and gammel and gammel not in tidligere_navne:
@@ -299,8 +323,9 @@ def main(argv: list[str] | None = None) -> int:
     p = under.add_parser("proeve", help="hent og vis ét CVR-nummer – gemmer intet")
     p.add_argument("--cvr", required=True)
     p.add_argument("--felter", action="store_true", help="vis også feltnavnene i CVR's svar")
-    o = under.add_parser("opdater", help="hent og sammenlign én kunde nu")
-    o.add_argument("--kundenummer", required=True)
+    o = under.add_parser("opdater", help="hent og sammenlign én kunde (eller alle i drift) nu")
+    o.add_argument("--kundenummer")
+    o.add_argument("--alle", action="store_true", help="alle kunder i drift med CVR-nummer")
     a = under.add_parser("aendringer", help="vis forskelle, der ikke er håndteret")
     a.add_argument("--kundenummer")
     args = parser.parse_args(argv)
@@ -324,16 +349,31 @@ def main(argv: list[str] | None = None) -> int:
             if args.kundenummer:
                 q = q.where(Client.kundenummer == args.kundenummer)
             if args.kommando == "opdater":
-                kunde = session.scalars(q).one_or_none()
-                if kunde is None:
+                if args.alle:
+                    kunder = list(session.scalars(select(Client).where(
+                        Client.status.in_(I_DRIFT), Client.cvr.is_not(None)).order_by(Client.navn)))
+                elif args.kundenummer:
+                    kunder = list(session.scalars(q))
+                else:
+                    print("Fejl: angiv --kundenummer eller --alle", file=sys.stderr)
+                    return 2
+                if not kunder:
                     print("Fejl: Kunden findes ikke", file=sys.stderr)
                     return 1
-                fund = opdater(session, kunde)
-                session.commit()
-                print(f"{kunde.navn}: {len(fund)} ny(e) forskel(le)")
-                for felt, gammel, ny, alvor in fund:
-                    print(f"  [{alvor}] {FELTER.get(felt, (felt,))[0]}: {gammel or '(tom)'} → {ny or '(tom)'}")
-                return 0
+                fejl_i_alt = 0
+                for kunde in kunder:
+                    try:                         # én kundes fejl stopper ikke resten
+                        fund = opdater(session, kunde)
+                        session.commit()
+                    except CvrFejl as fejl:
+                        session.rollback()
+                        fejl_i_alt += 1
+                        print(f"{kunde.navn}: FEJL – {fejl}")
+                        continue
+                    print(f"{kunde.navn}: {len(fund)} ny(e) forskel(le)")
+                    for felt, gammel, ny, alvor in fund:
+                        print(f"  [{alvor}] {FELTER.get(felt, (felt,))[0]}: {gammel or '(tom)'} → {ny or '(tom)'}")
+                return 2 if fejl_i_alt else 0
             aendringer = session.execute(
                 select(KundeCvrChange, Client.navn).join(Client, Client.id == KundeCvrChange.client_id)
                 .where(KundeCvrChange.handled_at.is_(None),

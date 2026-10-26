@@ -269,8 +269,13 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     --kundenummer <nr> | aendringer`. Reelle ejere læses først i trin 15. Opsætning: DEPLOY.md "CVR-registret".
   - `app/kunder/datafordeler.py` (bygherren 26.10.2026): CVR via DATAFORDELEREN (GraphQL, gratis API-nøgle
     DATAFORDELER_API_KEY – nøglen står i adressen, så adressen skrives ALDRIG i fejl). Stamdata på kundekortet = navn,
-    CVR-nummer, virksomhedsform og regnskabsperiode – hentes AUTOMATISK, tastes aldrig manuelt. Trin 1: `skema`-kommandoen
-    viser feltnavnene; hentningen bygges ud fra det rigtige svar (DEPLOY.md "Datafordeleren").
+    CVR-nummer, virksomhedsform og regnskabsperiode – hentes AUTOMATISK, tastes aldrig manuelt. Datamodel (aflæst på
+    serveren): CVR_Virksomhed (CVRNummer, id, status) + CVR_Navn/CVR_Virksomhedsform via CVREnhedsId; gældende = uden
+    slutdato. Datafordeleren har IKKE regnskabsår. `cvr.hent()` bruger Erhvervsstyrelsen, hvis den er sat op, ellers
+    Datafordeleren; et felt, der går fra tomt til kendt, er ikke en ændring. `proeve --cvr`, `skema`.
+    `app/kunder/stamdata.py` + `GET /api/kundekort/{id}/stamdata` + fanen Stamdata: REGNSKABSPERIODEN = kundens regnskabsår i
+    regnskabssystemet (accounting_years, det der omfatter dagen) – CVR's regnskabsår (kun Erhvervsstyrelsen) bruges til
+    KONTROL: forskel = advarsel på fanen (bygherren 26.10.2026). `python -m app.kunder.cvr opdater --alle`.
   - `kontakter.py` + `app/api/kundekort.py` (trin 3): KUNDEKORTET `/kunder/kort/?id=&fane=` (web/app/kunder/kort/; kundenavnet i
     Kundeoversigten er et link) – faner Stamdata · Kontaktpersoner · Aftale · Frister · Integrationer · Salgsfakturaer ·
     Dokumenter · Noter · Log · Timer (kun Kontaktpersoner er bygget). Kontakter: præcis én primær (den første bliver

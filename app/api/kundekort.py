@@ -9,7 +9,10 @@ Alle medarbejdere ser kortet og kontaktpersonerne. Kun kundens ansvarlige, assis
 - `POST /api/kundekort/kontakter/{kid}`              ret
 - `POST /api/kundekort/kontakter/{kid}/primaer`      gør til primær
 - `POST /api/kundekort/kontakter/{kid}/arkiver`      arkivér (slettes aldrig)
+- `GET  /api/kundekort/{id}/stamdata`                navn, CVR, virksomhedsform (CVR) + regnskabsperiode (regnskabssystemet)
 """
+
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -17,9 +20,10 @@ from sqlalchemy.orm import Session
 
 from app.api.data import kraev_header
 from app.api.login import db, nuvaerende_medarbejder
-from app.kunder import kartotek, kontakter
+from app.kunder import kartotek, kontakter, stamdata
 from app.kunder.models import Client
 from app.personale.models import Staff
+from app.tid import TIDSZONE
 
 router = APIRouter(prefix="/api/kundekort", dependencies=[Depends(nuvaerende_medarbejder)])
 IKKE_TILLADT = "Kun kundens ansvarlige, assistent eller en administrator kan rette kontaktpersoner"
@@ -98,3 +102,8 @@ def primaer(kontakt_id: int, m: Staff = Depends(nuvaerende_medarbejder), session
 @router.post("/kontakter/{kontakt_id}/arkiver", dependencies=[Depends(kraev_header)])
 def arkiver(kontakt_id: int, m: Staff = Depends(nuvaerende_medarbejder), session: Session = Depends(db)) -> dict:
     return _udfoer(session, lambda: kontakter.arkiver(session, m, kontakt_id))
+
+
+@router.get("/{kunde_id}/stamdata")
+def stamdata_vis(kunde_id: int, session: Session = Depends(db)) -> dict:
+    return stamdata.json(session, _kunde(session, kunde_id), datetime.now(TIDSZONE).date())

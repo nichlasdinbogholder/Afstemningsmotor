@@ -340,6 +340,10 @@ kræver kun en gratis API-nøgle – ingen ansøgning og ingen ventetid.
 5. Prøv (viser kun tjenestens feltnavne – ingen kundedata, ingen nøgle):
    `docker compose -f docker-compose.prod.yml exec -T api python -m app.kunder.datafordeler skema`
    Send et billede af svaret, så bygges hentningen af navn, CVR-nummer, virksomhedsform og regnskabsperiode ud fra det.
+6. Prøv ét opslag (gemmer intet):
+   `docker compose -f docker-compose.prod.yml exec -T api python -m app.kunder.datafordeler proeve --cvr 40850635`
+7. Hent alle kunder nu (ellers sker det automatisk hver morgen kl. 06.00):
+   `docker compose -f docker-compose.prod.yml exec -T api python -m app.kunder.cvr opdater --alle`
 
 ## CVR-registret (Kundeoversigten – stamdata fra Erhvervsstyrelsen)
 Når I har fået brugernavn og adgangskode til Erhvervsstyrelsens "CVR system-til-system":

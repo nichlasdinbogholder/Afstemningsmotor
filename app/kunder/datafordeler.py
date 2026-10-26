@@ -138,15 +138,15 @@ def _gaeldende(nodes: list[dict], hvad: str) -> dict | None:
     return nu[0] if nu else None
 
 
-def slaa_op(cvr: str, transport: httpx.BaseTransport | None = None) -> dict:
-    """Navn, CVR-nummer, virksomhedsform og status for én virksomhed. Kun læsning."""
+def slaa_op(cvr: str, transport: httpx.BaseTransport | None = None) -> dict | None:
+    """Navn, CVR-nummer, virksomhedsform og status for én virksomhed – None, hvis CVR-nummeret ikke findes (eller
+    ikke længere har en gældende registrering). Kun læsning."""
     if not (cvr or "").isdigit() or len(cvr) != 8:
         raise DatafordelerFejl("CVR-nummeret skal være 8 cifre")
     virksomheder = forespoerg(VIRKSOMHED, {"cvr": int(cvr)}, transport)["CVR_Virksomhed"]["nodes"]
     v = _gaeldende(virksomheder, "virksomheden")
     if v is None:
-        raise DatafordelerFejl(f"CVR-nummeret {cvr} findes ikke hos Datafordeleren"
-                               + (f" ({len(virksomheder)} historiske registreringer)" if virksomheder else ""))
+        return None
     if str(v.get("CVRNummer")) != cvr:
         raise DatafordelerFejl("Datafordeleren returnerede en anden virksomhed end den, der blev spurgt efter")
     navn = _gaeldende(forespoerg(NAVN, {"id": v["id"]}, transport)["CVR_Navn"]["nodes"], "navnet")
@@ -198,6 +198,9 @@ def main(argv: list[str] | None = None) -> int:
         except DatafordelerFejl as fejl:
             print(f"Fejl: {fejl}", file=sys.stderr)
             return 2
+        if data is None:
+            print(f"CVR-nummeret {args.cvr} findes ikke hos Datafordeleren.")
+            return 1
         for felt, tekst in (("cvr", "CVR-nummer"), ("navn", "Navn"), ("virksomhedsform", "Virksomhedsform"),
                             ("virksomhedsform_kode", "Virksomhedsform (kode)"), ("status", "Status"),
                             ("startdato", "Startdato"), ("ophoersdato", "Ophørsdato")):
