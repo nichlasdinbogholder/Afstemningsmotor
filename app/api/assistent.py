@@ -163,7 +163,7 @@ async def _stream(samtale_id: int, spoergsmaal_id: int, beskeder_til_model: list
         besked_id = _gem(samtale_id, svar, "complete")
         gemt = True
         yield _haendelse({"type": "slut", "besked_id": besked_id, "status": "complete",
-                          "opslag": [sm.beskriv_opslag(x) for x in svar.lookups]})
+                          "opslag": [sm.beskriv_opslag(x) for x in svar.lookups], "kilder": svar.kilder})
     except (asyncio.CancelledError, GeneratorExit):
         # Medarbejderen lukkede siden midt i svaret: gem det modtagne med markering (ikke en tom række).
         if svar.tekst.strip():

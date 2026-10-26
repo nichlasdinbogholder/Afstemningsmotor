@@ -140,7 +140,14 @@ export default function Fagassistent() {
         </div>
       </div>
 
-      {/* Kundevælgeren står synligt hele tiden. Et skift starter en ny samtale. */}
+      {/* Fast besked øverst (bygherren 26.10.2026): Svend er kun vejledende. */}
+      <p role="note" className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+        <span className="font-semibold">Kun vejledende.</span> Svends svar er vejledning – ikke en afgørelse. Tjek kilden,
+        før du bruger et tal, og få det bindende svar fra den kundeansvarlige.
+      </p>
+
+      {/* Kundevælgeren står synligt hele tiden. Et skift starter en ny samtale. Medarbejdere ser kun de kunder, de er
+          ansvarlige for i Kundeoversigten; administratorer ser alle aktive. */}
       <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm">
         <label htmlFor="svend-kunde" className="text-slate-500">Kunde:</label>
         <select id="svend-kunde" value={kundeId ?? ""} disabled={svarer}
@@ -173,14 +180,26 @@ export default function Fagassistent() {
                 </ul>
               </div>
             )}
-            {b.kilder && b.kilder.length > 0 && (
+            {b.kilder && b.kilder.some((k) => k.kb_id !== undefined) && (
               <div className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-500">
                 Kilder fra videnbasen:{" "}
-                {b.kilder.map((k, j) => (
+                {b.kilder.filter((k) => k.kb_id !== undefined).map((k, j) => (
                   <span key={k.kb_id}>{j > 0 && " · "}
                     <a href={`/fagassistent/?fane=videnbase&dok=${k.kb_id}`} className="text-brand-600 hover:underline">{k.title}</a>
                   </span>
                 ))}
+              </div>
+            )}
+            {b.kilder && b.kilder.some((k) => k.url) && (
+              <div className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-500">
+                <p>Slået op på nettet:</p>
+                <ul className="mt-0.5 list-disc pl-4">
+                  {b.kilder.filter((k) => k.url).map((k) => (
+                    <li key={k.url}>
+                      <a href={k.url} target="_blank" rel="noopener noreferrer" className="break-words text-brand-600 hover:underline">{k.title}</a>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
             {b.id !== null && b.status !== "streaming" && <Vurdering beskedId={b.id} givet={b.min_vurdering} />}

@@ -4,7 +4,9 @@
     python -m app.assistent.proeve --kundenummer <nr> --ansvarlig <e-mail>   (også trin 14: svar med kundetal)
 
 Stiller fire spørgsmål og tjekker svarene – med det materiale fra videnbasen, Svend ville få. Intet gemmes i
-databasen. Kræver ANTHROPIC_API_KEY. Test 15 kræver en aktiv kilometersats i videnbasen (ellers springes den over).
+databasen. Kræver ANTHROPIC_API_KEY. Med websøgningen slået til (ASSISTANT_WEB_DOMAINS) må Svend oplyse en sats, han
+selv har fundet på en af de tilladte sider – men så SKAL siden stå som kilde. Uden websøgning kræver test 15 en aktiv
+kilometersats i videnbasen (ellers springes den over).
 Kontrollerne er enkle tekstkontroller; læs også selv svarene, de skrives ud.
 Med --kundenummer stilles også et spørgsmål om kundens moms i sidste kvartal: Svend skal slå op i kundens regnskab
 (kun læsning), starte med hvad han slog op og hvor (konto og beløb), ikke sige hvad der skal indberettes, og slutte
@@ -33,12 +35,22 @@ def _materiale(tekst: str) -> list:
         return materiale
 
 
+# Sider på nettet, Svend har brugt til det seneste svar (kun til kontrollen af test 14 og 15).
+SIDSTE_WEBKILDER: list[str] = []
+
+
 async def _spoerg(tekst: str, materiale: list, kunde=None, opslag=None) -> str:
     svar = sm.Svar()
     async for _ in sm.stream_svar([{"role": "user", "content": tekst}], svar, sm.systemtekst(materiale, kunde),
                                   opslag=opslag):
         pass
+    SIDSTE_WEBKILDER[:] = [k["url"] for k in svar.kilder if k.get("url")]
     return svar.tekst
+
+
+def _tilladt(url: str) -> bool:
+    vaert = url.split("//", 1)[-1].split("/", 1)[0].lower()
+    return any(vaert == d or vaert.endswith("." + d) for d in sm.web_domaener())
 
 
 # Svaret må ikke SIGE, hvad der skal indberettes: "du skal indberette …", "indberet 73.189 kr." eller "rubrik A: 1.234".
@@ -124,7 +136,7 @@ async def main(argv: list[str] | None = None) -> int:
         satser = [d for d in materiale if d.category == "satser"]
         if materiale:
             print("  Materiale fra videnbasen: " + "; ".join(d.title for d in materiale))
-        if nr == "15" and not satser:
+        if nr == "15" and not satser and not sm.web_domaener():
             print("  SPRINGES OVER: der er ingen aktiv sats i videnbasen, der passer. Læg kilometersatsen ind først.")
             continue
         try:
@@ -134,13 +146,25 @@ async def main(argv: list[str] | None = None) -> int:
             resultater.append(False)
             continue
         print("  Svar: " + svar.strip().replace("\n", "\n        "))
+        if SIDSTE_WEBKILDER:
+            print("  Slået op på nettet: " + " · ".join(SIDSTE_WEBKILDER))
+        if SIDSTE_WEBKILDER:
+            udenfor = [u for u in SIDSTE_WEBKILDER if not _tilladt(u)]
+            resultater.append(_vis("kun tilladte sider", not udenfor,
+                                   "alle kilder er på de tilladte sider" if not udenfor
+                                   else "uden for de tilladte sider: " + ", ".join(udenfor)))
         if nr == "14" and satser:
             print("  (Der ligger en sats i videnbasen, så Svend må gerne nævne den – kontrollen springes over.)")
         elif nr == "14":
-            resultater.append(_vis("ingen sats fra hukommelsen", not PROCENTSATS.search(svar),
-                                   "ingen procentsats i svaret" if not PROCENTSATS.search(svar)
-                                   else "svaret indeholder en procentsats"))
-        if nr == "15":
+            har_sats = bool(PROCENTSATS.search(svar))
+            resultater.append(_vis("sats kun med kilde", not har_sats or bool(SIDSTE_WEBKILDER),
+                                   "ingen procentsats i svaret" if not har_sats
+                                   else "satsen har en kilde fra nettet" if SIDSTE_WEBKILDER
+                                   else "procentsats UDEN kilde – fra hukommelsen"))
+        if nr == "15" and not satser:
+            resultater.append(_vis("slår satsen op på nettet", bool(SIDSTE_WEBKILDER),
+                                   "har brugt en side på nettet" if SIDSTE_WEBKILDER else "har ikke slået noget op"))
+        elif nr == "15":
             sats = satser[0]
             tal = sm.dk_tal(sats.value)
             resultater.append(_vis("oplyser satsen fra videnbasen", tal in svar,

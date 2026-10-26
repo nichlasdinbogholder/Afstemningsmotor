@@ -348,6 +348,12 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   `active` inden for valid_from/valid_to må nå modellen; satser kræver value+unit; udkast peger på `replaces_id`)
   og kb_rate_checks. Satser bliver ALDRIG aktive uden menneskelig godkendelse; assistenten skriver aldrig til
   e-conomic/Dinero og afgør aldrig en kundesag.
+  - WEBSØGNING (bygherren 26.10.2026): Svend slår SELV satser/grænser/frister op – KUN på ASSISTANT_WEB_DOMAINS (skat.dk,
+    skm.dk, sktst.dk, retsinformation.dk, borger.dk, virk.dk, erhvervsstyrelsen.dk, nationalbanken.dk, dst.dk, atp.dk; tom =
+    slået fra) via Anthropics web_search/web_fetch (`samtale.web_vaerktoejer()`, højst ASSISTANT_WEB_MAX_USES pr. svar;
+    `pause_turn` fortsættes). Tal fra nettet SKAL have siden som kilde; brugte sider gemmes i `sources` som {url, title} og
+    vises under svaret. Aldrig kundenavn/CVR/CPR/kundetal i en søgning (`webtekst()`). Videnbasen bruges stadig først.
+    Øverst i Svend-vinduet står fast "Kun vejledende".
   - `samtale.py`: `find_materiale()` (videnbasen før hvert svar – kun aktive og gyldige; kilder gemmes i `sources`),
     historik, gemning og kaldet til modellen (biblioteket `anthropic`, godkendt 16.10.2026) – KUN på
     serveren; nøglen `ANTHROPIC_API_KEY` registreres i logfilteret. Grundinstruksen i `system_prompt.md`.

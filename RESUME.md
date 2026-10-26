@@ -634,3 +634,13 @@ selskabsdimension). Fire faser; ét trin ad gangen med PR og merge.
   samarbejdets ophør. En arkiveret kunde stoppes HELT (status 'opsagt'): ingen hentning, ingen rykkere, kan ikke vælges i
   timeregistreringen eller hos Svend. Intet slettes. Genaktivering af en administrator er muligt.
 - Den ansvarlige medarbejder i Kundeoversigten afgør, hvilke kunder medarbejderen kan spørge Svend om.
+
+# Svend slår selv op på nettet (bygherren 26.10.2026)
+- Svend finder selv satser, beløbsgrænser og frister på skat.dk og andre offentlige sider – uden at en administrator
+  først skal lægge dem i videnbasen. Kun de sider, der står i ASSISTANT_WEB_DOMAINS, kan bruges.
+- Et tal fra nettet skal altid have siden som kilde (vises under svaret som "Slået op på nettet"). Finder Svend ikke
+  tallet, siger han det – han gætter aldrig.
+- Søgningerne sker hos Anthropic. Der må aldrig stå kundens navn, CVR, CPR eller tal fra kundens regnskab i en søgning.
+- Øverst i Svend-vinduet står fast: "Kun vejledende".
+- Medarbejdere kan kun spørge om de kunder, de er ansvarlige for i Kundeoversigten (administratorer: alle aktive).
+- Videnbasen og den ugentlige satskontrol findes stadig; en godkendt sats i videnbasen bruges før nettet.

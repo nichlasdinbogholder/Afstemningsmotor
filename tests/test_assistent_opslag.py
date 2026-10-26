@@ -336,7 +336,44 @@ def test_34_afkortning_siges_i_svaret(db_session, samme_session, medarbejder, ku
 def test_38_uden_kunde_ingen_opslag(monkeypatch):
     model = FalskModel([([_tekst("Generelt svar.")], "end_turn")])
     svar, tekst = _koer(model, None, monkeypatch)
-    assert tekst == "Generelt svar." and "tools" not in model.kald[0] and svar.lookups == []
+    assert tekst == "Generelt svar." and svar.lookups == []
+    # Kun websøgningen (hos Anthropic) – ingen opslag i et kunderegnskab.
+    assert [t["name"] for t in model.kald[0]["tools"]] == ["web_search", "web_fetch"]
+
+
+# Websøgning (bygherren 26.10.2026): kun de tilladte offentlige sider – og pause midt i svaret fortsættes.
+def test_websoegning_kun_tilladte_sider(monkeypatch):
+    monkeypatch.setattr(sm.get_settings(), "assistant_web_domains", "skat.dk, retsinformation.dk")
+    soeg, hent = sm.web_vaerktoejer()
+    assert soeg["type"] == "web_search_20260209" and hent["type"] == "web_fetch_20260209"
+    assert soeg["allowed_domains"] == hent["allowed_domains"] == ["skat.dk", "retsinformation.dk"]
+    tekst = sm.systemtekst()
+    assert "WEBSØGNING\n" in tekst and "skat.dk, retsinformation.dk" in tekst and "ALDRIG kundens navn" in tekst
+    monkeypatch.setattr(sm.get_settings(), "assistant_web_domains", "")
+    assert sm.web_vaerktoejer() == [] and "WEBSØGNING\n" not in sm.systemtekst()
+    model = FalskModel([([_tekst("Uden net.")], "end_turn")])
+    _koer(model, None, monkeypatch)
+    assert "tools" not in model.kald[0]
+
+
+def test_websoegning_pause_og_kilder(monkeypatch):
+    soegning = _blok(type="server_tool_use", id="srv1", name="web_search", input={"query": "kilometersats 2026"})
+    hentet = _blok(type="web_fetch_tool_result", tool_use_id="srv2",
+                   content={"type": "web_fetch_result", "url": "https://skat.dk/satser",
+                            "content": {"type": "document", "title": "Satser – skat.dk"}})
+    citeret = _blok(type="text", text="Satsen er 3,94 kr. pr. km (skat.dk).",
+                    citations=[{"type": "web_search_result_location", "url": "https://info.skat.dk/km",
+                                "title": "Kørselsgodtgørelse", "cited_text": "3,94 kr."},
+                               {"type": "web_search_result_location", "url": "https://skat.dk/satser",
+                                "title": "Dublet", "cited_text": "…"}])
+    model = FalskModel([([soegning, hentet], "pause_turn"), ([citeret], "end_turn")])
+    svar, tekst = _koer(model, None, monkeypatch)
+    assert len(model.kald) == 2 and tekst == "Satsen er 3,94 kr. pr. km (skat.dk)."
+    # Efter en pause sendes svaret indtil nu tilbage – uden et nyt spørgsmål fra medarbejderen.
+    sidste = model.kald[1]["messages"][-1]
+    assert sidste["role"] == "assistant" and sidste["content"][0]["type"] == "server_tool_use"
+    assert svar.kilder == [{"url": "https://skat.dk/satser", "title": "Satser – skat.dk"},
+                           {"url": "https://info.skat.dk/km", "title": "Kørselsgodtgørelse"}]
 
 
 # 37. Hvert opslag logges i lookups – hele vejen gennem API'et
@@ -353,7 +390,7 @@ def test_37_opslag_gemmes_paa_svaret(db_session, samme_session, provider, medarb
         monkeypatch.setattr(sm, "_klient", lambda: model)
         r = k.post(f"/api/v1/assistant/conversations/{s['id']}/messages", headers=H, json={"tekst": "Arbejdstøj?"})
         assert r.status_code == 200
-        assert [v["name"] for v in model.kald[0]["tools"]] == list(op.NAVNE)
+        assert [v["name"] for v in model.kald[0]["tools"]] == ["web_search", "web_fetch"] + list(op.NAVNE)
         besked = db_session.scalars(select(AssistantMessage).where(
             AssistantMessage.conversation_id == s["id"], AssistantMessage.role == "assistant")).one()
         assert [(x["funktion"], x["kunde_id"], x["argumenter"]["konto"], x["antal_raekker"]) for x in besked.lookups] \

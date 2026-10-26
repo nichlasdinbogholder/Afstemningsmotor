@@ -7,6 +7,9 @@
   hvor dagens dato ligger i gyldighedsperioden, kommer med – en udløbet eller ikke-godkendt sats når ALDRIG
   modellen. Satser sendes med datoen, de senest er bekræftet. Findes intet, får modellen besked om det, så den
   ikke oplyser satser, beløbsgrænser eller frister (fast regel 1).
+- WEBSØGNING (bygherren 26.10.2026): Svend slår selv satser, grænser og frister op – KUN på de offentlige sider i
+  ASSISTANT_WEB_DOMAINS (skat.dk m.fl.). Søgningen sker hos Anthropic; der må aldrig stå kundenavn, CVR, CPR eller
+  tal fra kundens regnskab i en søgning (står i instruksen). De sider, Svend bruger, gemmes som kilder på svaret.
 """
 
 import asyncio
@@ -179,8 +182,40 @@ def beskriv_opslag(opslag: dict) -> str:
     return " · ".join(dele)
 
 
+def web_domaener() -> list[str]:
+    return [d.strip() for d in get_settings().assistant_web_domains.split(",") if d.strip()]
+
+
+def web_vaerktoejer() -> list[dict]:
+    """Websøgning og hentning af sider – kun på de tilladte sider. Tom liste, når websøgningen er slået fra."""
+    domaener = web_domaener()
+    if not domaener:
+        return []
+    loft = get_settings().assistant_web_max_uses
+    return [
+        {"type": "web_search_20260209", "name": "web_search", "max_uses": loft, "allowed_domains": domaener,
+         "user_location": {"type": "approximate", "country": "DK", "timezone": "Europe/Copenhagen"}},
+        {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": loft, "allowed_domains": domaener},
+    ]
+
+
+def webtekst() -> str:
+    return ("WEBSØGNING\n"
+            "Du kan selv søge og læse sider på nettet – men kun på disse offentlige sider: "
+            + ", ".join(web_domaener()) + ".\n"
+            "Spørges der om en sats, en beløbsgrænse eller en frist, og står den ikke i materialet fra videnbasen, så "
+            "slå den op. Et tal, du selv har fundet på en af siderne i denne samtale, må du gerne oplyse – også når "
+            "der ovenfor står, at tal kun må komme fra videnbasen. Skriv da, hvilken side tallet står på (adressen), "
+            "og hvilket år eller hvilken periode det gælder for. Står der forskellige tal, eller er du i tvivl om "
+            "perioden, så sig det. Finder du ikke tallet, så sig det – gæt aldrig.\n"
+            "Søg kun med almindelige fagord (fx \"kilometersats 2026\"). Skriv ALDRIG kundens navn, CVR- eller "
+            "CPR-nummer, beløb fra kundens regnskab eller andre oplysninger om en person eller kunde i en søgning.")
+
+
 def systemtekst(materiale: list[KbDocument] | None = None, kunde: Client | None = None) -> str:
     dele = [GRUNDINSTRUKS.read_text(encoding="utf-8").strip(), materialetekst(materiale or [])]
+    if web_domaener():
+        dele.append(webtekst())
     if kunde is not None:
         dele.append(kundetekst(kunde))
     return "\n\n".join(dele)
@@ -247,7 +282,7 @@ class Svar:
     millisekunder: int | None = None
     afkortet: bool = False
     afvist: bool = False
-    kilder: list = field(default_factory=list)  # [{kb_id, title}] – dokumenterne, der blev sendt med
+    kilder: list = field(default_factory=list)  # [{kb_id, title}] fra videnbasen + [{url, title}] fra nettet
     lookups: list = field(default_factory=list)  # opslag i kundens regnskab (se opslag.py)
 
 
@@ -277,13 +312,41 @@ def _blok(b) -> dict:
     return b.model_dump(mode="json", exclude_none=True)
 
 
+def _webkilder(blokke) -> list[dict]:
+    """De sider på nettet, Svend har brugt i svaret: sider han har hentet, og sider han citerer fra søgningen."""
+    ud = []
+    for b in blokke:
+        d = b if isinstance(b, dict) else b.model_dump(mode="json")
+        if d.get("type") == "web_fetch_tool_result" and isinstance(d.get("content"), dict):
+            indhold = d["content"]
+            dokument = indhold.get("content") or {}
+            if indhold.get("url"):
+                ud.append({"url": indhold["url"], "title": dokument.get("title") or indhold["url"]})
+        if d.get("type") == "text":
+            for c in d.get("citations") or []:
+                if c.get("url"):
+                    ud.append({"url": c["url"], "title": c.get("title") or c["url"]})
+    return ud
+
+
+def _tilfoej_kilder(svar: "Svar", nye: list[dict]) -> None:
+    kendte = {k.get("url") for k in svar.kilder}
+    for k in nye:
+        if k["url"] not in kendte:
+            svar.kilder.append(k)
+            kendte.add(k["url"])
+
+
 async def stream_svar(beskeder: list[dict], svar: Svar, system: str | None = None,
                       opslag=None) -> AsyncIterator[str]:
     """Kald modellen og giv tekststykkerne videre, efterhånden som de kommer. `svar` udfyldes undervejs.
 
     Med `opslag` (kun i en samtale om en kunde) får modellen de læsende opslagsfunktioner. Beder den om et
     opslag, udføres det på serveren (med kontrol af kunden), resultatet sendes tilbage, og modellen fortsætter.
-    Højst ASSISTANT_MAX_TOOL_CALLS opslag pr. besked – derefter må modellen kun skrive sit svar."""
+    Højst ASSISTANT_MAX_TOOL_CALLS opslag pr. besked – derefter må modellen kun skrive sit svar.
+
+    Websøgningen (web_vaerktoejer) udføres hos Anthropic. Holder den pause midt i et svar ("pause_turn"), sendes
+    svaret indtil nu tilbage, så den fortsætter, hvor den slap. Brugte sider lægges i `svar.kilder`."""
     from app.assistent import opslag as opslagsmodul
 
     s = get_settings()
@@ -295,12 +358,14 @@ async def stream_svar(beskeder: list[dict], svar: Svar, system: str | None = Non
     svar.tokens_ind, svar.tokens_ud = 0, 0
     if opslag is not None:
         svar.lookups = opslag.lookups  # samme liste – så opslagene gemmes, også hvis svaret afbrydes
-    for _ in range(s.assistant_max_tool_calls + 2):
+    web = web_vaerktoejer()
+    for _ in range(s.assistant_max_tool_calls + 6):
         ekstra = {}
-        if opslag is not None:
-            ekstra["tools"] = opslagsmodul.VAERKTOEJER
-            if brugt >= s.assistant_max_tool_calls:
-                ekstra["tool_choice"] = {"type": "none"}
+        vaerktoejer = web + (opslagsmodul.VAERKTOEJER if opslag is not None else [])
+        if vaerktoejer:
+            ekstra["tools"] = vaerktoejer
+        if opslag is not None and brugt >= s.assistant_max_tool_calls:
+            ekstra["tool_choice"] = {"type": "none"}
         # Afviser modellen et spørgsmål af sikkerhedsgrunde, prøver API'et selv en anden model ("fallbacks").
         async with klient.beta.messages.stream(
             model=s.assistant_model,
@@ -321,6 +386,10 @@ async def stream_svar(beskeder: list[dict], svar: Svar, system: str | None = Non
         svar.tokens_ud += endelig.usage.output_tokens
         svar.afkortet = endelig.stop_reason == "max_tokens"
         svar.afvist = endelig.stop_reason == "refusal"
+        _tilfoej_kilder(svar, _webkilder(endelig.content))
+        if endelig.stop_reason == "pause_turn":
+            beskeder += [{"role": "assistant", "content": [_blok(b) for b in endelig.content]}]
+            continue
         kald = [b for b in endelig.content if b.type == "tool_use"]
         if opslag is None or endelig.stop_reason != "tool_use" or not kald:
             break
