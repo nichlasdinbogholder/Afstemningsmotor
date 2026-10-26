@@ -11,7 +11,7 @@ import AdminLaas from "@/components/AdminLaas";
 type Hoved = {
   id: number; navn: string; kundenummer: string; cvr: string | null; status: string; status_kode: string;
   ansvarlig: string | null; ansvarlig_id: number | null; assistent: string | null; assistent_id: number | null;
-  kan_rette: boolean; admin: boolean;
+  kan_rette: boolean; admin: boolean; mangler_aftale: boolean;
 };
 type Stamdata = {
   navn: string | null; cvr: string | null; virksomhedsform: string | null; status: string | null; hentet: string | null;
@@ -111,11 +111,17 @@ function Kundekort() {
           <Link key={f.kode} href={`/kunder/kort/?id=${id}&fane=${f.kode}`}
                 className={`-mb-px border-b-2 px-3 py-2 ${fane === f.kode ? "border-brand-600 font-medium text-slate-900" : "border-transparent text-slate-600 hover:text-slate-900"}`}>
             {f.tekst}
+            {f.kode === "aftale" && hoved.mangler_aftale && (
+              <span title="Der er ikke uploadet et underskrevet aftalegrundlag" className="ml-1.5 inline-flex align-middle text-red-600">
+                <AlarmKlokke />
+              </span>
+            )}
           </Link>
         ))}
       </nav>
       {fane === "kontakter" ? <Kontakter hoved={hoved} />
         : fane === "stamdata" ? <StamdataFane hoved={hoved} />
+        : fane === "aftale" ? <AftaleFane hoved={hoved} opdateret={hentHoved} />
         : <p className="text-sm text-slate-500">Denne fane bygges i et senere trin.</p>}
     </div>
   );
@@ -484,6 +490,102 @@ function StamdataFane({ hoved }: { hoved: Hoved }) {
           </div>
         ))}
       </dl>
+    </div>
+  );
+}
+
+function AlarmKlokke() {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" aria-label="Mangler" className="h-4 w-4">
+      <path d="M10 2a5 5 0 0 0-5 5v2.6l-1.4 2.8A1 1 0 0 0 4.5 14h11a1 1 0 0 0 .9-1.6L15 9.6V7a5 5 0 0 0-5-5Zm-2 13a2 2 0 0 0 4 0H8Z" />
+    </svg>
+  );
+}
+
+type AftaleDok = { id: number; filnavn: string; stoerrelse: number; uploadet: string; uploadet_af: string | null; arkiveret: string | null };
+type AftaleSvar = { gaeldende: AftaleDok | null; tidligere: AftaleDok[]; mangler: boolean; kan_uploade: boolean };
+
+// Aftalegrundlaget (bygherren 26.10.2026): den underskrevne aftale som PDF. Mangler den, er der en alarmklokke ved fanen.
+function AftaleFane({ hoved, opdateret }: { hoved: Hoved; opdateret: () => void }) {
+  const [d, setD] = useState<AftaleSvar | null>(null);
+  const [besked, setBesked] = useState<{ tekst: string; fejl?: boolean } | null>(null);
+  const [sender, setSender] = useState(false);
+  const hentData = useCallback(() => { hent<AftaleSvar>(`/api/kundekort/${hoved.id}/aftale`).then(setD); }, [hoved.id]);
+  useEffect(() => { hentData(); }, [hentData]);
+
+  async function upload(fil: File) {
+    setSender(true); setBesked(null);
+    try {
+      const r = await fetch(`/api/kundekort/${hoved.id}/aftale`, {
+        method: "POST", credentials: "same-origin", body: fil,
+        headers: { "Content-Type": "application/pdf", "X-Afstemning": "1", "X-Filnavn": encodeURIComponent(fil.name) },
+      });
+      if (!r.ok) {
+        let tekst = `Fejl ${r.status}`;
+        try { const j = await r.json(); if (typeof j.detail === "string") tekst = j.detail; } catch {}
+        throw new Error(tekst);
+      }
+      setBesked({ tekst: `${fil.name} er uploadet` }); hentData(); opdateret();
+    } catch (e) { setBesked({ tekst: e instanceof Error ? e.message : "Det lykkedes ikke", fejl: true }); }
+    finally { setSender(false); }
+  }
+
+  if (!d) return <p className="text-slate-500">Henter …</p>;
+  const dato = (iso: string) => new Date(iso).toLocaleDateString("da-DK");
+  const pdf = (dok: AftaleDok) => `/api/kundekort/${hoved.id}/aftale/${dok.id}/pdf`;
+  const knap = d.kan_uploade && (
+    <label className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium text-white ${sender ? "bg-slate-400" : "bg-brand-600 hover:bg-brand-700"}`}>
+      {sender ? "Uploader …" : d.gaeldende ? "Upload ny version (PDF)" : "Upload aftalegrundlag (PDF)"}
+      <input type="file" accept="application/pdf,.pdf" className="hidden" disabled={sender}
+             onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) upload(f); }} />
+    </label>
+  );
+
+  return (
+    <div className="space-y-4 text-sm">
+      {besked && <p className={`rounded-md px-3 py-2 ${besked.fejl ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>{besked.tekst}</p>}
+      {d.gaeldende ? (
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white p-4">
+          <div>
+            <p className="text-xs font-medium text-slate-500">Underskrevet aftalegrundlag</p>
+            <a href={pdf(d.gaeldende)} target="_blank" rel="noreferrer" className="mt-0.5 block text-base font-medium text-brand-700 hover:underline">
+              {d.gaeldende.filnavn}
+            </a>
+            <p className="mt-0.5 text-slate-500">Uploadet {dato(d.gaeldende.uploadet)} af {d.gaeldende.uploadet_af ?? "ukendt"}</p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <a href={pdf(d.gaeldende)} target="_blank" rel="noreferrer"
+               className="rounded-md border border-slate-300 px-4 py-2 font-medium hover:bg-slate-50">Åbn PDF</a>
+            {knap}
+          </div>
+        </div>
+      ) : d.mangler ? (
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-red-200 bg-red-50 p-4">
+          <p className="flex items-center gap-2 font-medium text-red-800">
+            <AlarmKlokke />Der er ikke uploadet et underskrevet aftalegrundlag for kunden.
+          </p>
+          {knap}
+        </div>
+      ) : (
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white p-4">
+          <p className="text-slate-600">Intern kunde – der kræves ikke et aftalegrundlag.</p>
+          {knap}
+        </div>
+      )}
+      {!d.kan_uploade && <p className="text-slate-500">Kun kundens ansvarlige, assistent eller en administrator kan uploade.</p>}
+      {d.tidligere.length > 0 && (
+        <div>
+          <p className="mb-1 text-xs font-medium text-slate-500">Tidligere versioner</p>
+          <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
+            {d.tidligere.map((dok) => (
+              <li key={dok.id} className="flex justify-between px-4 py-2">
+                <a href={pdf(dok)} target="_blank" rel="noreferrer" className="text-slate-700 hover:underline">{dok.filnavn}</a>
+                <span className="text-slate-500">Uploadet {dato(dok.uploadet)} af {dok.uploadet_af ?? "ukendt"}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

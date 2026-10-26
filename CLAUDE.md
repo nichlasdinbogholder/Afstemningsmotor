@@ -290,6 +290,12 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     `raadgiver_aendret`). Aldrig primær/underskriver (CHECK) og tæller ikke med, når den primære vælges/arkiveres. "Fjern" =
     tilknytningen arkiveres. Farver: revisor violet, bankrådgiver mørkeblå (blue-900); "Send mail i Outlook" = mailto-link. `/api/kundekort/{id}`, `…/kontakter`,
     `POST …/kontakter`, `POST /api/kundekort/kontakter/{kid}[/primaer|/arkiver]`.
+  - `aftale.py` + fanen Aftale (bygherren 26.10.2026): det UNDERSKREVNE AFTALEGRUNDLAG som PDF i `kunde_aftaledokumenter`
+    (bytea i databasen – kommer med i de krypterede backups; kun PDF, højst 20 MB). Upload uden ekstra bibliotek: PDF'en
+    sendes som selve indholdet (`POST /api/kundekort/{id}/aftale`, navnet i X-Filnavn); `GET …/aftale`, `…/aftale/{did}/pdf`.
+    KUN ansvarlig/assistent/admin uploader, alle ser. DATABASEN: slettes/ændres aldrig – ny version arkiverer den gamle;
+    én gældende pr. kunde. ALARMKLOKKE ved fanen, når der ikke er et gældende (`mangler_aftale` i kundekortets hoved) –
+    ikke for interne kunder (afregning 'intern').
   - `oversigt.py` (trin 4): listen i Kundeoversigten – `GET /api/kundekartotek?mine=&ansvarlig_id=&afregning=&system=&status=
     &doede_forbindelser=&mangler_hvidvask=`; "mine" = ansvarlig ELLER assistent (standard i webdelen); sorteret
     efter navn. Kolonner (bygherren 26.10.2026): Kunde (kun navn) · Kundenr. · CVR · Ansvarlig (kun visning – status,
