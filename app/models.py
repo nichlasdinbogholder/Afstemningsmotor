@@ -23,7 +23,7 @@ from app.bilag.models import (
 from app.crm.models import Document, Handover, Note, Task
 from app.jobs.models import Job
 from app.kontoudtog.models import Statement, StatementLine
-from app.frister.models import SkatFrist
+from app.frister.models import MasterafstemningBooking, SkatFrist
 from app.kunder.models import Client, Contact, Credential, Raadgiver
 from app.kunder.tabeller import (
     KundeAftaleDokument,
@@ -113,6 +113,7 @@ __all__ = [
     "Contact",
     "Raadgiver",
     "SkatFrist",
+    "MasterafstemningBooking",
     "Credential",
     "KundeAgreement",
     "KundeAlias",

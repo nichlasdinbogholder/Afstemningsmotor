@@ -48,7 +48,8 @@ MOMSPERIODER = ("maaned", "kvartal", "halvaar", "ingen")
 # Lønsumsafgift: Skats metode 1-4 (bygherren 26.10.2026). Perioder og frister pr. metode står i Skats fristkalender.
 LOENSUM_METODER = ("metode_1", "metode_2", "metode_3", "metode_4", "ingen")
 # Årsafslutning (bygherren 26.10.2026): årsregnskab + oplysningsskema ELLER årsopgørelse (app/frister/aarsafslutning).
-AARSAFSLUTNINGER = ("aarsregnskab_oplysningsskema", "aarsopgoerelse")
+# 'ekstern_revisor': Din Bogholder laver kun masterafstemningen til kundens eksterne revisor (app/frister/masterafstemning).
+AARSAFSLUTNINGER = ("aarsregnskab_oplysningsskema", "aarsopgoerelse", "ekstern_revisor")
 LOEN_FREKVENSER = ("maaned", "14_dage", "ingen")
 TJEKLISTER = ("onboarding", "offboarding")
 

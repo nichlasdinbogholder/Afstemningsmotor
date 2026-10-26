@@ -135,6 +135,12 @@ def koer_cvrplanlaegning() -> int:
     return nye
 
 
+def koer_masterafstemning() -> int:
+    from app.frister.masterafstemning import koer
+
+    return len(koer())
+
+
 def lav_scheduler() -> BlockingScheduler:
     from app.opkraevning.jobs import KOE, KONTROL
 
@@ -170,6 +176,10 @@ def lav_scheduler() -> BlockingScheduler:
     scheduler.add_job(koer_cvrplanlaegning,
                       CronTrigger.from_crontab(get_settings().kunde_cvr_sync_cron, timezone=TIDSZONE),
                       id="kunde_cvr", name="CVR-opslag", misfire_grace_time=6 * 3600,
+                      coalesce=True, max_instances=1, replace_existing=True)
+    # Ekstern revisor: masterafstemninger bookes i Outlook hver hverdag kl. 06.20 (tørløb uden KALENDER_BOOK=true).
+    scheduler.add_job(koer_masterafstemning, CronTrigger(day_of_week=UGEDAGE, hour=6, minute=20, timezone=TIDSZONE),
+                      id="masterafstemning", name="Masterafstemning i Outlook", misfire_grace_time=6 * 3600,
                       coalesce=True, max_instances=1, replace_existing=True)
     return scheduler
 

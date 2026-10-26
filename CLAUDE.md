@@ -314,6 +314,15 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   REGNES ud fra kundens regnskabsår (accounting_years) i `app/frister/aarsafslutning.py` (godkendt regeltabel); øvrige
   frister rykkes fra weekend/helligdag til første hverdag (bankernes lukkedage 5/6, 24/12, 31/12 tæller ikke).
   Ultimo + 6 mdr. = ultimo (31.12 → 30.06, 30.06 → 31.12). Advarsel, hvis en kunde har valgt men mangler regnskabsår.
+  EKSTERN REVISOR (3. valg, bygherren 26.10.2026): Din Bogholder laver kun MASTERAFSTEMNINGEN. `app/frister/masterafstemning.py`
+  booker AUTOMATISK 5 samlede timer på én hverdag i Outlook (KALENDER_POSTKASSE = bygherrens; arbejdstid 8–16) i vinduet
+  næstkommende godkendte momsfrist efter regnskabsårets slutning → +60 dage (ikke momsregistreret: første hverdag efter
+  slutningen). Én booking pr. kunde pr. regnskabsår (`masterafstemning_bookinger`; DB: slettes aldrig, booket ændres
+  aldrig); ingen tid → notifikation ÉN gang, prøves igen dagligt. KALENDER_BOOK=false = TØRLØB (standard). Scheduler
+  hverdage 06.20. `python -m app.frister.masterafstemning proeve|koer`. Vises i AI Planlægning med booket tid.
+- `app/outlook/kalender.py` – Outlook via Microsoft Graph: EGEN app med KUN Calendars.ReadWrite begrænset til
+  KALENDER_POSTKASSE (Exchange RBAC – DEPLOY.md "Outlook-kalender"). `optaget()` (calendarView; "Ledig"/"Arbejder et andet
+  sted" blokerer ikke) og `opret()` (dansk tid). Fejl kun med statuskode – aldrig hemmeligheder.
   - `oversigt.py` (trin 4): listen i Kundeoversigten – `GET /api/kundekartotek?mine=&ansvarlig_id=&afregning=&system=&status=
     &doede_forbindelser=`; "mine" = ansvarlig ELLER assistent (standard i webdelen); sorteret
     efter navn. Kolonner (bygherren 26.10.2026): Kunde (kun navn) · Kundenr. · CVR · Ansvarlig (kun visning – status,

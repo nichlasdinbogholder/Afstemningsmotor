@@ -19,6 +19,7 @@ from app.personale.models import Staff
 PERIODE_TEKST = {"maaned": "Månedligt", "kvartal": "Kvartalsvis", "halvaar": "Halvårligt",
                  "metode_1": "Metode 1", "metode_2": "Metode 2", "metode_3": "Metode 3", "metode_4": "Metode 4",
                  "aarsregnskab_oplysningsskema": "Årsregnskab + oplysningsskema", "aarsopgoerelse": "Årsopgørelse",
+                 "ekstern_revisor": "Ekstern revisor",
                  "ingen": "Ikke tilmeldt", None: "Ikke valgt"}
 # Felterne på fanen: kode -> (dansk navn, kolonne i kunde_obligations, tilladte værdier).
 FRISTER = {"moms": ("Moms", "vat_period", MOMSPERIODER),

@@ -98,6 +98,15 @@ class Settings(BaseSettings):
     mail_tenant_id: str | None = None
     mail_client_id: str | None = None
     mail_client_secret: SecretStr | None = None
+    # Outlook-kalenderen til masterafstemninger (bygherren 26.10.2026): EGEN app-registrering med KUN
+    # Calendars.ReadWrite, begrænset til KALENDER_POSTKASSE. Uden id/hemmelighed/postkasse er planlægningen slået fra.
+    kalender_tenant_id: str | None = None
+    kalender_client_id: str | None = None
+    kalender_client_secret: SecretStr | None = None
+    kalender_postkasse: str | None = None          # den kalender, masterafstemningerne bookes i
+    kalender_book: bool = False                    # false = tørløb: vis hvad der ville bookes, men book intet
+    kalender_arbejdsdag_fra: int = 8               # arbejdstid (hele timer, dansk tid) – der bookes kun inden for den
+    kalender_arbejdsdag_til: int = 16
     # Timeregistreringens påmindelse kl. 16.05: false = tørløb (registreres, men sendes ikke).
     time_reminder_send: bool = False
 
