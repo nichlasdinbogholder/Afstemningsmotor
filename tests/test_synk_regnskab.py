@@ -43,6 +43,7 @@ from app.sikkerhed.hemmeligheder import HemmeligtToken
 from app.synk.planlaegger import planlaeg_dag
 from app.synk.ressourcer import SYNK_FUNKTIONER, synk_customers, synk_entries, synk_open_entries, synk_suppliers
 from app.synk.tilstand import KundeIkkeAktiv, hent_cursor, hent_tilstand
+from tests.hjaelp_token import laeg_token
 
 APP = Path(__file__).resolve().parent.parent / "app"
 
@@ -121,9 +122,7 @@ def _kunde(session, nr, status="aktiv", med_adgang=True, token="t"):
     session.add(k)
     session.flush()
     if med_adgang:
-        c = Credential(client_id=k.id, system="economic")
-        c.saet_token(token + nr)
-        session.add(c)
+        laeg_token(session, k.id, "economic", token + nr)
     session.commit()
     return k
 

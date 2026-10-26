@@ -24,6 +24,22 @@ from app.crm.models import Document, Handover, Note, Task
 from app.jobs.models import Job
 from app.kontoudtog.models import Statement, StatementLine
 from app.kunder.models import Client, Contact, Credential
+from app.kunder.tabeller import (
+    KundeAgreement,
+    KundeAlias,
+    KundeAml,
+    KundeAuthority,
+    KundeChecklist,
+    KundeCvrChange,
+    KundeCvrSnapshot,
+    KundeGroup,
+    KundeLedger,
+    KundeLog,
+    KundeObligations,
+    KundeOwnerHistory,
+    KundeTask,
+    KundeTaskType,
+)
 from app.opkraevning.models import (
     BillingPeriod,
     CollectionCase,
@@ -94,6 +110,20 @@ __all__ = [
     "Client",
     "Contact",
     "Credential",
+    "KundeAgreement",
+    "KundeAlias",
+    "KundeAml",
+    "KundeAuthority",
+    "KundeChecklist",
+    "KundeCvrChange",
+    "KundeCvrSnapshot",
+    "KundeGroup",
+    "KundeLedger",
+    "KundeLog",
+    "KundeObligations",
+    "KundeOwnerHistory",
+    "KundeTask",
+    "KundeTaskType",
     "CustomerCache",
     "Document",
     "EntryCache",

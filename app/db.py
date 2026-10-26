@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from sqlalchemy import CheckConstraint, Engine, MetaData, create_engine
+from sqlalchemy import CheckConstraint, Engine, MetaData, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session
 
 from app.config import get_settings
@@ -44,3 +44,9 @@ def kun_vaerdier(kolonne: str, vaerdier: tuple[str, ...], navn: str | None = Non
     """Regel i databasen: kolonnen må kun indeholde de faste værdier (eller være tom)."""
     liste = ", ".join(f"'{v}'" for v in vaerdier)
     return CheckConstraint(f"{kolonne} IN ({liste})", name=navn or f"{kolonne}_gyldig")
+
+
+def saet_aktoer(session: Session, staff_id: int) -> None:
+    """Hvem der laver ændringerne i denne transaktion. Databasens regler læser det (app.actor_id): revisionssporene
+    skriver det på hver række, og kun en administrator kan sætte et token (triggeren kunde_credential_guard)."""
+    session.execute(text("SELECT set_config('app.actor_id', :id, true)"), {"id": str(int(staff_id))})

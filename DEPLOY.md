@@ -274,7 +274,7 @@ Derfor:
 | Se status | `docker compose -f docker-compose.prod.yml ps` |
 | Se log (fx worker) | `docker compose -f docker-compose.prod.yml logs --tail 100 worker` |
 | Kør en kommando | `docker compose -f docker-compose.prod.yml exec api python -m app.cli findings <id>` |
-| Læg et token ind | `docker compose -f docker-compose.prod.yml exec api python -m app.kunder.gem_token --kundenummer <nr> --system economic` |
+| Læg et token ind | `docker compose -f docker-compose.prod.yml exec api python -m app.kunder.gem_token --kundenummer <nr> --system economic --af <din e-mail>` (kun administratorer) |
 | Flere workers | `docker compose -f docker-compose.prod.yml up -d --scale worker=2` |
 
 ## Automatisk opdatering

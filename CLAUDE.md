@@ -68,8 +68,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - `app/kunder/opret.py` – opret en kunde: `python -m app.kunder.opret --navn ... --kundenummer ... --cvr ... --system economic
   [--ansvarlig <e-mail>]` (`--vis` viser alle; `--kundenummer <nr> --ansvarlig <e-mail>` sætter den ansvarlige).
 - `app/kunder/gem_token.py` – kommando til at lægge et token ind:
-  `python -m app.kunder.gem_token --kundenummer <nr> --system economic|dinero`.
-  Tokenet indtastes skjult – aldrig som argument på kommandolinjen.
+  `python -m app.kunder.gem_token --kundenummer <nr> --system economic|dinero --af <administratorens e-mail>`.
+  Tokenet indtastes skjult – aldrig som argument på kommandolinjen. KUN administratorer (også håndhævet i databasen).
+  Udskiftning = det gamle tilbagekaldes (revoked_at) og et nyt indsættes – et gemt token ændres aldrig.
 - `app/adaptere/` – adapter-laget til e-conomic/Dinero. `hent_adgang()` og
   `hent_token(session, client_id, system)` er de eneste, der kalder dekrypteringen.
 - `app/adaptere/regnskab/base.py` – det fælles interface `AccountingProvider` med
@@ -242,6 +243,19 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   på FastAPI og `/dev-login?email=` (virker aldrig med APP_ENV=production). Læs `web/AGENTS.md` før
   ændringer (Next.js 16 adskiller sig fra ældre versioner).
 - Kapacitet (målt, DEPLOY.md): 500 kunder / 20 samtidige medarbejdere; 4 workers, 3 API-processer.
+- KUNDEOVERSIGTEN (spec 26.10.2026, se RESUME.md; fase 1 trin 1 bygget): `app/kunder/tabeller.py` – tabellerne `kunde_*`
+  (groups, aliases, owner_history, cvr_snapshot/changes, agreements, ledgers, authorities, obligations, task_types, tasks,
+  aml, checklists, log). Bygger på det eksisterende: clients (status `emne`/aktiv/pause/opsagt = livscyklus), contacts
+  (underskriver, maa_kontaktes_af, arkiveret) og credentials (ledger_id → `kunde_ledgers`, fingerprint = sidste 4 tegn,
+  set_by/set_at/revoked_at) er UDVIDET – ingen kopier. Afregningsform/pris bliver i time_client_terms. Fristparametre
+  (momsperiode, regnskabsår, lønkørselsdag) ligger KUN i `kunde_obligations`. Noter/dokumenter = notes/documents (crm).
+  ROLLER på kunden (`app/kunder/roller.py`): ansvarlig (`ansvarlig_medarbejder_id`) og assistent (`assistent_id`, før
+  "daglig medarbejder") – samme adgang; assistenten overtager ved fravær. Login-roller uændret (admin/medarbejder).
+  DATABASEN håndhæver: `kunde_log` kun tilføjelser (også ingen TRUNCATE); kunder kan ikke slettes; opsagt → aktiv kun
+  med `app.genaabning='ja'` (kartotek.genaktiver); skift af ansvarlig → kunde_owner_history (EXCLUDE: ingen overlap)
+  + kunde_log; tokens: kun aktiv admin (app.actor_id via `app.db.saet_aktoer`), krypteret felt kan aldrig ændres,
+  tilbagekaldt kan ikke genoplives, intet slettes, indsæt/tilbagekald → kunde_log med fingeraftryk. Tests:
+  `tests/test_kunde_trin1.py`; tokens i tests lægges ind med `tests/hjaelp_token.laeg_token()`.
 - `app/kunder/kartotek.py` + `app/api/kundekartotek.py` – KUNDEKARTOTEKET (bygherren 23.10.2026): boksen Kunde i venstre side er en
   dropdown med `/kunder/` Kundeoversigt og `/kunder/arkiverede/` Arkiverede kunder. Alle ser listerne; KUN admin opretter
   (startdato for samarbejdet + afregningsform, som gælder fra startdatoen), skifter ansvarlig (= hvem der kan spørge Svend om

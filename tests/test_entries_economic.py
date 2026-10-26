@@ -36,6 +36,7 @@ from app.kunder.models import Client, Credential
 from app.regnskab.models import EntryCache
 from app.synk.ressourcer import synk_entries
 from app.synk.tilstand import hent_cursor, hent_tilstand, nulstil_cursor
+from tests.hjaelp_token import laeg_token
 
 ECONOMIC_MAPPE = Path(__file__).resolve().parent.parent / "app" / "adaptere" / "economic"
 BASE = "https://restapi.e-conomic.com"
@@ -113,9 +114,7 @@ def kunde(db_session, token, app_secret):
     k = Client(navn="Posteringer ApS", kundenummer="EN-1", regnskabssystem="economic")
     db_session.add(k)
     db_session.flush()
-    adgang = Credential(client_id=k.id, system="economic")
-    adgang.saet_token(token)
-    db_session.add(adgang)
+    laeg_token(db_session, k.id, "economic", token)
     db_session.commit()
     return k
 

@@ -21,6 +21,7 @@ from app.kunder.models import Client, Credential
 from app.natkoersel.job import JOBTYPE, NatkoerselFejl, koer_natkoersel
 from app.natkoersel.scheduler import planlaeg_nat, trigger
 from app.rules.models import Finding
+from tests.hjaelp_token import laeg_token
 
 DK = ZoneInfo("Europe/Copenhagen")
 
@@ -94,9 +95,7 @@ def _kunde(session, nr, status="aktiv", med_adgang=True):
     session.add(k)
     session.flush()
     if med_adgang:
-        c = Credential(client_id=k.id, system="economic")
-        c.saet_token(f"token-{nr}")
-        session.add(c)
+        laeg_token(session, k.id, "economic", f"token-{nr}")
     session.commit()
     return k
 

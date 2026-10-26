@@ -21,18 +21,16 @@ from app.sikkerhed.kryptering import (
     krypter_token,
 )
 from app.sikkerhed.ny_noegle import gem_i_env, main as ny_noegle_main
+from tests.hjaelp_token import laeg_token
 
 APP = Path(__file__).resolve().parent.parent / "app"
 
 
 def _opret_kunde_med_token(session, token: str) -> Credential:
     kunde = Client(navn="Testkunde ApS", kundenummer="TEST-1", regnskabssystem="dinero")
-    adgang = Credential(system="dinero", organisation_id="12345")
-    adgang.saet_token(token)
-    kunde.credentials.append(adgang)
     session.add(kunde)
     session.flush()
-    return adgang
+    return laeg_token(session, kunde.id, "dinero", token, organisation_id="12345")
 
 
 # --- Databasen: det gemte kan ikke læses uden nøglen ------------------------

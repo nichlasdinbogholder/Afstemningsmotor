@@ -21,10 +21,10 @@ from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session
 
 from app.audit.models import AuditLog
+from app.db import saet_aktoer
 from app.kunder.models import ARKIV_AARSAGER, SYSTEMER, Client
 from app.personale.models import Staff
 from app.timeregistrering.satser import ManglerSats, nye_vilkaar
-from app.timeregistrering.stamdata import saet_aktoer
 
 AARSAG_TEKST = {
     "pris_for_hoej": "Prisen for høj",
@@ -44,7 +44,8 @@ def liste(session: Session, arkiverede: bool, dag: date) -> list[dict]:
 
     Afregningsformen vises på dagen – eller på startdatoen, hvis samarbejdet ikke er begyndt endnu. For en arkiveret
     kunde vises den, der gjaldt ved ophøret."""
-    betingelse = Client.status == "opsagt" if arkiverede else Client.status != "opsagt"
+    # Kundeoversigten viser kunder (aktiv og pause) – aldrig emner, der endnu ikke er blevet kunde.
+    betingelse = Client.status == "opsagt" if arkiverede else Client.status.in_(("aktiv", "pause"))
     ud = []
     for k in session.scalars(select(Client).where(betingelse).order_by(Client.navn)):
         ansvarlig = session.get(Staff, k.ansvarlig_medarbejder_id) if k.ansvarlig_medarbejder_id else None
@@ -119,6 +120,8 @@ def saet_ansvarlig(session: Session, af: Staff, client_id: int, ansvarlig_id: in
     fra = kunde.ansvarlig_medarbejder_id
     if fra == ansvarlig_id:
         return kunde
+    # Skiftet er en hændelse: triggeren skriver det i kunde_owner_history og kunde_log med aktøren.
+    saet_aktoer(session, af.id)
     kunde.ansvarlig_medarbejder_id = ansvarlig_id
     session.add(AuditLog(client_id=kunde.id, staff_id=af.id, handling="kunde_ansvarlig", detaljer={
         "udfoert_af": af.email, "fra_staff_id": fra, "til_staff_id": ansvarlig_id}))
@@ -168,6 +171,9 @@ def genaktiver(session: Session, af: Staff, client_id: int) -> Client:
         raise KartotekFejl("Kunden er ikke arkiveret")
     detaljer = {"udfoert_af": af.email, "tidligere_aarsag": kunde.arkiv_aarsag,
                 "tidligere_ophoersdato": kunde.opsagt_dato.isoformat() if kunde.opsagt_dato else None}
+    saet_aktoer(session, af.id)
+    # Den bevidste genåbning – uden den afviser databasen overgangen fra ophørt (triggeren kunde_lifecycle_guard).
+    session.execute(text("SELECT set_config('app.genaabning', 'ja', true)"))
     kunde.status, kunde.opsagt_dato, kunde.arkiv_aarsag, kunde.arkiveret_af = "aktiv", None, None, None
     session.add(AuditLog(client_id=kunde.id, staff_id=af.id, handling="kunde_genaktiveret", detaljer=detaljer))
     session.flush()

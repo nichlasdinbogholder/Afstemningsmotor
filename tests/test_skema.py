@@ -26,6 +26,10 @@ TABELLER = {
     "time_employees", "time_employee_rates", "time_client_terms", "time_sales_rates", "time_task_types",
     "time_weeks", "time_entry_notes", "time_toil_settlements", "time_toil_movements", "time_payroll_batches",
     "time_payroll_lines", "time_audit", "time_reminders",
+    # Kundeoversigten (spec 26.10.2026)
+    "kunde_groups", "kunde_aliases", "kunde_owner_history", "kunde_cvr_snapshot", "kunde_cvr_changes",
+    "kunde_agreements", "kunde_ledgers", "kunde_authorities", "kunde_obligations", "kunde_task_types",
+    "kunde_tasks", "kunde_aml", "kunde_checklists", "kunde_log",
 }
 
 
@@ -35,9 +39,12 @@ def inspektor(db_session):
 
 
 def _indekserede_kolonner(inspektor, tabel):
-    """Kolonner, der står først i et indeks eller en unik regel (kan slås op hurtigt)."""
+    """Kolonner, der står først i et indeks, en unik regel eller primærnøglen (kan slås op hurtigt)."""
     forreste = {i["column_names"][0] for i in inspektor.get_indexes(tabel)}
     forreste |= {u["column_names"][0] for u in inspektor.get_unique_constraints(tabel)}
+    pk = inspektor.get_pk_constraint(tabel)["constrained_columns"]
+    if pk:
+        forreste.add(pk[0])
     return forreste
 
 
@@ -67,7 +74,14 @@ def test_alle_client_id_er_relationer_med_indeks(inspektor):
 
 def test_alle_staff_kolonner_peger_paa_staff(inspektor):
     forventet = {
-        "clients": {"ansvarlig_medarbejder_id", "daglig_medarbejder_id", "arkiveret_af"},
+        "clients": {"ansvarlig_medarbejder_id", "assistent_id", "arkiveret_af"},
+        "credentials": {"set_by"},
+        "kunde_owner_history": {"owner_staff_id", "changed_by"},
+        "kunde_cvr_changes": {"handled_by"},
+        "kunde_aml": {"assessed_by"},
+        "kunde_tasks": {"completed_by"},
+        "kunde_checklists": {"completed_by"},
+        "kunde_log": {"actor_staff_id"},
         "tasks": {"ansvarlig_id"},
         "time_entries": {"created_by"},
         "notes": {"staff_id"},
@@ -104,9 +118,17 @@ def test_alle_staff_kolonner_peger_paa_staff(inspektor):
         ("staff", "rolle"),
         ("clients", "status"),
         ("clients", "regnskabssystem"),
-        ("clients", "opgave_frekvens"),
-        ("clients", "momsperiode"),
-        ("clients", "aftaletype"),
+        ("contacts", "maa_kontaktes_af"),
+        ("kunde_aliases", "source"),
+        ("kunde_cvr_changes", "severity"),
+        ("kunde_ledgers", "system"),
+        ("kunde_ledgers", "status"),
+        ("kunde_authorities", "kind"),
+        ("kunde_authorities", "status"),
+        ("kunde_obligations", "vat_period"),
+        ("kunde_obligations", "payroll_frequency"),
+        ("kunde_aml", "risk_level"),
+        ("kunde_checklists", "kind"),
         ("clients", "arkiv_aarsag"),
         ("credentials", "system"),
         ("credentials", "status"),

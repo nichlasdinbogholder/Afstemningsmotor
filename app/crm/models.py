@@ -71,6 +71,8 @@ class Note(Base):
     oprettet: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # Noter kan rettes og slettes (i modsætning til kunde_log) – tidspunktet for seneste rettelse.
+    opdateret: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Document(Base):
@@ -85,6 +87,8 @@ class Document(Base):
     uploadet: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # Dokumenter slettes ikke – de arkiveres.
+    arkiveret: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Handover(Base):
