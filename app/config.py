@@ -76,6 +76,11 @@ class Settings(BaseSettings):
     assistant_rate_stale_days: int = 45
     assistant_max_rows: int = 200
     assistant_max_tool_calls: int = 5
+    # Svend slår selv satser, grænser og frister op på nettet (bygherren 26.10.2026) – KUN på disse sider
+    # (kommasepareret; underdomæner som info.skat.dk er med). Tom = websøgning slået fra.
+    assistant_web_domains: str = ("skat.dk,skm.dk,sktst.dk,retsinformation.dk,borger.dk,virk.dk,"
+                                  "erhvervsstyrelsen.dk,nationalbanken.dk,dst.dk,atp.dk")
+    assistant_web_max_uses: int = 5  # højst så mange søgninger og så mange hentede sider pr. svar
 
     # Udgående mail (fx påmindelser i timeregistreringen) via Microsoft Graph fra én fast afsender.
     # Egen app-registrering med KUN Mail.Send, begrænset til netop MAIL_AFSENDER. Uden nøgler sendes intet.

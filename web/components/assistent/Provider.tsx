@@ -7,9 +7,12 @@ import { hent, send } from "@/lib/api";
 // Derfor overlever samtalen navigation mellem siderne, og den hentes fra serveren ved indlæsning, så den
 // også overlever en genindlæsning. Al logik (gemning, historik, kaldet til modellen) ligger på serveren.
 
+// En kilde er enten et dokument i videnbasen (kb_id) eller en side på nettet, Svend selv har slået op (url).
+export type Kilde = { kb_id?: number; url?: string; title: string };
+
 export type Besked = {
   id: number | null; rolle: "user" | "assistant"; tekst: string; status: string; min_vurdering?: string | null;
-  kilder?: { kb_id: number; title: string }[];
+  kilder?: Kilde[];
   opslag?: string[]; // det, Svend slog op i kundens regnskab (beskrevet af serveren)
 };
 type Samtale = { id: number; titel: string | null; kunde_id: number | null };
@@ -154,7 +157,8 @@ export function AssistentProvider({ children }: { children: React.ReactNode }) {
           } else if (h.type === "tekst") tilfoej(h.tekst);
           else if (h.type === "slut") {
             slutStatus = h.status;
-            setBeskeder((b) => [...b.slice(0, -1), { ...b[b.length - 1], id: h.besked_id, status: h.status, opslag: h.opslag ?? [] }]);
+            setBeskeder((b) => [...b.slice(0, -1), { ...b[b.length - 1], id: h.besked_id, status: h.status, opslag: h.opslag ?? [],
+              kilder: h.kilder ?? b[b.length - 1].kilder }]);
           } else if (h.type === "fejl") setFejl(h.besked);
         }
       }
