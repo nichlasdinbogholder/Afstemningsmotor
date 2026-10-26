@@ -11,7 +11,8 @@ system og forbindelsesstatus (bygherren 26.10.2026):
 - Bilagsdækning (andel af bankposteringer af typen finans med bilag; leverandørbetalinger tæller ikke) bygges i et
   selvstændigt trin – e-conomic sender ikke med på posteringen, om der er et bilag.
 Filtre: mine, ansvarlig, afregningsform, system, livscyklus (onboarding/aktiv/pause), døde forbindelser,
-manglende hvidvask. Alt regnes her på serveren – webdelen viser kun.
+Alt regnes her på serveren – webdelen viser kun. (Hvidvask er fjernet – bygherren 26.10.2026: Pingo Documents kan
+ikke integreres.)
 
 "Mine kunder" = kunder, hvor man er ansvarlig ELLER assistent (app/kunder/roller.py).
 """
@@ -25,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.kunder.kartotek import liste as kartotek_liste
 from app.kunder.models import Client
-from app.kunder.tabeller import KundeAml, KundeLedger, KundeTask
+from app.kunder.tabeller import KundeLedger, KundeTask
 from app.personale.models import Staff
 
 # Forbindelsens status pr. kunde = den dårligste af kundens regnskabsaftaler.
@@ -43,7 +44,6 @@ class Filtre:
     system: str | None = None             # economic | dinero
     status: str | None = None             # aktiv | pause
     doede_forbindelser: bool = False
-    mangler_hvidvask: bool = False
 
 
 def _forbindelser(session: Session, ider: list[int]) -> dict[int, str]:
@@ -102,18 +102,12 @@ def daekningsgrader(session: Session, ider: list[int], dag: date) -> dict[int, d
     return ud
 
 
-def _hvidvask_ok(session: Session, ider: list[int]) -> set[int]:
-    return set(session.scalars(select(KundeAml.client_id).where(
-        KundeAml.client_id.in_(ider), KundeAml.risk_level.is_not(None), KundeAml.assessed_on.is_not(None))))
-
-
 def liste(session: Session, medarbejder: Staff, dag: date, f: Filtre) -> list[dict]:
     raekker = kartotek_liste(session, False, dag)
     ider = [r["id"] for r in raekker]
     kunder = {k.id: k for k in session.scalars(select(Client).where(Client.id.in_(ider)))}
     navne = dict(session.execute(select(Staff.id, Staff.navn)).all())
     forbindelser = _forbindelser(session, ider)
-    hvidvask = _hvidvask_ok(session, ider)
 
     ud = []
     for r in raekker:
@@ -123,7 +117,6 @@ def liste(session: Session, medarbejder: Staff, dag: date, f: Filtre) -> list[di
             "assistent": navne.get(k.assistent_id), "assistent_id": k.assistent_id,
             "system_kode": k.regnskabssystem,
             "forbindelse": forbindelse, "forbindelse_tekst": FORBINDELSE_TEKST[forbindelse],
-            "hvidvask_ok": k.id in hvidvask,
             "min_kunde": medarbejder.id in (k.ansvarlig_medarbejder_id, k.assistent_id),
         }
         if f.mine and not r["min_kunde"]:
@@ -137,8 +130,6 @@ def liste(session: Session, medarbejder: Staff, dag: date, f: Filtre) -> list[di
         if f.status and k.status != f.status:
             continue
         if f.doede_forbindelser and forbindelse not in DOEDE:
-            continue
-        if f.mangler_hvidvask and r["hvidvask_ok"]:
             continue
         ud.append(r)
     ud.sort(key=lambda r: r["navn"].lower())

@@ -2,7 +2,7 @@
 arkivere og genaktivere. Logikken ligger i app/kunder/kartotek.py. Ændringer kræver headeren X-Afstemning.
 
 - `GET  /api/kundekartotek?arkiverede=false|true`   Kundeoversigten eller de arkiverede kunder
-      filtre (trin 4): mine, ansvarlig_id, afregning, system, status, doede_forbindelser, mangler_hvidvask
+      filtre (trin 4): mine, ansvarlig_id, afregning, system, status, doede_forbindelser
 - `GET  /api/kundekartotek/valg`                    medarbejdere, regnskabssystemer og årsager til formularerne
 - `POST /api/kundekartotek`                         opret en kunde (startdato + afregningsform kræves)
 - `POST /api/kundekartotek/{id}/ansvarlig`          skift ansvarlig medarbejder (styrer adgangen hos Svend)
@@ -38,14 +38,14 @@ def _i_dag() -> date:
 @router.get("")
 def kunder(arkiverede: bool = False, mine: bool = False, ansvarlig_id: int | None = None,
            afregning: str | None = None, system: str | None = None, status: str | None = None,
-           doede_forbindelser: bool = False, mangler_hvidvask: bool = False,
+           doede_forbindelser: bool = False,
            m: Staff = Depends(nuvaerende_medarbejder), session: Session = Depends(db)) -> list[dict]:
     """Kundeoversigten (med filtre, sorteret efter nærmeste frist) – eller de arkiverede kunder."""
     if arkiverede:
         return kartotek.liste(session, True, _i_dag())
     return oversigt.liste(session, m, _i_dag(), oversigt.Filtre(
         mine=mine, ansvarlig_id=ansvarlig_id, afregning=afregning, system=system, status=status,
-        doede_forbindelser=doede_forbindelser, mangler_hvidvask=mangler_hvidvask))
+        doede_forbindelser=doede_forbindelser))
 
 
 @router.get("/valg")

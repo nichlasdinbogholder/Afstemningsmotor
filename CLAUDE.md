@@ -247,7 +247,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - Kapacitet (målt, DEPLOY.md): 500 kunder / 20 samtidige medarbejdere; 4 workers, 3 API-processer.
 - KUNDEOVERSIGTEN (spec 26.10.2026, se RESUME.md; fase 1 trin 1 bygget): `app/kunder/tabeller.py` – tabellerne `kunde_*`
   (groups, aliases, owner_history, cvr_snapshot/changes, agreements, ledgers, authorities, obligations, task_types, tasks,
-  aml, checklists, log). Bygger på det eksisterende: clients (status emne/onboarding/aktiv/pause/opsagt = livscyklus;
+  checklists, log – hvidvask/kunde_aml er FJERNET, bygherren 26.10.2026: Pingo Documents kan ikke integreres). Bygger på det eksisterende: clients (status emne/onboarding/aktiv/pause/opsagt = livscyklus;
   ONBOARDING har samme funktion som aktiv – brug ALTID `I_DRIFT`, aldrig status == "aktiv"; DB-reglerne regel_1-3,
   luk_loeste_fund og visningen synk_kraever_handling bruger IN ('aktiv','onboarding'), migrering 59f02cd75f17), contacts
   (underskriver, maa_kontaktes_af, arkiveret) og credentials (ledger_id → `kunde_ledgers`, fingerprint = sidste 4 tegn,
@@ -315,12 +315,12 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   frister rykkes fra weekend/helligdag til første hverdag (bankernes lukkedage 5/6, 24/12, 31/12 tæller ikke).
   Ultimo + 6 mdr. = ultimo (31.12 → 30.06, 30.06 → 31.12). Advarsel, hvis en kunde har valgt men mangler regnskabsår.
   - `oversigt.py` (trin 4): listen i Kundeoversigten – `GET /api/kundekartotek?mine=&ansvarlig_id=&afregning=&system=&status=
-    &doede_forbindelser=&mangler_hvidvask=`; "mine" = ansvarlig ELLER assistent (standard i webdelen); sorteret
+    &doede_forbindelser=`; "mine" = ansvarlig ELLER assistent (standard i webdelen); sorteret
     efter navn. Kolonner (bygherren 26.10.2026): Kunde (kun navn) · Kundenr. · CVR · Ansvarlig (kun visning – status,
     ansvarlig og assistent sættes af admin på KUNDEKORTET) · Afregning (kun abonnement/timeafregning, ingen pris) · System
     · Bilagsdækning · Status. Næste frist, månedens status og dækningsgrad vises IKKE i oversigten – de hører til
     Controlling (`oversigt.maanedens_status()`/`daekningsgrader()` er bevaret). Filtrene: søgefelt på egen linje,
-    rullemenuer med overskrift, "Vis kun"-knapper (mine kunder, døde forbindelser = afvist/fejlet, mangler hvidvask), Nulstil. Forbindelse = dårligste af kundens kunde_ledgers.
+    rullemenuer med overskrift, "Vis kun"-knapper (mine kunder, døde forbindelser = afvist/fejlet), Nulstil. Forbindelse = dårligste af kundens kunde_ledgers.
     MÅNEDENS STATUS = "x af y" af denne måneds kunde_tasks. DÆKNINGSGRAD (kun abonnementskunder, seneste hele måned) =
     (abonnementspris + særskilte timer × salgspris − alle timer × kostpris) / indtægt; satser på arbejdsdagen; mangler en
     sats: "mangler sats" (`DAEKNING_SQL`). BILAGSDÆKNING (andel bankposteringer af typen finans med bilag – ikke
