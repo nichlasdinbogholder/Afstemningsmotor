@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { useMig } from "@/components/Ramme";
+import AdminLaas from "@/components/AdminLaas";
 import { hent, send } from "@/lib/api";
 import { dato, tidspunkt } from "@/lib/format";
 
@@ -66,7 +67,7 @@ export default function Side() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Medarbejdere</h1>
+        <h1 className="text-2xl font-semibold">Medarbejdere <AdminLaas className="h-5 w-5" /></h1>
         <p className="mt-1 max-w-3xl text-sm text-slate-600">
           Kun medarbejdere på listen kan logge ind – med deres egen Microsoft-konto (samme som Outlook). Kontoen
           skal findes i jeres Microsoft 365 og have to-trins-login sat op. Medarbejdere slettes aldrig: luk

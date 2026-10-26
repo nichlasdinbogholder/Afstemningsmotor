@@ -7,6 +7,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { hent, IkkeLoggetInd, type Medarbejder } from "@/lib/api";
 import Fagassistent from "@/components/assistent/Fagassistent";
 import Klokke from "@/components/Klokke";
+import AdminLaas from "@/components/AdminLaas";
 import { AssistentProvider } from "@/components/assistent/Provider";
 
 const MigKontekst = createContext<Medarbejder | null>(null);
@@ -80,7 +81,7 @@ function Venstremenu({ sti, admin }: { sti: string; admin: boolean }) {
         return (
           <Link key={d.href} href={d.href}
                 className={`block rounded-lg border bg-white px-3 py-2.5 text-sm ${aktiv ? "border-brand-600 font-medium text-slate-900 shadow-sm" : "border-slate-200 text-slate-700 hover:border-slate-300 hover:text-slate-900"}`}>
-            {d.tekst}
+            {d.tekst}{"kunAdmin" in d && <AdminLaas className="ml-1.5" />}
           </Link>
         );
       })}
@@ -94,7 +95,8 @@ function Indstillinger({ sti, admin, className }: { sti: string; admin: boolean;
   const punkter = [
     { href: "/fagassistent/", tekst: "Svend", aktiv: sti.startsWith("/fagassistent") },
     // Medarbejdere ses kun af administratorer (siden og API'et kræver også admin).
-    ...(admin ? [{ href: "/medarbejdere/", tekst: "Medarbejdere", aktiv: sti.startsWith("/medarbejdere") }] : []),
+    ...(admin ? [{ href: "/medarbejdere/", tekst: "Medarbejdere", aktiv: sti.startsWith("/medarbejdere"), kunAdmin: true }]
+      : []),
   ];
   return (
     <nav aria-label="Indstillinger" className={`rounded-lg border border-slate-200 bg-white p-3 text-sm ${className}`}>
@@ -104,7 +106,7 @@ function Indstillinger({ sti, admin, className }: { sti: string; admin: boolean;
           <li key={p.href}>
             <Link href={p.href}
                   className={`block rounded-md border-l-2 px-2 py-1.5 ${p.aktiv ? "border-brand-600 bg-slate-50 font-medium text-slate-900" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}>
-              {p.tekst}
+              {p.tekst}{"kunAdmin" in p && <AdminLaas className="ml-1.5" />}
             </Link>
           </li>
         ))}

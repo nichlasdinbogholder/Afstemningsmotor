@@ -237,6 +237,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   (`web/lib/api.ts`, `send()` sætter X-Afstemning). Sider: `/` dashboard (første side efter login; indhold
   ikke besluttet endnu), `/afstemning/` kundeoversigt, `/kunde/?id=` (fund med
   statusskift + historik, kontoudtog med linjer, "Opdater nu"), `/debitorstyring/` (kunder med opkrævning) og
+  LÅSEIKON (bygherren 26.10.2026): alt, der KUN kan ses/rettes af administratorer, får `components/AdminLaas.tsx`
+  ("Kun administratorer") – nye admin-ting skal også have det. Adgangen afgøres stadig på serveren.
   `/debitorstyring/kunde/?id=&fane=&filter=&q=&faktura=` (som FarPay: Kunder, Opkrævninger, Rykkere,
   Afbetaling, Indstillinger; `faktura=` viser fakturaen som en side med linjer og log; komponenter i
   `web/components/debitor/`). Lokalt: `npm run dev` + `DEV_LOGIN=true`

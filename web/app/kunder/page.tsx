@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useMig } from "@/components/Ramme";
+import AdminLaas from "@/components/AdminLaas";
 import { hent, send } from "@/lib/api";
 import { type KartotekKunde, type Valg } from "@/lib/kartotek";
 
@@ -52,7 +53,7 @@ export default function Side() {
         {admin && !visOpret && (
           <button onClick={() => setVisOpret(true)}
                   className="shrink-0 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
-            Opret kunde
+            <AdminLaas className="mr-1.5 text-white" />Opret kunde
           </button>
         )}
       </div>
@@ -114,7 +115,7 @@ export default function Side() {
                 <th className="px-3 py-2" title="Andel af bankposteringer af typen finans med bilag – bygges i et senere trin">Bilagsdækning</th>
                 <th className="px-3 py-2" title="Fuldførte af denne måneds opgaver">Månedens status</th>
                 <th className="px-3 py-2">Status</th>
-                {admin && <th className="px-3 py-2" title="Intern kunde: kun administratorer kan spørge Svend om den">Kun admin hos Svend</th>}
+                {admin && <th className="px-3 py-2" title="Intern kunde: kun administratorer kan spørge Svend om den">Kun admin hos Svend <AdminLaas /></th>}
                 {admin && <th className="px-3 py-2" />}
               </tr>
             </thead>
@@ -160,7 +161,7 @@ export default function Side() {
                       <td className="px-3 py-2 text-right">
                         <button onClick={() => setArkiverer(arkiverer === k.id ? null : k.id)}
                                 className="rounded-md border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-50">
-                          Arkivér
+                          <AdminLaas className="mr-1" />Arkivér
                         </button>
                       </td>
                     )}
@@ -220,7 +221,7 @@ function NyKunde({ valg, gem, luk }: { valg: Valg; gem: (d: NyData) => Promise<b
   const felt = "mt-1 block w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm";
   return (
     <form onSubmit={indsend} className="rounded-lg border border-slate-200 bg-white p-4">
-      <h2 className="font-semibold">Opret kunde</h2>
+      <h2 className="font-semibold">Opret kunde <AdminLaas /></h2>
       <div className="mt-3 grid grid-cols-4 gap-4 text-sm">
         <label className="col-span-2">Navn<input required value={navn} onChange={(e) => setNavn(e.target.value)} className={felt} /></label>
         <label>Kundenummer<input required value={kundenummer} onChange={(e) => setKundenummer(e.target.value)} className={felt} /></label>

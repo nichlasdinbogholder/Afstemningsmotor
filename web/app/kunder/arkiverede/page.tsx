@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useMig } from "@/components/Ramme";
+import AdminLaas from "@/components/AdminLaas";
 import { hent, send } from "@/lib/api";
 import { dato } from "@/lib/format";
 import { afregningTekst, type KartotekKunde } from "@/lib/kartotek";
@@ -76,7 +77,7 @@ export default function Side() {
                     <td className="px-3 py-2 text-right">
                       <button onClick={() => genaktiver(k)}
                               className="rounded-md border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-50">
-                        Genaktivér
+                        <AdminLaas className="mr-1" />Genaktivér
                       </button>
                     </td>
                   )}

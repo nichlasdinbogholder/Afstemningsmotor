@@ -5,6 +5,7 @@ import { useMig } from "@/components/Ramme";
 import { hent, send } from "@/lib/api";
 import { dato, tidspunkt } from "@/lib/format";
 import Svartekst from "./Svartekst";
+import AdminLaas from "@/components/AdminLaas";
 
 // Svends videnbase: alle kan læse, kun administratorer kan oprette og rette. Dokumenter slettes aldrig –
 // sæt en slutdato ("gyldig til") eller gør dem til kladde. Reglerne kontrolleres på serveren.
@@ -119,7 +120,7 @@ export default function Videnbase({ start = null }: { start?: number | null }) {
           </select>
           {admin && (
             <button type="button" onClick={() => { setValgt(null); setFormular({ ...TOM }); setBesked(null); }}
-                    className="rounded-md bg-brand-600 px-4 py-1.5 text-sm text-white hover:bg-brand-700">Nyt dokument</button>
+                    className="rounded-md bg-brand-600 px-4 py-1.5 text-sm text-white hover:bg-brand-700"><AdminLaas className="mr-1.5 text-white" />Nyt dokument</button>
           )}
         </div>
         {!liste ? <p className="text-slate-500">Henter …</p> : liste.length === 0 ? (
@@ -214,7 +215,7 @@ export default function Videnbase({ start = null }: { start?: number | null }) {
               </div>
               {admin && valgt.status !== "superseded" && (
                 <button type="button" onClick={() => { setFormular(formularFra(valgt)); setBesked(null); }}
-                        className="rounded-md border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50">Ret</button>
+                        className="rounded-md border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50"><AdminLaas className="mr-1" />Ret</button>
               )}
             </div>
             {valgt.vaerdi && (

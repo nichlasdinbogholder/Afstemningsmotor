@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useMig } from "@/components/Ramme";
 import { hent, send } from "@/lib/api";
 import { beloeb, dato, RYKKERTILSTAND } from "@/lib/format";
+import AdminLaas from "@/components/AdminLaas";
 
 type Data = {
   virksomhed: { navn: string; cvr: string | null; adresse: string | null; postnr: string | null; by: string | null; kundenummer: string };
@@ -136,7 +137,7 @@ function Kort({ titel, ok, neutral, felter, d, kundeId, admin, gemt, children }:
       <div className="mb-1 flex items-start justify-between gap-2">
         <h3 className="font-semibold">{titel}</h3>
         {felter && admin && !redigerer && (
-          <button onClick={() => setRedigerer(true)} className="rounded border border-slate-300 bg-white px-3 py-0.5 text-xs text-slate-700 hover:bg-slate-50">Rediger</button>
+          <button onClick={() => setRedigerer(true)} className="rounded border border-slate-300 bg-white px-3 py-0.5 text-xs text-slate-700 hover:bg-slate-50"><AdminLaas className="mr-1" />Rediger</button>
         )}
       </div>
       {redigerer && felter ? <Formular felter={felter} d={d} kundeId={kundeId} luk={() => setRedigerer(false)} gemt={gemt} /> : children}
