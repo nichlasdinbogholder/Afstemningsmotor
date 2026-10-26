@@ -115,3 +115,40 @@ def test_kundekortets_hoved(klient, kunde):
     assert (h["navn"], h["status"], h["ansvarlig"], h["assistent"]) == (
         "Kon Tømrer ApS", "Aktiv", "Kon Ansvarlig", "Kon Assistent")
     assert klient.get("/api/kundekort/999999").status_code == 404
+
+
+# Kundens revisor (bygherren 26.10.2026): navn, revisionsfirma, telefon, mail – tydeligt markeret.
+def test_revisor_oprettes_med_revisionsfirma(klient, kunde, db_session):
+    r = _opret(klient, kunde, navn="Rikke Revisor", er_revisor=True, firma="Revisorhuset ApS",
+               telefon="12345678", email="rikke@revisorhuset.dk").json()
+    assert (r["er_revisor"], r["firma"], r["primaer"], r["telefon"]) == (True, "Revisorhuset ApS", False, "12345678")
+    # Revisoren er ikke kundens egen kontakt – den første egne kontakt bliver stadig primær.
+    h = _opret(klient, kunde, navn="Hanne").json()
+    assert h["primaer"] is True
+    liste = klient.get(f"/api/kundekort/{kunde.id}/kontakter").json()
+    assert [k["navn"] for k in liste] == ["Hanne", "Rikke Revisor"]
+    log = db_session.scalars(select(KundeLog).where(KundeLog.client_id == kunde.id).order_by(KundeLog.id)).first()
+    assert log.detail == "Rikke Revisor (revisor, Revisorhuset ApS)"
+
+
+def test_revisor_kraever_firma_og_er_aldrig_primaer_eller_underskriver(klient, kunde):
+    assert "revisionsfirma" in _opret(klient, kunde, er_revisor=True, firma=" ").json()["detail"]
+    assert _opret(klient, kunde, er_revisor=True, firma="R ApS", primaer=True).status_code == 422
+    assert _opret(klient, kunde, er_revisor=True, firma="R ApS", underskriver=True).status_code == 422
+    r = _opret(klient, kunde, navn="Rikke", er_revisor=True, firma="R ApS").json()
+    assert "revisor" in klient.post(f"/api/kundekort/kontakter/{r['id']}/primaer", headers=H).json()["detail"]
+    # Den primære kan arkiveres, selv om der også er en revisor (revisoren kan ikke overtage som primær).
+    h = _opret(klient, kunde, navn="Hanne").json()
+    assert "primære" in klient.post(f"/api/kundekort/kontakter/{h['id']}", headers=H,
+                                    json={"navn": "Hanne", "er_revisor": True, "firma": "X"}).json()["detail"]
+    assert klient.post(f"/api/kundekort/kontakter/{h['id']}/arkiver", headers=H).status_code == 200
+
+
+def test_databasen_afviser_revisor_som_primaer(db_session, kunde):
+    from sqlalchemy.exc import IntegrityError
+    with pytest.raises(IntegrityError), db_session.begin_nested():
+        db_session.add(Contact(client_id=kunde.id, navn="X", er_revisor=True, firma="F", primaer=True))
+        db_session.flush()
+    with pytest.raises(IntegrityError), db_session.begin_nested():
+        db_session.add(Contact(client_id=kunde.id, navn="Y", er_revisor=True))
+        db_session.flush()
