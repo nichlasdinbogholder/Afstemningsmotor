@@ -6,8 +6,8 @@
 - Arkivering (KUN administratorer): årsag (pris for høj, engangsopgave, uoverensstemmelse, har ansat egen bogholder)
   og dato for samarbejdets OPHØR. Kunden får status 'opsagt' og stoppes helt – ingen hentning fra regnskabssystemet,
   ingen rykkere, kan ikke vælges i timeregistreringen eller hos Svend. Intet slettes; historikken bevares.
-- Ansvarlig medarbejder (KUN administratorer) kan skiftes i oversigten. Det er den, der afgør, hvilke kunder en
-  medarbejder kan spørge Svend om.
+- Ansvarlig medarbejder (KUN administratorer) kan skiftes i oversigten. Ansvarlig og assistent afgør, hvilke kunder
+  en medarbejder kan spørge Svend om.
 - Genaktivering (KUN administratorer): kunden bliver aktiv igen. Arkiveringen står stadig i loggen.
 - "Kun admin hos Svend" (KUN administratorer): en intern kunde som Din Bogholder selv kan kun administratorer spørge
   Svend om (bygherren 26.10.2026).

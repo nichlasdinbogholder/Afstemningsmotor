@@ -258,7 +258,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   `tests/test_kunde_trin1.py`; tokens i tests lægges ind med `tests/hjaelp_token.laeg_token()`.
 - `app/kunder/kartotek.py` + `app/api/kundekartotek.py` – KUNDEKARTOTEKET (bygherren 23.10.2026): boksen Kunde i venstre side er en
   dropdown med `/kunder/` Kundeoversigt og `/kunder/arkiverede/` Arkiverede kunder. Alle ser listerne; KUN admin opretter
-  (startdato for samarbejdet + afregningsform, som gælder fra startdatoen), skifter ansvarlig (= hvem der kan spørge Svend om
+  (startdato for samarbejdet + afregningsform, som gælder fra startdatoen), skifter ansvarlig (ansvarlig og assistent kan spørge Svend om
   kunden), arkiverer (årsag `clients.arkiv_aarsag`: pris_for_hoej/engangsopgave/uoverensstemmelse/egen_bogholder + ophørsdato
   i `opsagt_dato`, `arkiveret_af`) og genaktiverer. Arkiveret = status 'opsagt' = stoppet helt (ingen synk, rykkere,
   timeregistrering eller Svend). CHECK: årsag kun på opsagt. audit_log `kunde_oprettet|_ansvarlig|_arkiveret|_genaktiveret`.
@@ -385,7 +385,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     serveren; nøglen `ANTHROPIC_API_KEY` registreres i logfilteret. Grundinstruksen i `system_prompt.md`.
   - `app/api/assistent.py`: `/api/v1/assistant` – status, conversations (kun egne; andres = 404), messages
     (SSE; spørgsmål gemmes før kaldet; afbrudt = 'interrupted'), feedback (én pr. svar). POST kræver X-Afstemning.
-  - Kundevælger (fase 4): kun aktive kunder, hvor man er ANSVARLIG – admin: alle aktive (`er_tilknyttet()`, tjekkes ved hvert kald);
+  - Kundevælger (fase 4): kun aktive kunder, hvor man er ANSVARLIG eller ASSISTENT (26.10.2026) – admin: alle aktive (`er_tilknyttet()`, tjekkes ved hvert kald);
     kunden kan ikke skiftes i en samtale. Kundeopslag hentes DIREKTE fra e-conomic via adapter-laget, kun læsning.
   - `opslag.py` (trin 13): de 7 læsende opslag (`VAERKTOEJER`, `Opslag.udfoer`) – kunde kontrolleres ved hvert
     opslag, lofter ASSISTANT_MAX_ROWS/ASSISTANT_MAX_TOOL_CALLS, CPR/kontonumre/lønposteringstekster skjules, alt
