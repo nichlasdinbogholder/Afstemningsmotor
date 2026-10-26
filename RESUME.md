@@ -712,3 +712,7 @@ Nyt modul i hub'en – fire faser, ét trin ad gangen (PR + merge pr. trin). Kun
   mod det rigtige svar (bygget ud fra Erhvervsstyrelsens kendte feltnavne). Alvor: konkurs/tvangsopløsning =
   kritisk; virksomhedsform, regnskabsår og anden status = advarsel; navn, adresse, branchekode = info.
   Kritisk → notifikation til ansvarlig og administratorer (ikke assistenten – spec'en).
+- **Fase 1, trin 3 (26.10.2026):** kontaktpersoner på kundekortet (`/kunder/kort/?id=`). Beslutninger: ALLE
+  medarbejdere ser alle kontakter – "må kun kontaktes af den ansvarlige" vises tydeligt (ingen skjules); kun
+  kundens ansvarlige, assistent og administratorer opretter/retter/arkiverer. Kundekortet er lavet nu med alle faner;
+  kun Kontaktpersoner virker – resten bygges i trin 5.
