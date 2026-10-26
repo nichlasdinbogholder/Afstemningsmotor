@@ -727,3 +727,9 @@ Nyt modul i hub'en – fire faser, ét trin ad gangen (PR + merge pr. trin). Kun
   - Dækningsgrad = KUN abonnementskunder, seneste hele måned: (abonnementspris + timer uden for abonnementet ×
     salgspris − alle registrerede timer × kostpris) / indtægt. Alle registrerede timer tæller (ugegodkendelse er
     endnu ikke bygget).
+- Rettelser til oversigten (bygherren 26.10.2026): kun firmanavn i kundekolonnen + egne kolonner til kundenr. og CVR;
+  ansvarlig vælges IKKE i oversigten, men på kundekortet (admin: status, ansvarlig, assistent); næste frist og
+  dækningsgrad er ikke relevante i oversigten; afregning viser kun abonnement/timeafregning (ingen pris); listen er
+  sorteret efter navn.
+- Ny status ONBOARDING (kunder, der er ved at blive onboardet) – samme funktion som Aktiv overalt (`I_DRIFT`). Pause
+  beholdes. En ny kunde oprettes som Aktiv eller Onboarding.

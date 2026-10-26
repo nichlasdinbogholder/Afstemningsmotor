@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 from app.assistent.models import AssistantConversation, AssistantMessage, KbDocument
 from app.assistent.satskontrol import er_foraeldet
 from app.config import get_settings
-from app.kunder.models import Client
+from app.kunder.models import I_DRIFT, Client
 from app.kunder.roller import arbejder_paa
 from app.personale.models import Staff
 from app.sikkerhed.hemmeligheder import registrer_hemmelighed
@@ -122,7 +122,7 @@ def tilknyttede_kunder(session: Session, medarbejder: Staff) -> list[Client]:
     """De kunder, medarbejderen må slå op hos i Svend: en ADMINISTRATOR må alle aktive kunder; en medarbejder kun de
     aktive kunder, hun er ANSVARLIG eller ASSISTENT for (bygherren 26.10.2026 – se app/kunder/roller.py).
     Kontrolleres på serveren ved hvert kald – aldrig kun i brugerfladen."""
-    q = select(Client).where(Client.status == "aktiv")
+    q = select(Client).where(Client.status.in_(I_DRIFT))
     if medarbejder.rolle != "admin":
         # Interne kunder (fx Din Bogholder selv) er kun for administratorer – også hvis man er ansvarlig/assistent.
         q = q.where(or_(Client.ansvarlig_medarbejder_id == medarbejder.id, Client.assistent_id == medarbejder.id),
@@ -132,7 +132,7 @@ def tilknyttede_kunder(session: Session, medarbejder: Staff) -> list[Client]:
 
 def er_tilknyttet(session: Session, medarbejder: Staff, client_id: int) -> bool:
     k = session.get(Client, client_id)
-    if k is None or k.status != "aktiv":
+    if k is None or k.status not in I_DRIFT:
         return False
     if medarbejder.rolle == "admin":
         return True

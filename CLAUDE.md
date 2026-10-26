@@ -114,7 +114,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   - REGEL: al hentning med bogmærke (cursor) skal ske i `synk_transaktion(...)`;
     kald `synk.gennemfoert(ny_cursor, type, antal_hentet=...)` efter data er skrevet.
     Data og bogmærke gemmes samlet – aldrig bogmærket alene.
-  - Kun kunder med status `aktiv` synkroniseres (aldrig `opsagt` eller `pause`).
+  - Kun kunder I DRIFT synkroniseres: `aktiv` og `onboarding` (`app.kunder.models.I_DRIFT`) – aldrig `opsagt`, `pause` eller `emne`.
   - Efter 5 fejl i træk: status `fejlet`. Ventetid 5 min, 10 min, … højst 24 t.
   - `python -m app.synk.kommando oversigt|status|nulstil|deaktiver|aktiver`.
 - `app/cli.py` – `python -m app.cli sync-entries <client_id>`: lægger et `synk_entries`-job
@@ -245,7 +245,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 - Kapacitet (målt, DEPLOY.md): 500 kunder / 20 samtidige medarbejdere; 4 workers, 3 API-processer.
 - KUNDEOVERSIGTEN (spec 26.10.2026, se RESUME.md; fase 1 trin 1 bygget): `app/kunder/tabeller.py` – tabellerne `kunde_*`
   (groups, aliases, owner_history, cvr_snapshot/changes, agreements, ledgers, authorities, obligations, task_types, tasks,
-  aml, checklists, log). Bygger på det eksisterende: clients (status `emne`/aktiv/pause/opsagt = livscyklus), contacts
+  aml, checklists, log). Bygger på det eksisterende: clients (status emne/onboarding/aktiv/pause/opsagt = livscyklus;
+  ONBOARDING har samme funktion som aktiv – brug ALTID `I_DRIFT`, aldrig status == "aktiv"; DB-reglerne regel_1-3,
+  luk_loeste_fund og visningen synk_kraever_handling bruger IN ('aktiv','onboarding'), migrering 59f02cd75f17), contacts
   (underskriver, maa_kontaktes_af, arkiveret) og credentials (ledger_id → `kunde_ledgers`, fingerprint = sidste 4 tegn,
   set_by/set_at/revoked_at) er UDVIDET – ingen kopier. Afregningsform/pris bliver i time_client_terms. Fristparametre
   (momsperiode, regnskabsår, lønkørselsdag) ligger KUN i `kunde_obligations`. Noter/dokumenter = notes/documents (crm).
@@ -272,7 +274,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     `POST …/kontakter`, `POST /api/kundekort/kontakter/{kid}[/primaer|/arkiver]`.
   - `oversigt.py` (trin 4): listen i Kundeoversigten – `GET /api/kundekartotek?mine=&ansvarlig_id=&afregning=&system=&status=
     &forfaldne=&doede_forbindelser=&mangler_hvidvask=`; "mine" = ansvarlig ELLER assistent (standard i webdelen); sorteret
-    efter nærmeste åbne frist (kunde_tasks), uden frist sidst. Forbindelse = dårligste af kundens kunde_ledgers.
+    efter navn. Kolonner (bygherren 26.10.2026): Kunde (kun navn) · Kundenr. · CVR · Ansvarlig (kun visning – status,
+    ansvarlig og assistent sættes af admin på KUNDEKORTET) · Afregning (kun abonnement/timeafregning, ingen pris) · System
+    · Bilagsdækning · Månedens status · Status. Næste frist og dækningsgrad vises IKKE i oversigten
+    (`oversigt.daekningsgrader()` gemmes til ledervisningen). Forbindelse = dårligste af kundens kunde_ledgers.
     MÅNEDENS STATUS = "x af y" af denne måneds kunde_tasks. DÆKNINGSGRAD (kun abonnementskunder, seneste hele måned) =
     (abonnementspris + særskilte timer × salgspris − alle timer × kostpris) / indtægt; satser på arbejdsdagen; mangler en
     sats: "mangler sats" (`DAEKNING_SQL`). BILAGSDÆKNING (andel bankposteringer af typen finans med bilag – ikke

@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.api.data import kraev_header
 from app.api.login import db, kraev_admin, nuvaerende_medarbejder
 from app.audit.models import AuditLog
-from app.kunder.models import Client
+from app.kunder.models import I_DRIFT, Client
 from app.opkraevning.models import (
     KANALER,
     Debtor,
@@ -106,7 +106,7 @@ def kunder(session: Session = Depends(db)) -> list[dict]:
                func.coalesce(func.sum(Invoice.amount_outstanding).filter(
                    Invoice.status == "open", Invoice.kind == "invoice", Invoice.due_date < dag), 0).label("forfaldent"))
         .outerjoin(Invoice, Invoice.client_id == Client.id)
-        .where(Client.status == "aktiv")
+        .where(Client.status.in_(I_DRIFT))
         .group_by(Client.id).order_by(Client.navn))
     return [{"id": r.id, "navn": r.navn, "kundenummer": r.kundenummer, "rykkere": r.dunning_mode,
              "aabne": r.aabne, "forfaldne": r.forfaldne, "forfaldent_beloeb": _kr(r.forfaldent)} for r in raekker]

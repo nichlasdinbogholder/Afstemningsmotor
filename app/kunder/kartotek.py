@@ -23,8 +23,9 @@ from sqlalchemy.orm import Session
 from app.audit.models import AuditLog
 from app.db import saet_aktoer
 from app.kunder.cvr import laeg_opslag_i_koe
+from app.kunder.tabeller import KundeLog
 from app.tid import TIDSZONE
-from app.kunder.models import ARKIV_AARSAGER, SYSTEMER, Client
+from app.kunder.models import ARKIV_AARSAGER, I_OVERSIGTEN, SYSTEMER, Client
 from app.personale.models import Staff
 from app.timeregistrering.satser import ManglerSats, nye_vilkaar
 
@@ -47,7 +48,7 @@ def liste(session: Session, arkiverede: bool, dag: date) -> list[dict]:
     Afregningsformen vises på dagen – eller på startdatoen, hvis samarbejdet ikke er begyndt endnu. For en arkiveret
     kunde vises den, der gjaldt ved ophøret."""
     # Kundeoversigten viser kunder (aktiv og pause) – aldrig emner, der endnu ikke er blevet kunde.
-    betingelse = Client.status == "opsagt" if arkiverede else Client.status.in_(("aktiv", "pause"))
+    betingelse = Client.status == "opsagt" if arkiverede else Client.status.in_(I_OVERSIGTEN)
     ud = []
     for k in session.scalars(select(Client).where(betingelse).order_by(Client.navn)):
         ansvarlig = session.get(Staff, k.ansvarlig_medarbejder_id) if k.ansvarlig_medarbejder_id else None
@@ -73,7 +74,8 @@ def liste(session: Session, arkiverede: bool, dag: date) -> list[dict]:
 
 
 def opret(session: Session, af: Staff, navn: str, kundenummer: str, cvr: str | None, system: str,
-          ansvarlig_id: int | None, startdato: date, afregning: str, abonnementspris: Decimal | None) -> Client:
+          ansvarlig_id: int | None, startdato: date, afregning: str, abonnementspris: Decimal | None,
+          status: str = "aktiv") -> Client:
     navn, kundenummer = (navn or "").strip(), (kundenummer or "").strip()
     cvr = (cvr or "").replace(" ", "") or None
     if not navn or not kundenummer:
@@ -84,6 +86,8 @@ def opret(session: Session, af: Staff, navn: str, kundenummer: str, cvr: str | N
         raise KartotekFejl("Vælg kundens regnskabssystem")
     if startdato is None:
         raise KartotekFejl("Vælg startdatoen for samarbejdet")
+    if status not in ("onboarding", "aktiv"):
+        raise KartotekFejl("En ny kunde er enten Onboarding eller Aktiv")
     findes = session.scalars(select(Client).where(or_(
         Client.kundenummer == kundenummer, Client.cvr == cvr if cvr else False))).first()
     if findes is not None:
@@ -94,7 +98,7 @@ def opret(session: Session, af: Staff, navn: str, kundenummer: str, cvr: str | N
         if m is None or not m.aktiv:
             raise KartotekFejl("Den ansvarlige skal være en aktiv medarbejder")
     saet_aktoer(session, af.id)
-    kunde = Client(navn=navn, kundenummer=kundenummer, cvr=cvr, regnskabssystem=system, status="aktiv",
+    kunde = Client(navn=navn, kundenummer=kundenummer, cvr=cvr, regnskabssystem=system, status=status,
                    startdato=startdato, ansvarlig_medarbejder_id=ansvarlig_id)
     session.add(kunde)
     session.flush()
@@ -129,6 +133,51 @@ def saet_ansvarlig(session: Session, af: Staff, client_id: int, ansvarlig_id: in
     kunde.ansvarlig_medarbejder_id = ansvarlig_id
     session.add(AuditLog(client_id=kunde.id, staff_id=af.id, handling="kunde_ansvarlig", detaljer={
         "udfoert_af": af.email, "fra_staff_id": fra, "til_staff_id": ansvarlig_id}))
+    session.flush()
+    return kunde
+
+
+def saet_assistent(session: Session, af: Staff, client_id: int, assistent_id: int | None) -> Client:
+    """Assistenten på kunden (det daglige arbejde – samme adgang som den ansvarlige). Skrives i kundens log."""
+    kunde = session.get(Client, client_id)
+    if kunde is None:
+        raise KartotekFejl("Kunden findes ikke")
+    if kunde.status == "opsagt":
+        raise KartotekFejl("Kunden er arkiveret – genaktivér den først")
+    ny = session.get(Staff, assistent_id) if assistent_id is not None else None
+    if assistent_id is not None and (ny is None or not ny.aktiv):
+        raise KartotekFejl("Assistenten skal være en aktiv medarbejder")
+    if kunde.assistent_id == assistent_id:
+        return kunde
+    gammel = session.get(Staff, kunde.assistent_id) if kunde.assistent_id else None
+    kunde.assistent_id = assistent_id
+    session.add(KundeLog(client_id=kunde.id, event="assistent_skiftet", actor_staff_id=af.id,
+                         detail=f"{gammel.navn if gammel else 'ingen'} → {ny.navn if ny else 'ingen'}"))
+    session.flush()
+    return kunde
+
+
+# Status, der kan vælges på kundekortet. Arkivering ('opsagt') sker kun med årsag og dato (arkiver/genaktiver).
+VALGBARE_STATUSSER = ("onboarding", "aktiv", "pause")
+STATUS_TEKST = {"emne": "Emne", "onboarding": "Onboarding", "aktiv": "Aktiv", "pause": "Pause", "opsagt": "Arkiveret"}
+
+
+def saet_status(session: Session, af: Staff, client_id: int, status: str) -> Client:
+    kunde = session.get(Client, client_id)
+    if kunde is None:
+        raise KartotekFejl("Kunden findes ikke")
+    if status not in VALGBARE_STATUSSER:
+        raise KartotekFejl("Vælg Onboarding, Aktiv eller Pause")
+    if kunde.status == "opsagt":
+        raise KartotekFejl("Kunden er arkiveret – genaktivér den under Arkiverede kunder")
+    if kunde.status == status:
+        return kunde
+    fra = kunde.status
+    kunde.status = status
+    session.add(KundeLog(client_id=kunde.id, event="status_skiftet", actor_staff_id=af.id,
+                         detail=f"{STATUS_TEKST[fra]} → {STATUS_TEKST[status]}"))
+    session.add(AuditLog(client_id=kunde.id, staff_id=af.id, handling="kunde_status", detaljer={
+        "udfoert_af": af.email, "fra": fra, "til": status}))
     session.flush()
     return kunde
 

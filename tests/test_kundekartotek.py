@@ -166,3 +166,52 @@ def test_kun_admin_hos_svend(db_session, klient, folk):
     _som(folk[1])
     assert klient.post(f"/api/kundekartotek/{kid}/kun-admin", headers=H, json={"kun_admin": False}
                        ).status_code == 403
+
+
+# Bygherren 26.10.2026: status Onboarding (samme funktion som Aktiv) og Pause vælges på kundekortet – kun admin.
+def test_status_og_assistent_saettes_paa_kundekortet(db_session, klient, folk):
+    kid = klient.post("/api/kundekartotek", headers=H, json={**NY, "status": "onboarding"}).json()["id"]
+    assert db_session.get(Client, kid).status == "onboarding"
+    assert klient.post("/api/kundekartotek", headers=H, json={**NY, "kundenummer": "KART-X", "cvr": None,
+                                                              "status": "pause"}).status_code == 422
+    for status in ("aktiv", "pause", "onboarding"):
+        assert klient.post(f"/api/kundekartotek/{kid}/status", headers=H, json={"status": status}).json()["status"] \
+            == status
+    assert klient.post(f"/api/kundekartotek/{kid}/status", headers=H, json={"status": "opsagt"}).status_code == 422
+    assert klient.post(f"/api/kundekartotek/{kid}/assistent", headers=H,
+                       json={"assistent_id": folk[1].id}).json()["assistent_id"] == folk[1].id
+    from app.kunder.tabeller import KundeLog
+
+    log = db_session.scalars(select(KundeLog.detail).where(KundeLog.client_id == kid,
+                                                           KundeLog.event.in_(("status_skiftet", "assistent_skiftet")))
+                             .order_by(KundeLog.id)).all()
+    assert log == ["Onboarding → Aktiv", "Aktiv → Pause", "Pause → Onboarding", "ingen → Kartotek Medarbejder"]
+    _som(folk[1])
+    assert klient.post(f"/api/kundekartotek/{kid}/status", headers=H, json={"status": "aktiv"}).status_code == 403
+    assert klient.post(f"/api/kundekartotek/{kid}/assistent", headers=H, json={"assistent_id": None}).status_code == 403
+
+
+def test_onboarding_virker_som_aktiv(db_session, klient, folk):
+    from app.assistent.samtale import tilknyttede_kunder
+    from app.kunder.models import I_DRIFT
+    from app.synk.planlaegger import aktive_kunder
+
+    assert I_DRIFT == ("aktiv", "onboarding")
+    kid = klient.post("/api/kundekartotek", headers=H, json={**NY, "status": "onboarding",
+                                                             "ansvarlig_id": folk[1].id}).json()["id"]
+    k = db_session.get(Client, kid)
+    assert k in tilknyttede_kunder(db_session, folk[1])                      # Svend
+    stamdata.saet_ansaettelse(db_session, folk[1].id, "fastloennet", False, None)
+    _som(folk[1])
+    assert kid in [x["id"] for x in klient.get("/api/tid/uge?dato=2026-11-02").json()["kunder"]]  # timer
+    assert kid in [x["id"] for x in klient.get("/api/kundekartotek").json()]                       # oversigten
+    # Databasens regler for åbne poster og synk-visningen tæller også onboarding med.
+    for navn in ("regel_1_kandidater", "regel_2_kandidater", "regel_3_kandidater", "luk_loeste_fund"):
+        definition = db_session.scalar(text("SELECT pg_get_functiondef(CAST(:n AS regproc))"), {"n": navn})
+        assert "c.status IN ('aktiv', 'onboarding')" in definition
+    assert "onboarding" in db_session.scalar(text("SELECT pg_get_viewdef('synk_kraever_handling'::regclass)"))
+    # Natkørslen: en onboarding-kunde med token kommer med.
+    from tests.hjaelp_token import laeg_token
+
+    laeg_token(db_session, kid, "economic", "onboarding-token-1234")
+    assert kid in aktive_kunder(db_session)

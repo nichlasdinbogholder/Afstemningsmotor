@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.jobs.koe import laeg_i_koe
 from app.jobs.register import JobKontekst, jobtype
-from app.kunder.models import Client
+from app.kunder.models import I_DRIFT, Client
 from app.rules.koersel import koer_regler
 
 log = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ def planlaeg_regler(session: Session, dag: date | None = None) -> int:
     dag = dag or nu.date()
     tidspunkt = max(datetime.combine(dag, KLOKKEN, TIDSZONE), nu)
     nye = 0
-    for client_id in session.scalars(select(Client.id).where(Client.status == "aktiv").order_by(Client.id)):
+    for client_id in session.scalars(select(Client.id).where(Client.status.in_(I_DRIFT)).order_by(Client.id)):
         nye += laeg_i_koe(session, "run_rules", client_id=client_id, planlagt_til=tidspunkt,
                           idempotens_noegle=f"rules:{client_id}:{dag.isoformat()}").ny
     return nye

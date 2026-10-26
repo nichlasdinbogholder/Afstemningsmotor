@@ -6,6 +6,8 @@ arkivere og genaktivere. Logikken ligger i app/kunder/kartotek.py. Ændringer kr
 - `GET  /api/kundekartotek/valg`                    medarbejdere, regnskabssystemer og årsager til formularerne
 - `POST /api/kundekartotek`                         opret en kunde (startdato + afregningsform kræves)
 - `POST /api/kundekartotek/{id}/ansvarlig`          skift ansvarlig medarbejder (styrer adgangen hos Svend)
+- `POST /api/kundekartotek/{id}/assistent`          skift assistent (kundekortet)
+- `POST /api/kundekartotek/{id}/status`             Onboarding / Aktiv / Pause (kundekortet)
 - `POST /api/kundekartotek/{id}/kun-admin`          intern kunde: kun administratorer kan spørge Svend om den
 - `POST /api/kundekartotek/{id}/arkiver`            årsag + dato for samarbejdets ophør
 - `POST /api/kundekartotek/{id}/genaktiver`
@@ -65,6 +67,7 @@ class NyKunde(BaseModel):
     startdato: date
     afregning: str
     abonnementspris: Decimal | None = Field(default=None, ge=0, max_digits=15, decimal_places=2)
+    status: str = "aktiv"
 
 
 @router.post("", dependencies=[Depends(kraev_header)])
@@ -72,7 +75,7 @@ def opret(data: NyKunde, af: Staff = Depends(kraev_admin), session: Session = De
     try:
         with session.begin_nested():
             k = kartotek.opret(session, af, data.navn, data.kundenummer, data.cvr, data.system, data.ansvarlig_id,
-                               data.startdato, data.afregning, data.abonnementspris)
+                               data.startdato, data.afregning, data.abonnementspris, data.status)
     except kartotek.KartotekFejl as fejl:
         raise HTTPException(status_code=422, detail=str(fejl)) from None
     session.commit()
@@ -92,6 +95,36 @@ def ansvarlig(kunde_id: int, data: Ansvarlig, af: Staff = Depends(kraev_admin), 
         raise HTTPException(status_code=422, detail=str(fejl)) from None
     session.commit()
     return {"id": k.id, "ansvarlig_id": k.ansvarlig_medarbejder_id}
+
+
+class Assistent(BaseModel):
+    assistent_id: int | None
+
+
+@router.post("/{kunde_id}/assistent", dependencies=[Depends(kraev_header)])
+def assistent(kunde_id: int, data: Assistent, af: Staff = Depends(kraev_admin), session: Session = Depends(db)) -> dict:
+    try:
+        with session.begin_nested():
+            k = kartotek.saet_assistent(session, af, kunde_id, data.assistent_id)
+    except kartotek.KartotekFejl as fejl:
+        raise HTTPException(status_code=422, detail=str(fejl)) from None
+    session.commit()
+    return {"id": k.id, "assistent_id": k.assistent_id}
+
+
+class Status(BaseModel):
+    status: str
+
+
+@router.post("/{kunde_id}/status", dependencies=[Depends(kraev_header)])
+def status(kunde_id: int, data: Status, af: Staff = Depends(kraev_admin), session: Session = Depends(db)) -> dict:
+    try:
+        with session.begin_nested():
+            k = kartotek.saet_status(session, af, kunde_id, data.status)
+    except kartotek.KartotekFejl as fejl:
+        raise HTTPException(status_code=422, detail=str(fejl)) from None
+    session.commit()
+    return {"id": k.id, "status": k.status}
 
 
 class KunAdmin(BaseModel):

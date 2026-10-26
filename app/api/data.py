@@ -21,7 +21,7 @@ from app.api.login import db, nuvaerende_medarbejder
 from app.jobs.koe import laeg_i_koe
 from app.jobs.models import Job
 from app.kontoudtog.models import Statement
-from app.kunder.models import Client
+from app.kunder.models import I_DRIFT, Client
 from app.natkoersel.job import OPDATER_JOBTYPE, OPDATER_PRIORITET
 from app.personale.models import Staff
 from app.rules.models import STATUSSER, Finding, FindingEvent
@@ -168,7 +168,7 @@ def opdater(client_id: int, m: Staff = Depends(nuvaerende_medarbejder), session:
     """Hent frisk data fra kundens regnskabssystem og kør reglerne – forrest i køen.
     Ligger der allerede en opdatering i kø eller i gang, genbruges den."""
     k = _kunde(session, client_id)
-    if k.status != "aktiv":
+    if k.status not in I_DRIFT:
         raise HTTPException(status_code=409, detail="Kun aktive kunder kan opdateres")
     igang = session.scalar(select(Job).where(Job.client_id == client_id, Job.type == OPDATER_JOBTYPE,
                                              Job.status.in_(("koe", "i_gang"))).order_by(Job.id))

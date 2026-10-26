@@ -26,7 +26,7 @@ import app.models  # noqa: F401
 from app.adaptere.regnskab.base import understoettede_systemer
 from app.db import ny_session
 from app.jobs.koe import laeg_i_koe
-from app.kunder.models import Client, Credential
+from app.kunder.models import I_DRIFT, Client, Credential
 from app.synk.models import SyncState
 from app.synk.ressourcer import SYNK_FUNKTIONER
 
@@ -42,13 +42,13 @@ class PlanResultat:
 
 
 def aktive_kunder(session: Session) -> list[int]:
-    """Aktive kunder (aldrig pause/opsagt) med aktiv adgang til et understøttet system."""
+    """Kunder i drift (aktiv og onboarding – aldrig pause/opsagt) med aktiv adgang til et understøttet system."""
     return list(session.scalars(
         select(Client.id)
         .join(Credential, (Credential.client_id == Client.id)
               & (Credential.system == Client.regnskabssystem))
         .where(
-            Client.status == "aktiv",
+            Client.status.in_(I_DRIFT),
             Credential.status == "aktiv",
             Client.regnskabssystem.in_(understoettede_systemer()),
         )

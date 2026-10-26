@@ -68,20 +68,20 @@ def test_mine_kunder_er_ansvarlig_eller_assistent(klient, kunder):
     assert _navne(klient, mine=True) == ["Ovs A ApS", "Ovs B ApS"]        # A: ansvarlig, B: assistent
 
 
-def test_sorteret_efter_naermeste_frist(klient, kunder):
-    assert _navne(klient) == ["Ovs C ApS", "Ovs A ApS", "Ovs B ApS"]     # forfalden, om 5 dage, ingen frist
+def test_sorteret_efter_navn(klient, kunder):
+    assert _navne(klient) == ["Ovs A ApS", "Ovs B ApS", "Ovs C ApS"]
     c = [r for r in klient.get("/api/kundekartotek").json() if r["navn"] == "Ovs C ApS"][0]
     assert (c["dage_til_frist"], c["forbindelse"], c["forbindelse_tekst"]) == (-2, "afvist", "Afvist")
 
 
 def test_filtrene(klient, kunder, folk):
-    assert _navne(klient, ansvarlig_id=folk[1].id) == ["Ovs C ApS", "Ovs B ApS"]
+    assert _navne(klient, ansvarlig_id=folk[1].id) == ["Ovs B ApS", "Ovs C ApS"]
     assert _navne(klient, afregning="abonnement") == ["Ovs A ApS"]
     assert _navne(klient, system="dinero") == ["Ovs B ApS"]
     assert _navne(klient, status="pause") == ["Ovs B ApS"]
     assert _navne(klient, forfaldne=True) == ["Ovs C ApS"]
     assert _navne(klient, doede_forbindelser=True) == ["Ovs C ApS"]   # én af to aftaler er afvist
-    assert _navne(klient, mangler_hvidvask=True) == ["Ovs C ApS", "Ovs B ApS"]
+    assert _navne(klient, mangler_hvidvask=True) == ["Ovs B ApS", "Ovs C ApS"]
     assert _navne(klient, mine=True, system="economic") == ["Ovs A ApS"]
 
 
@@ -112,7 +112,7 @@ def test_maanedens_status(klient, kunder, db_session):
 def test_daekningsgrad_kun_for_abonnement(klient, kunder, folk, db_session):
     from decimal import Decimal
 
-    from app.kunder.oversigt import seneste_hele_maaned
+    from app.kunder.oversigt import daekningsgrader, seneste_hele_maaned
     from app.timeregistrering import registrering, stamdata
 
     fra, _ = seneste_hele_maaned(I_DAG)
@@ -126,14 +126,14 @@ def test_daekningsgrad_kun_for_abonnement(klient, kunder, folk, db_session):
                            {fra: Decimal(2)})
     registrering.gem_linje(db_session, e, mig.id, fra, [],
                            registrering.Linje("kundearbejde", a.id, "Ekstra opgave", True), {fra: Decimal(1)})
-    raekker = {r["navn"]: r for r in klient.get("/api/kundekartotek").json()}
+    # Bruges i ledervisningen (trin 18) – ikke i Kundeoversigten.
+    dg = daekningsgrader(db_session, [a.id, c.id], I_DAG)
     # (2.000 + 1 × 900 − 3 × 300) / 2.900 = 68,97 %
-    assert raekker["Ovs A ApS"]["daekningsgrad"] == {"procent": "69.0", "tekst": None}
-    assert raekker["Ovs A ApS"]["daekning_periode"] == f"{fra:%m.%Y}"
-    assert raekker["Ovs C ApS"]["daekningsgrad"] is None        # timeafregning – ingen dækningsgrad
+    assert dg[a.id] == {"procent": "69.0", "tekst": None}
+    assert c.id not in dg                                       # timeafregning – ingen dækningsgrad
+    assert "daekningsgrad" not in klient.get("/api/kundekartotek").json()[0]
     # En medarbejder uden kostpris -> "mangler sats" – aldrig et gættet tal.
     e2 = stamdata.saet_ansaettelse(db_session, anden.id, "fastloennet", False, None)
     registrering.gem_linje(db_session, e2, anden.id, fra, [], registrering.Linje("kundearbejde", a.id, None, False),
                            {fra: Decimal(1)})
-    raekke = [r for r in klient.get("/api/kundekartotek").json() if r["navn"] == "Ovs A ApS"][0]
-    assert raekke["daekningsgrad"] == {"procent": None, "tekst": "mangler sats"}
+    assert daekningsgrader(db_session, [a.id], I_DAG)[a.id] == {"procent": None, "tekst": "mangler sats"}

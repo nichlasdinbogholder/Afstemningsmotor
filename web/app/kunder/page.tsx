@@ -4,10 +4,9 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useMig } from "@/components/Ramme";
 import { hent, send } from "@/lib/api";
-import { dato } from "@/lib/format";
-import { afregningTekst, type KartotekKunde, type Valg } from "@/lib/kartotek";
+import { type KartotekKunde, type Valg } from "@/lib/kartotek";
 
-const STATUS = { aktiv: "Aktiv", pause: "Pause", opsagt: "Arkiveret" };
+const STATUS = { emne: "Emne", onboarding: "Onboarding", aktiv: "Aktiv", pause: "Pause", opsagt: "Arkiveret" };
 
 // Kun dansk skrivemåde: 1500 · 1.500 · 1.500,50 – "1500.5" afvises, så et beløb aldrig gættes.
 function danskTal(v: string): string | null {
@@ -90,7 +89,8 @@ export default function Side() {
         </select>
         <select aria-label="Livscyklus" value={filtre.status} onChange={(e) => setFiltre({ ...filtre, status: e.target.value })}
                 className="rounded-md border border-slate-300 px-2 py-1.5">
-          <option value="">Aktiv og pause</option>
+          <option value="">Alle statusser</option>
+          <option value="onboarding">Onboarding</option>
           <option value="aktiv">Aktiv</option>
           <option value="pause">Pause</option>
         </select>
@@ -108,12 +108,11 @@ export default function Side() {
           <table className="w-full text-sm">
             <thead className="border-b border-slate-200 text-left text-xs font-semibold text-slate-600">
               <tr>
-                <th className="px-3 py-2">Kunde og CVR</th><th className="px-3 py-2">Ansvarlig</th>
+                <th className="px-3 py-2">Kunde</th><th className="px-3 py-2">Kundenr.</th><th className="px-3 py-2">CVR</th>
+                <th className="px-3 py-2">Ansvarlig</th>
                 <th className="px-3 py-2">Afregning</th><th className="px-3 py-2">System</th>
-                <th className="px-3 py-2">Næste frist</th>
                 <th className="px-3 py-2" title="Andel af bankposteringer af typen finans med bilag – bygges i et senere trin">Bilagsdækning</th>
                 <th className="px-3 py-2" title="Fuldførte af denne måneds opgaver">Månedens status</th>
-                <th className="px-3 py-2" title="Kun abonnementskunder – seneste hele måned">Dækningsgrad</th>
                 <th className="px-3 py-2">Status</th>
                 {admin && <th className="px-3 py-2" title="Intern kunde: kun administratorer kan spørge Svend om den">Kun admin hos Svend</th>}
                 {admin && <th className="px-3 py-2" />}
@@ -125,24 +124,17 @@ export default function Side() {
                   <tr className="border-b border-slate-100">
                     <td className="px-3 py-2">
                       <Link href={`/kunder/kort/?id=${k.id}`} className="font-medium text-slate-900 hover:text-brand-700 hover:underline">{k.navn}</Link>
-                      <div className="text-xs text-slate-500">{k.kundenummer}{k.cvr && ` · CVR ${k.cvr}`}</div>
                     </td>
+                    <td className="px-3 py-2">{k.kundenummer}</td>
+                    <td className="px-3 py-2">{k.cvr}</td>
                     <td className="px-3 py-2">
-                      {admin && valg ? (
-                        <select value={k.ansvarlig_id ?? ""} aria-label={`Ansvarlig for ${k.navn}`}
-                                onChange={(e) => udfoer(() => send(`/api/kundekartotek/${k.id}/ansvarlig`, {
-                                  ansvarlig_id: e.target.value ? Number(e.target.value) : null }),
-                                  `Ansvarlig for ${k.navn} er ændret`)}
-                                className="rounded-md border border-slate-300 px-2 py-1 text-sm">
-                          <option value="">Ingen</option>
-                          {valg.medarbejdere.map((m) => <option key={m.id} value={m.id}>{m.navn}</option>)}
-                        </select>
-                      ) : (k.ansvarlig ?? <span className="text-slate-400">Ingen</span>)}
+                      {k.ansvarlig ?? <span className="text-slate-400">Ingen</span>}
                       <div className="text-xs text-slate-500">Assistent: {k.assistent ?? "ingen"}</div>
                     </td>
                     <td className="px-3 py-2">
-                      {afregningTekst(k) || <span className="text-slate-400">Ikke sat</span>}
-                      {k.startdato && <div className="text-xs text-slate-500">fra {dato(k.startdato)}</div>}
+                      {/* Kun afregningsformen – ikke prisen (bygherren 26.10.2026). */}
+                      {k.afregning === "abonnement" ? "Abonnement" : k.afregning === "timeafregning" ? "Timeafregning"
+                        : <span className="text-slate-400">Ikke sat</span>}
                     </td>
                     <td className="px-3 py-2">
                       {k.system}
@@ -150,29 +142,10 @@ export default function Side() {
                         {k.forbindelse_tekst}
                       </div>
                     </td>
-                    <td className="px-3 py-2">
-                      {k.naeste_frist ? (
-                        <>
-                          {dato(k.naeste_frist)}
-                          <div className={`text-xs ${(k.dage_til_frist ?? 0) < 0 ? "font-semibold text-red-700" : "text-slate-500"}`}>
-                            {(k.dage_til_frist ?? 0) < 0 ? `${-(k.dage_til_frist ?? 0)} dage over` : k.dage_til_frist === 0 ? "i dag" : `om ${k.dage_til_frist} dage`}
-                          </div>
-                        </>
-                      ) : <span className="text-slate-400">–</span>}
-                    </td>
                     <td className="px-3 py-2 text-xs text-slate-400">kommer senere</td>
                     <td className="px-3 py-2">
                       {k.maanedens_opgaver ? `${k.maanedens_opgaver.fuldfoert} af ${k.maanedens_opgaver.i_alt}`
                         : <span className="text-slate-400">–</span>}
-                    </td>
-                    <td className="px-3 py-2">
-                      {k.daekningsgrad?.procent ? (
-                        <>
-                          {Number(k.daekningsgrad.procent).toLocaleString("da-DK", { minimumFractionDigits: 1 })} %
-                          <div className="text-xs text-slate-500">{k.daekning_periode}</div>
-                        </>
-                      ) : k.daekningsgrad?.tekst ? <span className="text-xs text-amber-700">{k.daekningsgrad.tekst}</span>
-                        : <span className="text-slate-400" title="Kun abonnementskunder">–</span>}
                     </td>
                     <td className="px-3 py-2">{STATUS[k.status]}</td>
                     {admin && (
@@ -215,7 +188,7 @@ export default function Side() {
 }
 
 type NyData = { navn: string; kundenummer: string; cvr: string | null; system: string; ansvarlig_id: number | null;
-  startdato: string; afregning: string; abonnementspris: string | null };
+  startdato: string; afregning: string; abonnementspris: string | null; status: string };
 
 function NyKunde({ valg, gem, luk }: { valg: Valg; gem: (d: NyData) => Promise<boolean>; luk: () => void }) {
   const [navn, setNavn] = useState("");
@@ -225,6 +198,7 @@ function NyKunde({ valg, gem, luk }: { valg: Valg; gem: (d: NyData) => Promise<b
   const [ansvarlig, setAnsvarlig] = useState("");
   const [startdato, setStartdato] = useState("");
   const [afregning, setAfregning] = useState("");
+  const [status, setStatus] = useState("aktiv");
   const [pris, setPris] = useState("");
   const [fejl, setFejl] = useState<string | null>(null);
 
@@ -239,7 +213,7 @@ function NyKunde({ valg, gem, luk }: { valg: Valg; gem: (d: NyData) => Promise<b
     }
     setFejl(null);
     const ok = await gem({ navn, kundenummer, cvr: cvr.trim() || null, system,
-      ansvarlig_id: ansvarlig ? Number(ansvarlig) : null, startdato, afregning, abonnementspris });
+      ansvarlig_id: ansvarlig ? Number(ansvarlig) : null, startdato, afregning, abonnementspris, status });
     if (ok) luk();
   }
 
@@ -264,6 +238,12 @@ function NyKunde({ valg, gem, luk }: { valg: Valg; gem: (d: NyData) => Promise<b
         </label>
         <label>Startdato for samarbejdet
           <input type="date" required value={startdato} onChange={(e) => setStartdato(e.target.value)} className={felt} />
+        </label>
+        <label>Status
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className={felt}>
+            <option value="aktiv">Aktiv</option>
+            <option value="onboarding">Onboarding</option>
+          </select>
         </label>
         <label>Afregningsform
           <select required value={afregning} onChange={(e) => setAfregning(e.target.value)} className={felt}>

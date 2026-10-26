@@ -1,4 +1,5 @@
-"""Kundeoversigtens liste (Kundeoversigten, trin 4): standard "mine kunder", sorteret efter nærmeste frist.
+"""Kundeoversigtens liste (Kundeoversigten, trin 4): standard "mine kunder", sorteret efter navn (bygherren 26.10.2026:
+næste frist og dækningsgrad er ikke relevante i oversigten – dækningsgraden bruges i ledervisningen, trin 18).
 
 Kolonner: kunde og CVR, ansvarlig og assistent, afregningsform og månedspris, system og forbindelsesstatus, næste frist
 med dage til, månedens status og dækningsgrad (bygherren 26.10.2026):
@@ -90,7 +91,7 @@ GROUP BY c.id
 """)
 
 
-def _daekningsgrader(session: Session, ider: list[int], dag: date) -> dict[int, dict]:
+def daekningsgrader(session: Session, ider: list[int], dag: date) -> dict[int, dict]:
     fra, til = seneste_hele_maaned(dag)
     ud = {}
     for r in session.execute(DAEKNING_SQL, {"ider": ider, "fra": fra, "til": til}):
@@ -120,8 +121,6 @@ def liste(session: Session, medarbejder: Staff, dag: date, f: Filtre) -> list[di
     frister = _naeste_frister(session, ider)
     hvidvask = _hvidvask_ok(session, ider)
     status = _maanedens_status(session, ider, dag)
-    daekning = _daekningsgrader(session, ider, dag)
-    daekning_fra, daekning_til = seneste_hele_maaned(dag)
 
     ud = []
     for r in raekker:
@@ -137,8 +136,6 @@ def liste(session: Session, medarbejder: Staff, dag: date, f: Filtre) -> list[di
             "hvidvask_ok": k.id in hvidvask,
             "maanedens_opgaver": None if k.id not in status else {"fuldfoert": status[k.id][0],
                                                                   "i_alt": status[k.id][1]},
-            "daekningsgrad": daekning.get(k.id),
-            "daekning_periode": f"{daekning_fra:%m.%Y}" if k.id in daekning else None,
             "min_kunde": medarbejder.id in (k.ansvarlig_medarbejder_id, k.assistent_id),
         }
         if f.mine and not r["min_kunde"]:
@@ -158,6 +155,5 @@ def liste(session: Session, medarbejder: Staff, dag: date, f: Filtre) -> list[di
         if f.mangler_hvidvask and r["hvidvask_ok"]:
             continue
         ud.append(r)
-    # Nærmeste frist først (kunder uden frist sidst), derefter navn.
-    ud.sort(key=lambda r: (r["naeste_frist"] is None, r["naeste_frist"] or "", r["navn"].lower()))
+    ud.sort(key=lambda r: r["navn"].lower())
     return ud

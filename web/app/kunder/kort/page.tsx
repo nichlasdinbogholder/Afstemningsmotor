@@ -8,9 +8,11 @@ import { hent, send } from "@/lib/api";
 // Kundekortet (Kundeoversigten). Trin 3: hovedet og fanen Kontaktpersoner – de øvrige faner bygges i trin 5.
 // Alle regler (hvem må rette, præcis én primær) afgøres på serveren (/api/kundekort).
 type Hoved = {
-  id: number; navn: string; kundenummer: string; cvr: string | null; status: string;
-  ansvarlig: string | null; assistent: string | null; kan_rette: boolean;
+  id: number; navn: string; kundenummer: string; cvr: string | null; status: string; status_kode: string;
+  ansvarlig: string | null; ansvarlig_id: number | null; assistent: string | null; assistent_id: number | null;
+  kan_rette: boolean; admin: boolean;
 };
+type Valg = { medarbejdere: { id: number; navn: string }[] };
 type Kontakt = {
   id: number; navn: string; rolle: string | null; telefon: string | null; email: string | null;
   primaer: boolean; underskriver: boolean; maa_kontaktes_af: "alle" | "ansvarlig"; arkiveret: string | null;
@@ -43,10 +45,18 @@ function Kundekort() {
   const fane = params.get("fane") ?? "kontakter";
   const [hoved, setHoved] = useState<Hoved | null>(null);
   const [fejl, setFejl] = useState<string | null>(null);
-
-  useEffect(() => {
+  const [besked, setBesked] = useState<{ tekst: string; fejl?: boolean } | null>(null);
+  const [valg, setValg] = useState<Valg | null>(null);
+  const hentHoved = useCallback(() => {
     hent<Hoved>(`/api/kundekort/${id}`).then(setHoved).catch((e) => setFejl(e instanceof Error ? e.message : "Fejl"));
   }, [id]);
+  useEffect(() => { hentHoved(); hent<Valg>("/api/kundekartotek/valg").then(setValg).catch(() => {}); }, [hentHoved]);
+
+  // Kun administratorer: status, ansvarlig og assistent sættes her (ikke i Kundeoversigten – bygherren 26.10.2026).
+  async function aendr(sti: string, data: unknown, ok: string) {
+    try { await send(`/api/kundekartotek/${id}/${sti}`, data); setBesked({ tekst: ok }); hentHoved(); }
+    catch (e) { setBesked({ tekst: e instanceof Error ? e.message : "Det lykkedes ikke", fejl: true }); }
+  }
 
   if (fejl) return <p className="text-red-700">{fejl}</p>;
   if (!hoved) return <p className="text-slate-500">Henter …</p>;
@@ -56,9 +66,37 @@ function Kundekort() {
         <Link href="/kunder/" className="text-sm text-brand-600 hover:underline">← Kundeoversigt</Link>
         <h1 className="mt-1 text-2xl font-semibold">{hoved.navn}</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Kundenr. {hoved.kundenummer}{hoved.cvr && ` · CVR ${hoved.cvr}`} · {hoved.status}
-          {" · "}Ansvarlig: {hoved.ansvarlig ?? "ingen"} · Assistent: {hoved.assistent ?? "ingen"}
+          Kundenr. {hoved.kundenummer}{hoved.cvr && ` · CVR ${hoved.cvr}`}
+          {!(hoved.admin && valg && hoved.status_kode !== "opsagt") &&
+            ` · ${hoved.status} · Ansvarlig: ${hoved.ansvarlig ?? "ingen"} · Assistent: ${hoved.assistent ?? "ingen"}`}
         </p>
+        {hoved.admin && valg && hoved.status_kode !== "opsagt" && (
+          <div className="mt-3 flex flex-wrap items-end gap-4 text-sm">
+            <label className="flex flex-col text-slate-600">Status
+              <select value={hoved.status_kode} onChange={(e) => aendr("status", { status: e.target.value }, "Status er ændret")}
+                      className="mt-1 rounded-md border border-slate-300 px-2 py-1 text-slate-900">
+                <option value="onboarding">Onboarding</option>
+                <option value="aktiv">Aktiv</option>
+                <option value="pause">Pause</option>
+              </select>
+            </label>
+            <label className="flex flex-col text-slate-600">Ansvarlig
+              <select value={hoved.ansvarlig_id ?? ""} className="mt-1 rounded-md border border-slate-300 px-2 py-1 text-slate-900"
+                      onChange={(e) => aendr("ansvarlig", { ansvarlig_id: e.target.value ? Number(e.target.value) : null }, "Ansvarlig er ændret")}>
+                <option value="">Ingen</option>
+                {valg.medarbejdere.map((m) => <option key={m.id} value={m.id}>{m.navn}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-col text-slate-600">Assistent
+              <select value={hoved.assistent_id ?? ""} className="mt-1 rounded-md border border-slate-300 px-2 py-1 text-slate-900"
+                      onChange={(e) => aendr("assistent", { assistent_id: e.target.value ? Number(e.target.value) : null }, "Assistent er ændret")}>
+                <option value="">Ingen</option>
+                {valg.medarbejdere.map((m) => <option key={m.id} value={m.id}>{m.navn}</option>)}
+              </select>
+            </label>
+          </div>
+        )}
+        {besked && <p className={`mt-3 rounded-md px-3 py-2 text-sm ${besked.fejl ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>{besked.tekst}</p>}
       </div>
       <nav className="flex flex-wrap gap-1 border-b border-slate-200 text-sm">
         {FANER.map((f) => (

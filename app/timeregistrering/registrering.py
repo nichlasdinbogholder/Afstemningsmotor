@@ -20,7 +20,7 @@ from decimal import Decimal, InvalidOperation
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.kunder.models import Client
+from app.kunder.models import I_DRIFT, Client
 from app.timeregistrering.models import TimeEmployee, TimeRegistration, TimeTaskType, TimeWeek
 from app.timeregistrering.satser import ManglerSats, satser_paa
 from app.timeregistrering.stamdata import saet_aktoer
@@ -94,7 +94,7 @@ def _kontroller_linje(session: Session, e: TimeEmployee, linje: Linje) -> TimeTa
         if linje.client_id is None:
             raise RegistreringsFejl("Vælg kunden – kundearbejde skal altid have en kunde")
         kunde = session.get(Client, linje.client_id)
-        if kunde is None or kunde.status != "aktiv":
+        if kunde is None or kunde.status not in I_DRIFT:
             raise RegistreringsFejl("Kunden findes ikke eller er ikke aktiv")
     elif linje.client_id is not None:
         raise RegistreringsFejl("Intern tid og fravær registreres uden kunde")
