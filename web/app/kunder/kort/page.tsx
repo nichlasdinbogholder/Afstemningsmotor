@@ -21,6 +21,7 @@ type Valg = { medarbejdere: { id: number; navn: string }[] };
 type Kontakt = {
   id: number; navn: string; rolle: string | null; telefon: string | null; email: string | null;
   primaer: boolean; underskriver: boolean; maa_kontaktes_af: "alle" | "ansvarlig"; arkiveret: string | null;
+  er_revisor: boolean; firma: string | null;
 };
 
 const FANER = [
@@ -122,7 +123,7 @@ function Kundekort() {
 function Kontakter({ hoved }: { hoved: Hoved }) {
   const [liste, setListe] = useState<Kontakt[] | null>(null);
   const [visArkiverede, setVisArkiverede] = useState(false);
-  const [retter, setRetter] = useState<number | "ny" | null>(null);
+  const [retter, setRetter] = useState<number | "ny" | "ny_revisor" | null>(null);
   const [besked, setBesked] = useState<{ tekst: string; fejl?: boolean } | null>(null);
   const hentListe = useCallback(() => {
     hent<Kontakt[]>(`/api/kundekort/${hoved.id}/kontakter?arkiverede=${visArkiverede}`).then(setListe);
@@ -141,15 +142,21 @@ function Kontakter({ hoved }: { hoved: Hoved }) {
           <input type="checkbox" checked={visArkiverede} onChange={(e) => setVisArkiverede(e.target.checked)} />
           Vis også arkiverede
         </label>
-        {hoved.kan_rette && retter !== "ny" && (
-          <button onClick={() => setRetter("ny")}
-                  className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
-            Tilføj kontaktperson
-          </button>
+        {hoved.kan_rette && retter !== "ny" && retter !== "ny_revisor" && (
+          <div className="flex gap-2">
+            <button onClick={() => setRetter("ny_revisor")}
+                    className="flex items-center gap-1.5 rounded-md border border-violet-300 bg-white px-4 py-2 text-sm font-medium text-violet-800 hover:bg-violet-50">
+              <RevisorIkon />Tilføj revisor
+            </button>
+            <button onClick={() => setRetter("ny")}
+                    className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
+              Tilføj kontaktperson
+            </button>
+          </div>
         )}
       </div>
-      {retter === "ny" && (
-        <KontaktFormular luk={() => setRetter(null)} ny
+      {(retter === "ny" || retter === "ny_revisor") && (
+        <KontaktFormular luk={() => setRetter(null)} ny revisor={retter === "ny_revisor"}
                          gem={(d) => udfoer(() => send(`/api/kundekort/${hoved.id}/kontakter`, d), `${d.navn} er tilføjet`)} />
       )}
       {besked && <p className={`rounded-md px-3 py-2 text-sm ${besked.fejl ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>{besked.tekst}</p>}
@@ -158,16 +165,22 @@ function Kontakter({ hoved }: { hoved: Hoved }) {
       ) : (
         <ul className="space-y-2">
           {liste.map((k) => (
-            <li key={k.id} className={`rounded-lg border bg-white p-4 text-sm ${k.arkiveret ? "border-slate-200 opacity-60" : "border-slate-200"}`}>
+            <li key={k.id} className={`rounded-lg border bg-white p-4 text-sm ${k.er_revisor ? "border-l-4 border-slate-200 border-l-violet-500" : "border-slate-200"} ${k.arkiveret ? "opacity-60" : ""}`}>
               {retter === k.id ? (
-                <KontaktFormular start={k} luk={() => setRetter(null)}
+                <KontaktFormular start={k} revisor={k.er_revisor} luk={() => setRetter(null)}
                                  gem={(d) => udfoer(() => send(`/api/kundekort/kontakter/${k.id}`, d), `${d.navn} er rettet`)} />
               ) : (
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="font-medium text-slate-900">
-                      {k.navn}{k.rolle && <span className="font-normal text-slate-500"> · {k.rolle}</span>}
+                    <p className="flex items-center gap-2 font-medium text-slate-900">
+                      {k.er_revisor && (
+                        <span className="inline-flex items-center gap-1 rounded bg-violet-100 px-1.5 py-0.5 text-xs font-semibold text-violet-800">
+                          <RevisorIkon />Revisor
+                        </span>
+                      )}
+                      <span>{k.navn}{k.rolle && <span className="font-normal text-slate-500"> · {k.rolle}</span>}</span>
                     </p>
+                    {k.er_revisor && k.firma && <p className="mt-0.5 font-medium text-violet-900">{k.firma}</p>}
                     <p className="mt-0.5 text-slate-600">
                       {[k.telefon, k.email].filter(Boolean).join(" · ") || <span className="text-slate-400">Ingen telefon eller e-mail</span>}
                     </p>
@@ -182,7 +195,7 @@ function Kontakter({ hoved }: { hoved: Hoved }) {
                   </div>
                   {hoved.kan_rette && !k.arkiveret && (
                     <div className="flex shrink-0 gap-2">
-                      {!k.primaer && (
+                      {!k.primaer && !k.er_revisor && (
                         <button onClick={() => udfoer(() => send(`/api/kundekort/kontakter/${k.id}/primaer`), `${k.navn} er nu primær`)}
                                 className="rounded border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-50">Gør til primær</button>
                       )}
@@ -204,10 +217,19 @@ function Kontakter({ hoved }: { hoved: Hoved }) {
 }
 
 type Data = { navn: string; rolle: string | null; telefon: string | null; email: string | null; underskriver: boolean;
-  maa_kontaktes_af: string; primaer?: boolean };
+  maa_kontaktes_af: string; primaer?: boolean; er_revisor: boolean; firma: string | null };
 
-function KontaktFormular({ start, ny, gem, luk }: {
-  start?: Kontakt; ny?: boolean; gem: (d: Data) => Promise<boolean>; luk: () => void;
+// Kundens revisor (bygherren 26.10.2026): violet mærke og kant, så revisoren skiller sig tydeligt ud fra kundens egne kontakter.
+function RevisorIkon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden className="h-3.5 w-3.5">
+      <path d="M10 2 3 5v1h14V5l-7-3ZM4 7h2v7H4V7Zm5 0h2v7H9V7Zm5 0h2v7h-2V7ZM3 15h14v2H3v-2Z" />
+    </svg>
+  );
+}
+
+function KontaktFormular({ start, ny, revisor, gem, luk }: {
+  start?: Kontakt; ny?: boolean; revisor?: boolean; gem: (d: Data) => Promise<boolean>; luk: () => void;
 }) {
   const [navn, setNavn] = useState(start?.navn ?? "");
   const [rolle, setRolle] = useState(start?.rolle ?? "");
@@ -216,27 +238,36 @@ function KontaktFormular({ start, ny, gem, luk }: {
   const [underskriver, setUnderskriver] = useState(start?.underskriver ?? false);
   const [kunAnsvarlig, setKunAnsvarlig] = useState(start?.maa_kontaktes_af === "ansvarlig");
   const [primaer, setPrimaer] = useState(false);
+  const [firma, setFirma] = useState(start?.firma ?? "");
 
   async function indsend(e: React.FormEvent) {
     e.preventDefault();
-    const d: Data = { navn, rolle: rolle || null, telefon: telefon || null, email: email || null, underskriver,
-      maa_kontaktes_af: kunAnsvarlig ? "ansvarlig" : "alle", ...(ny ? { primaer } : {}) };
+    const d: Data = { navn, rolle: revisor ? null : rolle || null, telefon: telefon || null, email: email || null,
+      underskriver: revisor ? false : underskriver, maa_kontaktes_af: kunAnsvarlig ? "ansvarlig" : "alle",
+      er_revisor: !!revisor, firma: revisor ? firma || null : null, ...(ny ? { primaer: revisor ? false : primaer } : {}) };
     if (await gem(d)) luk();
   }
 
   const felt = "mt-1 block w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm";
   return (
-    <form onSubmit={indsend} className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
+    <form onSubmit={indsend} className={`rounded-lg border bg-white p-4 text-sm ${revisor ? "border-l-4 border-slate-200 border-l-violet-500" : "border-slate-200"}`}>
+      {revisor && (
+        <p className="mb-3 flex items-center gap-1.5 font-semibold text-violet-800"><RevisorIkon />Kundens revisor</p>
+      )}
       <div className="grid grid-cols-4 gap-4">
         <label>Navn<input required value={navn} onChange={(e) => setNavn(e.target.value)} className={felt} /></label>
-        <label>Rolle<input value={rolle} onChange={(e) => setRolle(e.target.value)} placeholder="fx Direktør" className={felt} /></label>
+        {revisor ? (
+          <label>Revisionsfirma<input required value={firma} onChange={(e) => setFirma(e.target.value)} placeholder="fx Revisorhuset ApS" className={felt} /></label>
+        ) : (
+          <label>Rolle<input value={rolle} onChange={(e) => setRolle(e.target.value)} placeholder="fx Direktør" className={felt} /></label>
+        )}
         <label>Telefon<input value={telefon} onChange={(e) => setTelefon(e.target.value)} className={felt} /></label>
-        <label>E-mail<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={felt} /></label>
+        <label>{revisor ? "Mailadresse" : "E-mail"}<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={felt} /></label>
       </div>
       <div className="mt-3 flex flex-wrap gap-5">
-        <label className="flex items-center gap-2"><input type="checkbox" checked={underskriver} onChange={(e) => setUnderskriver(e.target.checked)} /> Underskriver</label>
+        {!revisor && <label className="flex items-center gap-2"><input type="checkbox" checked={underskriver} onChange={(e) => setUnderskriver(e.target.checked)} /> Underskriver</label>}
         <label className="flex items-center gap-2"><input type="checkbox" checked={kunAnsvarlig} onChange={(e) => setKunAnsvarlig(e.target.checked)} /> Kontaktes kun af den ansvarlige</label>
-        {ny && <label className="flex items-center gap-2"><input type="checkbox" checked={primaer} onChange={(e) => setPrimaer(e.target.checked)} /> Primær kontaktperson</label>}
+        {ny && !revisor && <label className="flex items-center gap-2"><input type="checkbox" checked={primaer} onChange={(e) => setPrimaer(e.target.checked)} /> Primær kontaktperson</label>}
       </div>
       <div className="mt-4 flex gap-2">
         <button type="submit" className="rounded-md bg-brand-600 px-4 py-2 font-medium text-white hover:bg-brand-700">Gem</button>

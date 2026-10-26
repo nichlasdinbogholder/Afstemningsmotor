@@ -165,7 +165,8 @@ KONTAKTES_AF = ("alle", "ansvarlig")
 
 class Contact(Base):
     """Kontaktpersoner. Slettes aldrig – arkiveres (arkiveret sat). Underskriver og "må kontaktes af" er to
-    uafhængige felter."""
+    uafhængige felter. KUNDENS REVISOR (bygherren 26.10.2026) er en kontaktperson med er_revisor og revisionsfirmaet i
+    `firma` – aldrig primær (den primære er kundens egen kontakt) og aldrig underskriver for kunden."""
 
     __tablename__ = "contacts"
     __table_args__ = (
@@ -177,6 +178,8 @@ class Contact(Base):
             postgresql_where=text("primaer AND arkiveret IS NULL"),
         ),
         kun_vaerdier("maa_kontaktes_af", KONTAKTES_AF),
+        CheckConstraint("NOT er_revisor OR (firma IS NOT NULL AND btrim(firma) <> '')", name="revisor_kraever_firma"),
+        CheckConstraint("NOT (er_revisor AND (primaer OR underskriver))", name="revisor_ikke_primaer_underskriver"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -190,6 +193,8 @@ class Contact(Base):
     primaer: Mapped[bool] = mapped_column(Boolean, server_default=false())
     underskriver: Mapped[bool] = mapped_column(Boolean, server_default=false())
     maa_kontaktes_af: Mapped[str] = mapped_column(String(10), server_default="alle")
+    er_revisor: Mapped[bool] = mapped_column(Boolean, server_default=false())
+    firma: Mapped[str | None] = mapped_column(String(255))          # revisionsfirmaet (kun revisorer)
     oprettet: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     arkiveret: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

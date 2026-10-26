@@ -61,6 +61,8 @@ class Kontakt(BaseModel):
     email: str | None = Field(default=None, max_length=255)
     underskriver: bool = False
     maa_kontaktes_af: str = "alle"
+    er_revisor: bool = False                                  # kundens revisor (bygherren 26.10.2026)
+    firma: str | None = Field(default=None, max_length=255)   # revisionsfirmaet
 
 
 class NyKontakt(Kontakt):
@@ -84,14 +86,15 @@ def opret(kunde_id: int, data: NyKontakt, m: Staff = Depends(nuvaerende_medarbej
           session: Session = Depends(db)) -> dict:
     return _udfoer(session, lambda: kontakter.opret(session, m, kunde_id, data.navn, data.rolle, data.telefon,
                                                     data.email, data.primaer, data.underskriver,
-                                                    data.maa_kontaktes_af))
+                                                    data.maa_kontaktes_af, data.er_revisor, data.firma))
 
 
 @router.post("/kontakter/{kontakt_id}", dependencies=[Depends(kraev_header)])
 def ret(kontakt_id: int, data: Kontakt, m: Staff = Depends(nuvaerende_medarbejder),
         session: Session = Depends(db)) -> dict:
     return _udfoer(session, lambda: kontakter.ret(session, m, kontakt_id, data.navn, data.rolle, data.telefon,
-                                                  data.email, data.underskriver, data.maa_kontaktes_af))
+                                                  data.email, data.underskriver, data.maa_kontaktes_af,
+                                                  data.er_revisor, data.firma))
 
 
 @router.post("/kontakter/{kontakt_id}/primaer", dependencies=[Depends(kraev_header)])

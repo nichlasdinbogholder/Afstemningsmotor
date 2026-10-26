@@ -281,7 +281,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     Dokumenter · Noter · Log · Timer (kun Kontaktpersoner er bygget). Kontakter: præcis én primær (den første bliver
     primær; ny primær afløser; primær kan ikke arkiveres, mens der er andre); underskriver og maa_kontaktes_af
     uafhængige; ALLE ser alle (begrænsede vises "Kontaktes kun af den ansvarlige"); KUN ansvarlig, assistent og admin
-    retter (`kontakter.maa_rette`); slettes aldrig (arkiveres); alt i kunde_log. `/api/kundekort/{id}`, `…/kontakter`,
+    retter (`kontakter.maa_rette`); slettes aldrig (arkiveres); alt i kunde_log.
+    KUNDENS REVISOR (bygherren 26.10.2026): kontakt med `er_revisor` + revisionsfirma i `firma` (krævet) – navn, firma,
+    telefon, mail; violet mærke "Revisor" og venstrekant; aldrig primær/underskriver (CHECK i databasen) og tæller ikke
+    med, når den primære vælges/arkiveres. `/api/kundekort/{id}`, `…/kontakter`,
     `POST …/kontakter`, `POST /api/kundekort/kontakter/{kid}[/primaer|/arkiver]`.
   - `oversigt.py` (trin 4): listen i Kundeoversigten – `GET /api/kundekartotek?mine=&ansvarlig_id=&afregning=&system=&status=
     &doede_forbindelser=&mangler_hvidvask=`; "mine" = ansvarlig ELLER assistent (standard i webdelen); sorteret
