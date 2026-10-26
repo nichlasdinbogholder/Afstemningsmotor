@@ -24,6 +24,7 @@ from sqlalchemy import or_, select
 import app.models  # noqa: F401
 from app.audit.models import AuditLog
 from app.db import ny_session
+from app.kunder.cvr import laeg_opslag_i_koe
 from app.kunder.models import SYSTEMER, Client
 from app.personale.models import Staff
 
@@ -94,6 +95,8 @@ def main(argv: list[str] | None = None) -> int:
         session.flush()
         session.add(AuditLog(client_id=kunde.id, handling="kunde_oprettet",
                              detaljer={"udfoert_af": getpass.getuser(), "system": args.system}))
+        # Stamdata fra CVR-registret (job i kø – kun når CVR-opslag er slået til).
+        laeg_opslag_i_koe(session, kunde, date.today(), prioritet=10)
         session.commit()
         print(f"Oprettet: {kunde.navn} (id {kunde.id}, kundenr. {kunde.kundenummer}).")
         print(f"Læg tokenet ind: python -m app.kunder.gem_token --kundenummer {kunde.kundenummer} "

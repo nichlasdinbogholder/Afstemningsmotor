@@ -256,6 +256,17 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
   + kunde_log; tokens: kun aktiv admin (app.actor_id via `app.db.saet_aktoer`), krypteret felt kan aldrig ændres,
   tilbagekaldt kan ikke genoplives, intet slettes, indsæt/tilbagekald → kunde_log med fingeraftryk. Tests:
   `tests/test_kunde_trin1.py`; tokens i tests lægges ind med `tests/hjaelp_token.laeg_token()`.
+  - `cvr.py` (trin 2): CVR-registret (Erhvervsstyrelsens system-til-system; KUNDE_CVR_API_URL/_BRUGER/_KODE – uden
+    login slået fra). `hent()`/`laes()` gætter aldrig (andet nr./flere virksomheder = fejl; manglende felt = tomt).
+    `sammenlign()`: forskelle → `kunde_cvr_changes` (+ kunde_log `cvr_aendring`), ALDRIG ind over clients; dublet
+    undgås, mens en forskel venter; tidligere navne → `kunde_aliases`; konkurs/tvangsopløsning = 'kritisk' →
+    notifikation til ansvarlig + administratorer. Job `kunde_cvr_opdater` ved oprettelse (prioritet 10) og dagligt
+    (scheduler, KUNDE_CVR_SYNC_CRON 06.00). `python -m app.kunder.cvr proeve --cvr <nr> [--felter] | opdater
+    --kundenummer <nr> | aendringer`. Reelle ejere læses først i trin 15. Opsætning: DEPLOY.md "CVR-registret".
+- `app/notifikationer/` + `app/api/notifikationer.py` – NOTIFIKATIONER (bygherren 26.10.2026): tabellen `notifications`
+  (én pr. modtager, kun læst-markering – slettes ikke), `send_notifikation(session, modtagere, alvor, titel, …)`;
+  `/api/notifikationer` (kun egne; `POST {id}/laest`, `POST laest`). Klokken i øverste højre hjørne:
+  `web/components/Klokke.tsx` (henter hvert 5. minut).
 - `app/kunder/kartotek.py` + `app/api/kundekartotek.py` – KUNDEKARTOTEKET (bygherren 23.10.2026): boksen Kunde i venstre side er en
   dropdown med `/kunder/` Kundeoversigt og `/kunder/arkiverede/` Arkiverede kunder. Alle ser listerne; KUN admin opretter
   (startdato for samarbejdet + afregningsform, som gælder fra startdatoen), skifter ansvarlig (ansvarlig og assistent kan spørge Svend om

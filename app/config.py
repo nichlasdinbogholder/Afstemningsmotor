@@ -50,6 +50,13 @@ class Settings(BaseSettings):
     referencesats_tabel: str = "DNRENTD"
     referencesats_valg: str | None = "OPGOER=E"
 
+    # CVR-registret (Kundeoversigten trin 2): Erhvervsstyrelsens "CVR system-til-system"-adgang. Brugernavn og
+    # adgangskode får man hos Erhvervsstyrelsen. Uden dem er CVR-opslag slået fra (intet hentes, intet fejler).
+    kunde_cvr_api_url: str = "https://distribution.virk.dk/cvr-permanent/virksomhed/_search"
+    kunde_cvr_api_bruger: str | None = None
+    kunde_cvr_api_kode: SecretStr | None = None
+    kunde_cvr_sync_cron: str = "0 6 * * *"   # dagligt opslag på alle aktive kunder (dansk tid)
+
     # Fejlrapporter (Sentry). Tom = slået fra. Selve adressen (DSN) er en hemmelighed.
     sentry_dsn: SecretStr | None = None
 

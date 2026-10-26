@@ -324,3 +324,20 @@ postkasser. Indtil dette er gjort, kører påmindelserne i tørløb (registreres
    proevemail --til <din e-mail>` → "Prøvemail sendt …", og mailen ligger i indbakken fra info@.
 7. **Slå påmindelserne til:** `sed -i 's/^TIME_REMINDER_SEND=.*/TIME_REMINDER_SEND=true/' .env` (findes linjen ikke:
    `echo 'TIME_REMINDER_SEND=true' >> .env`), og `docker compose -f docker-compose.prod.yml up -d`.
+
+## CVR-registret (Kundeoversigten – stamdata fra Erhvervsstyrelsen)
+Når I har fået brugernavn og adgangskode til Erhvervsstyrelsens "CVR system-til-system":
+
+1. På serveren: `nano /opt/afstemning/.env` og tilføj (adgangskoden skrives KUN her – aldrig i mail eller chat):
+   ```
+   KUNDE_CVR_API_BRUGER=<brugernavnet>
+   KUNDE_CVR_API_KODE=<adgangskoden>
+   ```
+2. Genstart: `docker compose -f docker-compose.prod.yml up -d api worker scheduler`
+3. Prøv ét opslag (gemmer intet): `docker compose -f docker-compose.prod.yml exec -T api python -m app.kunder.cvr proeve --cvr <et CVR-nummer> --felter`
+   - Navn, adresse, virksomhedsform, branchekode, regnskabsår og status skal stå udfyldt.
+   - Står der "(tom – ikke i svaret)" ved et felt, så send listen med feltnavne (ikke adgangskoden) – så retter vi
+     aflæsningen. Svarer den ikke, kan det være adressen: prøv `KUNDE_CVR_API_URL` med `http://` i stedet for `https://`.
+4. Derefter hentes alle aktive kunder automatisk hver dag kl. 06.00. Se forskellene:
+   `docker compose -f docker-compose.prod.yml exec -T api python -m app.kunder.cvr aendringer`
+

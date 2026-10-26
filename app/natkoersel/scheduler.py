@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401
 from app.audit.models import AuditLog
+from app.config import get_settings
 from app.db import ny_session
 from app.fejlrapport import init_fejlrapport
 from app.jobs.koe import laeg_i_koe
@@ -125,6 +126,15 @@ def koer_tidspaamindelse() -> int:
     return nye
 
 
+def koer_cvrplanlaegning() -> int:
+    from app.kunder.cvr import planlaeg
+
+    with ny_session() as session:
+        nye = planlaeg(session, datetime.now(TIDSZONE))
+        session.commit()
+    return nye
+
+
 def lav_scheduler() -> BlockingScheduler:
     from app.opkraevning.jobs import KOE, KONTROL
 
@@ -155,6 +165,11 @@ def lav_scheduler() -> BlockingScheduler:
     # over i jobbet).
     scheduler.add_job(koer_tidspaamindelse, CronTrigger(day_of_week=UGEDAGE, hour=16, minute=5, timezone=TIDSZONE),
                       id="tid_paamindelse", name="Påmindelse om timeregistrering", misfire_grace_time=3600,
+                      coalesce=True, max_instances=1, replace_existing=True)
+    # Kundeoversigten: CVR-opslag på alle aktive kunder (standard kl. 06.00 hver dag, KUNDE_CVR_SYNC_CRON).
+    scheduler.add_job(koer_cvrplanlaegning,
+                      CronTrigger.from_crontab(get_settings().kunde_cvr_sync_cron, timezone=TIDSZONE),
+                      id="kunde_cvr", name="CVR-opslag", misfire_grace_time=6 * 3600,
                       coalesce=True, max_instances=1, replace_existing=True)
     return scheduler
 

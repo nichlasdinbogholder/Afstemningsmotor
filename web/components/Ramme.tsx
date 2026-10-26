@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
 import { hent, IkkeLoggetInd, type Medarbejder } from "@/lib/api";
 import Fagassistent from "@/components/assistent/Fagassistent";
+import Klokke from "@/components/Klokke";
 import { AssistentProvider } from "@/components/assistent/Provider";
 
 const MigKontekst = createContext<Medarbejder | null>(null);
@@ -159,6 +160,7 @@ export default function Ramme({ children }: { children: React.ReactNode }) {
             </nav>
           </div>
           <div className="flex items-center gap-4 text-sm text-slate-600">
+            <Klokke />
             <span>{mig?.navn}{mig?.rolle === "admin" && <span className="ml-1 text-slate-400">(administrator)</span>}</span>
             <a href="/logout" className="text-slate-500 hover:text-brand-600">Log ud</a>
           </div>

@@ -706,3 +706,9 @@ Nyt modul i hub'en – fire faser, ét trin ad gangen (PR + merge pr. trin). Kun
   forudsætter ét aktivt token pr. kunde pr. system – de skal arbejde pr. aftale (`kunde_ledgers`).
 - Svend (26.10.2026): en medarbejder kan spørge om de aktive kunder, hun er ANSVARLIG ELLER ASSISTENT for (før kun
   ansvarlig). Administratorer: alle aktive. Interne kunder (kun_admin) stadig kun administratorer.
+- **Fase 1, trin 2 (26.10.2026):** CVR-opslag (`app/kunder/cvr.py`) + notifikationer med klokke i højre hjørne.
+  Login til Erhvervsstyrelsens CVR er søgt – kommer senest om tre uger. Indtil da er opslag slået fra. Når det kommer:
+  DEPLOY.md "CVR-registret" – og kør `proeve --felter` på et rigtigt CVR-nummer, så aflæsningen kan efterprøves
+  mod det rigtige svar (bygget ud fra Erhvervsstyrelsens kendte feltnavne). Alvor: konkurs/tvangsopløsning =
+  kritisk; virksomhedsform, regnskabsår og anden status = advarsel; navn, adresse, branchekode = info.
+  Kritisk → notifikation til ansvarlig og administratorer (ikke assistenten – spec'en).
