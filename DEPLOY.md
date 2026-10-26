@@ -325,6 +325,22 @@ postkasser. Indtil dette er gjort, kører påmindelserne i tørløb (registreres
 7. **Slå påmindelserne til:** `sed -i 's/^TIME_REMINDER_SEND=.*/TIME_REMINDER_SEND=true/' .env` (findes linjen ikke:
    `echo 'TIME_REMINDER_SEND=true' >> .env`), og `docker compose -f docker-compose.prod.yml up -d`.
 
+## Datafordeleren (CVR-stamdata med gratis API-nøgle – bygherren 26.10.2026)
+Datafordeleren er statens officielle udleveringssted for CVR. Virksomhedsdata (navn, virksomhedsform, regnskabsår)
+kræver kun en gratis API-nøgle – ingen ansøgning og ingen ventetid.
+
+1. Gå til datafordeler.dk → log ind på **Datafordeler Administration** med MitID Erhverv.
+2. Opret et **IT-system** (fx navnet "Afstemningsmotor"), og under det en **API-Key** (fx navnet "server").
+   Nøglen vises KUN én gang – kopiér den straks. Den bliver først aktiv efter 15 minutter.
+3. På serveren: `nano /opt/afstemning/.env` og tilføj nederst (nøglen skrives KUN her – aldrig i mail eller chat):
+   ```
+   DATAFORDELER_API_KEY=<nøglen>
+   ```
+4. Genstart: `docker compose -f docker-compose.prod.yml up -d api worker scheduler`
+5. Prøv (viser kun tjenestens feltnavne – ingen kundedata, ingen nøgle):
+   `docker compose -f docker-compose.prod.yml exec -T api python -m app.kunder.datafordeler skema`
+   Send et billede af svaret, så bygges hentningen af navn, CVR-nummer, virksomhedsform og regnskabsperiode ud fra det.
+
 ## CVR-registret (Kundeoversigten – stamdata fra Erhvervsstyrelsen)
 Når I har fået brugernavn og adgangskode til Erhvervsstyrelsens "CVR system-til-system":
 
