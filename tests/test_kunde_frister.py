@@ -51,7 +51,8 @@ def test_valgene_er_skats_ordninger(klient, kunde):
     assert [v["tekst"] for v in d["frister"][0]["valg"]] == ["Månedligt", "Kvartalsvis", "Halvårligt", "Ikke tilmeldt"]
     assert [v["tekst"] for v in d["frister"][1]["valg"]] == [
         "Metode 1", "Metode 2", "Metode 3", "Metode 4", "Ikke tilmeldt"]
-    assert [v["tekst"] for v in d["frister"][2]["valg"]] == ["Årsregnskab + oplysningsskema", "Årsopgørelse"]
+    assert [v["tekst"] for v in d["frister"][2]["valg"]] == [
+        "Årsregnskab + oplysningsskema", "Årsopgørelse", "Ekstern revisor"]
 
 
 def test_admin_vaelger_og_det_logges(klient, kunde, db_session):

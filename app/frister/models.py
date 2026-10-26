@@ -49,3 +49,33 @@ class SkatFrist(Base):
     godkendt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     afvist_af: Mapped[int | None] = mapped_column(ForeignKey("staff.id", ondelete="RESTRICT"), index=True)
     afvist_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+BOOKING_STATUS = ("booket", "ingen_tid")
+
+
+class MasterafstemningBooking(Base):
+    """MASTERAFSTEMNING TIL EKSTERN REVISOR (bygherren 26.10.2026): én pr. kunde pr. regnskabsår. 'booket' = aftalen er
+    oprettet i Outlook (outlook_id); 'ingen_tid' = der var ikke 5 ledige timer i vinduet – prøves igen hver dag, og der
+    gives besked én gang. Slettes aldrig."""
+
+    __tablename__ = "masterafstemning_bookinger"
+    __table_args__ = (
+        kun_vaerdier("status", BOOKING_STATUS),
+        Index("uq_masterafstemning_kunde_aar", "client_id", "regnskabsaar_slut", unique=True),
+        CheckConstraint("status <> 'booket' OR (outlook_id IS NOT NULL AND start IS NOT NULL AND slut > start)",
+                        name="booket_kraever_aftale"),
+        CheckConstraint("seneste >= tidligst", name="vindue_gyldigt"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="RESTRICT"), index=True)
+    regnskabsaar_slut: Mapped[date] = mapped_column(Date)
+    tidligst: Mapped[date] = mapped_column(Date)           # næstkommende momsfrist efter regnskabsårets slutning
+    seneste: Mapped[date] = mapped_column(Date)            # 60 dage efter
+    status: Mapped[str] = mapped_column(String(10))
+    start: Mapped[datetime | None] = mapped_column(DateTime)   # dansk tid
+    slut: Mapped[datetime | None] = mapped_column(DateTime)
+    outlook_id: Mapped[str | None] = mapped_column(Text)
+    oprettet: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    opdateret: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

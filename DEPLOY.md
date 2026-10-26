@@ -325,6 +325,42 @@ postkasser. Indtil dette er gjort, kører påmindelserne i tørløb (registreres
 7. **Slå påmindelserne til:** `sed -i 's/^TIME_REMINDER_SEND=.*/TIME_REMINDER_SEND=true/' .env` (findes linjen ikke:
    `echo 'TIME_REMINDER_SEND=true' >> .env`), og `docker compose -f docker-compose.prod.yml up -d`.
 
+## Outlook-kalender (masterafstemning til ekstern revisor – bygherren 26.10.2026)
+
+Har en kunde "Ekstern revisor" under Årsafslutning på fanen Frister, booker hub'en automatisk 5 timer til
+masterafstemningen i ÉN Outlook-kalender (din). Appen får KUN kalenderadgang – og kun til din postkasse. Indtil
+`KALENDER_BOOK=true` kører den i tørløb (viser, hvad den ville booke, men opretter intet).
+
+1. **Opret appen** (Microsoft Entra admin center → Applikationer → App-registreringer → Ny registrering):
+   navn "Hub – kalender", kun denne organisation. Notér *Program-id (klient)* og *Mappe-id (lejer)*.
+   Under *Virksomhedsapplikationer* → appen: notér *Objekt-id*.
+2. **Hemmelighed:** appen → Certifikater og hemmeligheder → Ny klienthemmelighed (24 måneder). Kopiér *Værdi* med det
+   samme (vises kun én gang). Læg den ALDRIG i chat eller mail.
+3. **Giv IKKE Calendars.ReadWrite under API-tilladelser** – det ville give adgang til alle kalendere. Rettigheden gives
+   i stedet i Exchange og begrænses til din postkasse (trin 4).
+4. **Exchange Online PowerShell** (som administrator – fx Christopher):
+   ```powershell
+   Connect-ExchangeOnline -UserPrincipalName <admin-mail>
+   New-ServicePrincipal -AppId <program-id> -ObjectId <objekt-id> -DisplayName "Hub – kalender"
+   New-ManagementScope -Name "Kun Nichlas kalender" -RecipientRestrictionFilter "PrimarySmtpAddress -eq 'nichlas@dinbogholder.dk'"
+   New-ManagementRoleAssignment -App <program-id> -Role "Application Calendars.ReadWrite" -CustomResourceScope "Kun Nichlas kalender"
+   Test-ServicePrincipalAuthorization -Identity <program-id> -Resource nichlas@dinbogholder.dk   # InScope: True
+   Test-ServicePrincipalAuthorization -Identity <program-id> -Resource <en anden postkasse>      # InScope: False
+   ```
+   Ændringen kan tage op til et par timer om at slå igennem hos Microsoft.
+5. **Serverens .env** (`cd /opt/afstemning`):
+   ```bash
+   echo 'KALENDER_TENANT_ID=<mappe-id>' >> .env
+   echo 'KALENDER_CLIENT_ID=<program-id>' >> .env
+   read -rsp "Klienthemmelighed: " H && echo "KALENDER_CLIENT_SECRET=$H" >> .env && unset H && echo
+   echo 'KALENDER_POSTKASSE=nichlas@dinbogholder.dk' >> .env
+   docker compose -f docker-compose.prod.yml up -d
+   ```
+6. **Prøv (opretter INTET):** `docker compose -f docker-compose.prod.yml exec -T api python -m app.frister.masterafstemning proeve`
+   → én linje pr. kunde med "VILLE BOOKE (tørløb) … man 01.03.2027 08:00–13:00" (eller hvorfor den ikke kan planlægges).
+7. **Slå booking til:** `echo 'KALENDER_BOOK=true' >> .env` og `docker compose -f docker-compose.prod.yml up -d`.
+   Derefter bookes der hver hverdag kl. 06.20. Arbejdstiden er 08–16 (`KALENDER_ARBEJDSDAG_FRA/_TIL`).
+
 ## Datafordeleren (CVR-stamdata med gratis API-nøgle – bygherren 26.10.2026)
 Datafordeleren er statens officielle udleveringssted for CVR. Virksomhedsdata (navn, virksomhedsform, regnskabsår)
 kræver kun en gratis API-nøgle – ingen ansøgning og ingen ventetid.
