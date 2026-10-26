@@ -6,8 +6,9 @@ Regnskabsåret kommer fra kundens regnskabssystem (accounting_years); når CVR-a
 To valg på fanen Frister (`kunde_obligations.aarsafslutning`):
 - 'aarsregnskab_oplysningsskema':
     * Årsregnskab: 6 måneder efter regnskabsårets slutning (årsregnskabsloven, klasse B).
-    * Oplysningsskema (selvangivelsen – tillæg til årsregnskabet): 6 måneder efter regnskabsårets slutning; slutter
-      regnskabsåret 1. februar–31. marts, er fristen 1. august samme år (skattekontrolloven § 4, stk. 2).
+    * Oplysningsskema (selvangivelsen – tillæg til årsregnskabet): 6 måneder efter regnskabsårets slutning (fx 30.06.2026
+      → 31.12.2026, 30.09.2026 → 31.03.2027); slutter regnskabsåret 1. februar–31. marts, er fristen 1. september samme
+      år (skattekontrolloven § 12, stk. 2 – bygherren 26.10.2026).
 - 'aarsopgoerelse':
     * Årsopgørelse: ALTID 20. maj i året efter det kalenderår, regnskabsåret slutter i (rykkes ikke).
 Falder en frist (undtagen årsopgørelsen) på en lørdag, søndag eller helligdag, rykkes den til første hverdag efter.
@@ -58,7 +59,7 @@ def plus_maaneder(dag: date, antal: int) -> date:
 def frister(valg: str | None, regnskabsaar_slut: date) -> list[Aarsfrist]:
     if valg == "aarsregnskab_oplysningsskema":
         if regnskabsaar_slut.month in (2, 3):
-            oplysningsskema = date(regnskabsaar_slut.year, 8, 1)
+            oplysningsskema = date(regnskabsaar_slut.year, 9, 1)
         else:
             oplysningsskema = plus_maaneder(regnskabsaar_slut, 6)
         return [Aarsfrist("aarsregnskab", "Årsregnskab", foerste_hverdag(plus_maaneder(regnskabsaar_slut, 6))),

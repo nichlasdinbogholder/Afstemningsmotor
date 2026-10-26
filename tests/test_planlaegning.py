@@ -137,9 +137,13 @@ def test_aarsafslutningens_regler():
         return [(x.hvad, x.frist) for x in frister(valg, slut)]
     assert f("aarsregnskab_oplysningsskema", date(2026, 12, 31)) == [
         ("aarsregnskab", date(2027, 6, 30)), ("oplysningsskema", date(2027, 6, 30))]
-    # Regnskabsår slut 31.03: årsregnskab 30.09, oplysningsskema 1. august (lørdag 2026 → mandag 3. august).
+    # Regnskabsår slut 1. februar–31. marts: oplysningsskema 1. september samme år (skattekontrolloven § 12, stk. 2).
     assert f("aarsregnskab_oplysningsskema", date(2026, 3, 31)) == [
-        ("aarsregnskab", date(2026, 9, 30)), ("oplysningsskema", date(2026, 8, 3))]
+        ("aarsregnskab", date(2026, 9, 30)), ("oplysningsskema", date(2026, 9, 1))]
+    assert f("aarsregnskab_oplysningsskema", date(2026, 2, 28))[1] == ("oplysningsskema", date(2026, 9, 1))
+    # Bygherrens eksempler: 30.06.2026 → 31.12.2026 og 30.09.2026 → 31.03.2027.
+    assert f("aarsregnskab_oplysningsskema", date(2026, 6, 30))[1] == ("oplysningsskema", date(2026, 12, 31))
+    assert f("aarsregnskab_oplysningsskema", date(2026, 9, 30))[1] == ("oplysningsskema", date(2027, 3, 31))
     # 30.06 + 6 måneder = 31.12 – nytårsaftensdag er ikke en helligdag, så fristen bliver.
     assert f("aarsregnskab_oplysningsskema", date(2026, 6, 30))[0] == ("aarsregnskab", date(2026, 12, 31))
     # 31.07.2026 + 6 = 31.01.2027 (søndag) → mandag 1. februar.
