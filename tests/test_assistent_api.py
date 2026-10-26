@@ -452,3 +452,36 @@ def test_korte_ord_rammer_ikke_for_bredt(db_session):
 def test_spoergsmaal_kun_med_smaaord_giver_intet(db_session):
     _dok(db_session, title="Det er en test", body="og eller men")
     assert sm.find_materiale(db_session, "og det er") == []
+
+
+# Bygherren 26.10.2026: kunden Din Bogholder (intern, kun_admin) kan KUN administratorer spørge Svend om – også i
+# chathistorikken og loggen, og også selv om en medarbejder står som ansvarlig.
+def test_intern_kunde_kun_for_administratorer(db_session, klient, medarbejder, monkeypatch):
+    intern = _kunde(db_session, "Din Bogholder ApS", medarbejder)
+    intern.kun_admin = True
+    db_session.flush()
+    assert intern.navn not in [k["navn"] for k in klient.get("/api/v1/assistant/kunder").json()]
+    assert klient.post("/api/v1/assistant/conversations", headers=H,
+                       json={"kunde_id": intern.id}).status_code == 403
+    # En samtale fra før (eller lavet af en admin, der siden er blevet medarbejder) kan ikke ses eller bruges.
+    s = AssistantConversation(staff_id=medarbejder.id, client_id=intern.id, title="Lønninger hos os")
+    db_session.add(s)
+    db_session.flush()
+    db_session.add(AssistantMessage(conversation_id=s.id, role="user", content="Hvad tjener kollegerne"))
+    db_session.flush()
+    assert s.id not in [x["id"] for x in klient.get("/api/v1/assistant/conversations").json()]
+    assert klient.get(f"/api/v1/assistant/conversations/{s.id}/messages").status_code == 404
+    _falsk_model(monkeypatch, ["x"])
+    assert klient.post(f"/api/v1/assistant/conversations/{s.id}/messages", headers=H,
+                       json={"tekst": "Hej"}).status_code == 404
+    log = [r["spoergsmaal"] for r in klient.get("/api/v1/assistant/log").json()["spoergsmaal"]]
+    assert "Hvad tjener kollegerne" not in log
+    assert "kollegerne" not in [e["ord"] for e in klient.get("/api/v1/assistant/emner").json()]
+    # En administrator kan det hele.
+    medarbejder.rolle = "admin"
+    db_session.flush()
+    assert intern.navn in [k["navn"] for k in klient.get("/api/v1/assistant/kunder").json()]
+    assert s.id in [x["id"] for x in klient.get("/api/v1/assistant/conversations").json()]
+    assert klient.get(f"/api/v1/assistant/conversations/{s.id}/messages").status_code == 200
+    assert "Hvad tjener kollegerne" in [r["spoergsmaal"] for r in
+                                        klient.get("/api/v1/assistant/log").json()["spoergsmaal"]]

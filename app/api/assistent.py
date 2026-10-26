@@ -51,7 +51,7 @@ def _besked_json(b: AssistantMessage, vurdering: str | None = None) -> dict:
 
 def _hent_egen(session: Session, samtale_id: int, m: Staff) -> AssistantConversation:
     samtale = sm.egen_samtale(session, samtale_id, m.id)
-    if samtale is None:
+    if samtale is None or not sm.maa_se_samtale(session, m, samtale):
         raise HTTPException(status_code=404, detail="Samtalen findes ikke")
     return samtale
 
@@ -95,7 +95,7 @@ def samtaler(m: Staff = Depends(nuvaerende_medarbejder), session: Session = Depe
         select(AssistantConversation).where(AssistantConversation.staff_id == m.id)
         .order_by(AssistantConversation.updated_at.desc(), AssistantConversation.id.desc()).limit(MAKS_SAMTALER)
     )
-    return [_samtale_json(s, session) for s in raekker]
+    return [_samtale_json(s, session) for s in raekker if sm.maa_se_samtale(session, m, s)]
 
 
 @router.get("/conversations/{samtale_id}/messages")
@@ -231,6 +231,8 @@ LEFT JOIN LATERAL (
 LEFT JOIN assistant_feedback f ON f.message_id = a.id AND f.staff_id = c.staff_id
 WHERE q.role = 'user'
   AND (CAST(:staff_id AS integer) IS NULL OR c.staff_id = :staff_id)
+  AND (CAST(:staff_id AS integer) IS NULL OR c.client_id IS NULL
+       OR NOT EXISTS (SELECT 1 FROM clients k WHERE k.id = c.client_id AND k.kun_admin))
   AND (NOT :kun_ned OR f.rating = 'down')
 ORDER BY q.created_at DESC, q.id DESC
 LIMIT :graense
@@ -246,6 +248,8 @@ JOIN assistant_conversations c ON c.id = q.conversation_id
 CROSS JOIN LATERAL regexp_split_to_table(lower(q.content), '[^a-zæøåéü]+') AS ord
 WHERE q.role = 'user' AND q.created_at > now() - interval '30 days'
   AND (CAST(:staff_id AS integer) IS NULL OR c.staff_id = :staff_id)
+  AND (CAST(:staff_id AS integer) IS NULL OR c.client_id IS NULL
+       OR NOT EXISTS (SELECT 1 FROM clients k WHERE k.id = c.client_id AND k.kun_admin))
   AND length(ord) >= 4
   AND numnode(plainto_tsquery('danish', ord)) > 0
 GROUP BY ord

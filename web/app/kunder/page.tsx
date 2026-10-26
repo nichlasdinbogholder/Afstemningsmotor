@@ -68,7 +68,9 @@ export default function Side() {
                 <th className="px-3 py-2">Kunde</th><th className="px-3 py-2">Kundenr.</th><th className="px-3 py-2">CVR</th>
                 <th className="px-3 py-2">System</th><th className="px-3 py-2">Ansvarlig</th>
                 <th className="px-3 py-2">Startdato</th><th className="px-3 py-2">Afregning</th>
-                <th className="px-3 py-2">Status</th>{admin && <th className="px-3 py-2" />}
+                <th className="px-3 py-2">Status</th>
+                {admin && <th className="px-3 py-2" title="Intern kunde: kun administratorer kan spørge Svend om den">Kun admin hos Svend</th>}
+                {admin && <th className="px-3 py-2" />}
               </tr>
             </thead>
             <tbody>
@@ -95,6 +97,14 @@ export default function Side() {
                     <td className="px-3 py-2">{afregningTekst(k) || <span className="text-slate-400">Ikke sat</span>}</td>
                     <td className="px-3 py-2">{STATUS[k.status]}</td>
                     {admin && (
+                      <td className="px-3 py-2 text-center">
+                        <input type="checkbox" checked={k.kun_admin} aria-label={`Kun admin hos Svend for ${k.navn}`}
+                               onChange={(e) => udfoer(() => send(`/api/kundekartotek/${k.id}/kun-admin`, { kun_admin: e.target.checked }),
+                                 e.target.checked ? `Kun administratorer kan nu spørge Svend om ${k.navn}`
+                                                  : `${k.navn} kan nu bruges hos Svend af den ansvarlige`)} />
+                      </td>
+                    )}
+                    {admin && (
                       <td className="px-3 py-2 text-right">
                         <button onClick={() => setArkiverer(arkiverer === k.id ? null : k.id)}
                                 className="rounded-md border border-slate-300 px-2.5 py-1 text-xs hover:bg-slate-50">
@@ -105,7 +115,7 @@ export default function Side() {
                   </tr>
                   {admin && arkiverer === k.id && valg && (
                     <tr className="border-b border-slate-100 bg-slate-50">
-                      <td colSpan={9} className="px-3 py-3">
+                      <td colSpan={10} className="px-3 py-3">
                         <Arkivering kunde={k} valg={valg} luk={() => setArkiverer(null)}
                                     gem={(d) => udfoer(() => send(`/api/kundekartotek/${k.id}/arkiver`, d),
                                                        `${k.navn} er arkiveret`)} />
@@ -115,7 +125,7 @@ export default function Side() {
                 </Fragment>
               ))}
               {viste.length === 0 && (
-                <tr><td colSpan={9} className="px-3 py-6 text-center text-slate-500">Ingen kunder fundet.</td></tr>
+                <tr><td colSpan={10} className="px-3 py-6 text-center text-slate-500">Ingen kunder fundet.</td></tr>
               )}
             </tbody>
           </table>

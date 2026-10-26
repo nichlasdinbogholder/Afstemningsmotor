@@ -96,6 +96,9 @@ class Client(Base):
     # Arkivering (siden Kunde → Kundeoversigt, kun administratorer): årsag og hvem. Datoen er opsagt_dato.
     arkiv_aarsag: Mapped[str | None] = mapped_column(String(30))
     arkiveret_af: Mapped[int | None] = mapped_column(ForeignKey("staff.id", ondelete="SET NULL"), index=True)
+    # Intern kunde (fx Din Bogholder selv): KUN administratorer kan spørge Svend om den og se samtalerne om den
+    # (bygherren 26.10.2026) – også selv om en medarbejder står som ansvarlig.
+    kun_admin: Mapped[bool] = mapped_column(Boolean, server_default=false())
     ansvarlig_medarbejder_id: Mapped[int | None] = mapped_column(
         ForeignKey("staff.id", ondelete="SET NULL"), index=True
     )

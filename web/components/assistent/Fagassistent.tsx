@@ -2,8 +2,60 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ADVARSEL, lignerPersonoplysninger } from "@/lib/personoplysninger";
-import { useAssistent } from "./Provider";
+import { useAssistent, type Kunde } from "./Provider";
 import Svartekst from "./Svartekst";
+
+// Kundevælger med søgning: skriv en del af navnet eller kundenummeret, og vælg i listen.
+function Kundesoeg({ kunder, kundeId, vaelg, laast }: {
+  kunder: Kunde[]; kundeId: number | null; vaelg: (id: number | null) => void; laast: boolean;
+}) {
+  const valgt = kunder.find((k) => k.id === kundeId) ?? null;
+  const [soeg, setSoeg] = useState("");
+  const [aaben, setAaben] = useState(false);
+  const s = soeg.trim().toLowerCase();
+  const fundne = kunder.filter((k) => !s || k.navn.toLowerCase().includes(s) || k.kundenummer.toLowerCase().includes(s));
+
+  function tag(id: number | null) {
+    vaelg(id);
+    setSoeg("");
+    setAaben(false);
+  }
+
+  return (
+    <div className="relative min-w-0 flex-1">
+      <input id="svend-kunde" type="search" autoComplete="off" disabled={laast}
+             role="combobox" aria-expanded={aaben} aria-controls="svend-kundeliste"
+             placeholder={valgt ? `${valgt.navn} (${valgt.kundenummer})` : "Generelt (ingen kunde) – søg kunde …"}
+             value={soeg}
+             onFocus={() => setAaben(true)}
+             onBlur={() => setTimeout(() => setAaben(false), 150)}
+             onChange={(e) => { setSoeg(e.target.value); setAaben(true); }}
+             onKeyDown={(e) => {
+               if (e.key === "Escape" && aaben) { e.stopPropagation(); setAaben(false); }
+               if (e.key === "Enter") { e.preventDefault(); if (fundne.length > 0 && s) tag(fundne[0].id); }
+             }}
+             className={`w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm ${valgt ? "placeholder:text-slate-900" : ""}`} />
+      {aaben && (
+        <ul id="svend-kundeliste" role="listbox"
+            className="absolute left-0 right-0 top-full z-10 mt-1 max-h-60 overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg">
+          <li role="option" aria-selected={kundeId === null}>
+            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => tag(null)}
+                    className="block w-full px-3 py-1.5 text-left text-slate-600 hover:bg-slate-50">Generelt (ingen kunde)</button>
+          </li>
+          {fundne.map((k) => (
+            <li key={k.id} role="option" aria-selected={k.id === kundeId}>
+              <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => tag(k.id)}
+                      className={`block w-full px-3 py-1.5 text-left hover:bg-slate-50 ${k.id === kundeId ? "font-medium text-slate-900" : "text-slate-700"}`}>
+                {k.navn} <span className="text-slate-400">({k.kundenummer})</span>
+              </button>
+            </li>
+          ))}
+          {fundne.length === 0 && <li className="px-3 py-1.5 text-slate-400">Ingen kunder passer</li>}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 // Tommel op/ned under et færdigt svar. Ved tommel ned kan man skrive, hvad der var galt.
 function Vurdering({ beskedId, givet }: { beskedId: number; givet: string | null | undefined }) {
@@ -150,19 +202,14 @@ export default function Fagassistent() {
           ansvarlige for i Kundeoversigten; administratorer ser alle aktive. */}
       <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm">
         <label htmlFor="svend-kunde" className="text-slate-500">Kunde:</label>
-        <select id="svend-kunde" value={kundeId ?? ""} disabled={svarer}
-                onChange={(e) => vaelgKunde(e.target.value ? Number(e.target.value) : null)}
-                className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm">
-          <option value="">Generelt (ingen kunde)</option>
-          {kunder.map((k) => <option key={k.id} value={k.id}>{k.navn} ({k.kundenummer})</option>)}
-        </select>
+        <Kundesoeg kunder={kunder} kundeId={kundeId} vaelg={vaelgKunde} laast={svarer} />
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto p-4 text-sm" aria-live="polite">
         {beskeder.length === 0 && (
           <div className="rounded-lg bg-slate-50 p-3 text-slate-600">
-            <p>Hej, jeg er Svend. Spørg mig om regler for moms, bogføring og skat. Jeg forklarer rammen – det bindende svar
-              giver den kundeansvarlige.</p>
+            <p>Hej, jeg er Svend. Spørg mig om regler for moms, bogføring og skat. Jeg forklarer rammen – husk jeg kun
+              skal bruges vejledende.</p>
             {slaaetTil === false && <p className="mt-2 text-xs text-slate-500">Svend er ikke slået til endnu.</p>}
           </div>
         )}

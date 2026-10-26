@@ -354,6 +354,11 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     `pause_turn` fortsættes). Tal fra nettet SKAL have siden som kilde; brugte sider gemmes i `sources` som {url, title} og
     vises under svaret. Aldrig kundenavn/CVR/CPR/kundetal i en søgning (`webtekst()`). Videnbasen bruges stadig først.
     Øverst i Svend-vinduet står fast "Kun vejledende".
+  - INTERNE KUNDER (bygherren 26.10.2026): `clients.kun_admin` (fx Din Bogholder selv – migreringen satte det på navne med
+    "din bogholder") = KUN administratorer kan vælge kunden hos Svend og se samtaler/log/emner om den – også selv om en
+    medarbejder er ansvarlig (`er_tilknyttet`, `tilknyttede_kunder`, `maa_se_samtale`, LOG_SQL/EMNER_SQL). Sættes i
+    Kundeoversigten (kolonnen "Kun admin hos Svend", `POST /api/kundekartotek/{id}/kun-admin`, audit `kunde_kun_admin`).
+    Kundevælgeren i Svend er et søgefelt (navn eller kundenummer).
   - `samtale.py`: `find_materiale()` (videnbasen før hvert svar – kun aktive og gyldige; kilder gemmes i `sources`),
     historik, gemning og kaldet til modellen (biblioteket `anthropic`, godkendt 16.10.2026) – KUN på
     serveren; nøglen `ANTHROPIC_API_KEY` registreres i logfilteret. Grundinstruksen i `system_prompt.md`.

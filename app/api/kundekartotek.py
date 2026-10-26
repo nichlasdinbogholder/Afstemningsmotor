@@ -5,6 +5,7 @@ arkivere og genaktivere. Logikken ligger i app/kunder/kartotek.py. Ændringer kr
 - `GET  /api/kundekartotek/valg`                    medarbejdere, regnskabssystemer og årsager til formularerne
 - `POST /api/kundekartotek`                         opret en kunde (startdato + afregningsform kræves)
 - `POST /api/kundekartotek/{id}/ansvarlig`          skift ansvarlig medarbejder (styrer adgangen hos Svend)
+- `POST /api/kundekartotek/{id}/kun-admin`          intern kunde: kun administratorer kan spørge Svend om den
 - `POST /api/kundekartotek/{id}/arkiver`            årsag + dato for samarbejdets ophør
 - `POST /api/kundekartotek/{id}/genaktiver`
 """
@@ -82,6 +83,21 @@ def ansvarlig(kunde_id: int, data: Ansvarlig, af: Staff = Depends(kraev_admin), 
         raise HTTPException(status_code=422, detail=str(fejl)) from None
     session.commit()
     return {"id": k.id, "ansvarlig_id": k.ansvarlig_medarbejder_id}
+
+
+class KunAdmin(BaseModel):
+    kun_admin: bool
+
+
+@router.post("/{kunde_id}/kun-admin", dependencies=[Depends(kraev_header)])
+def kun_admin(kunde_id: int, data: KunAdmin, af: Staff = Depends(kraev_admin), session: Session = Depends(db)) -> dict:
+    try:
+        with session.begin_nested():
+            k = kartotek.saet_kun_admin(session, af, kunde_id, data.kun_admin)
+    except kartotek.KartotekFejl as fejl:
+        raise HTTPException(status_code=422, detail=str(fejl)) from None
+    session.commit()
+    return {"id": k.id, "kun_admin": k.kun_admin}
 
 
 class Arkivering(BaseModel):
