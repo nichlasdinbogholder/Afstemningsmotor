@@ -655,3 +655,9 @@ selskabsdimension). Fire faser; ét trin ad gangen med PR og merge.
 - Kan mailen ikke findes, trykker man "Send invitation igen" ud for medarbejderen (vises, indtil personen har logget ind).
 - Invitationen udløber aldrig – der er ingen kode i den. Adgangen styres af listen over medarbejdere.
 - Virker først, når udgående mail fra info@ er sat op (afventer Christopher); indtil da står der "ikke sendt".
+
+# Produktive timer (bygherren 26.10.2026)
+- Fastlønnede: standard 1.400 produktive timer om året (feltet er udfyldt med 1.400 og kan rettes pr. medarbejder).
+- Timelønnede: ingen produktive timer – kostprisen pr. time tager udgangspunkt i timelønnen. Eksisterende satser for
+  timelønnede fik feltet tømt af migreringen c41d8e2f9a63.
+- Eksisterende satser for fastlønnede (fx 1.926) er IKKE ændret automatisk – læg en ny sats ind for at skifte til 1.400.

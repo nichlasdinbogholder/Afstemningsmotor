@@ -179,3 +179,23 @@ def test_invitation_sendes_og_kan_sendes_igen(db_session, klient, admin, monkeyp
     # Lukket adgang -> ingen invitation.
     klient.post(f"/api/medarbejdere/{ny['id']}", headers=H, json={"aktiv": False})
     assert klient.post(f"/api/medarbejdere/{ny['id']}/invitation", headers=H).status_code == 409
+
+
+# Bygherren 26.10.2026: timelønnede har ingen produktive timer (kostpris ud fra timelønnen); fastlønnede standard 1.400.
+def test_produktive_timer_kun_for_fastloennede(db_session, klient):
+    t = Staff(navn="Timo", email="timo-sats@dinbogholder.dk", rolle="medarbejder", aktiv=True)
+    f = Staff(navn="Fie", email="fie-sats@dinbogholder.dk", rolle="medarbejder", aktiv=True)
+    db_session.add_all([t, f])
+    db_session.flush()
+    klient.post(f"/api/medarbejdere/{t.id}/ansaettelse", headers=H, json={"ansaettelse": "timeloennet", "flexjob": False})
+    klient.post(f"/api/medarbejdere/{f.id}/ansaettelse", headers=H, json={"ansaettelse": "fastloennet", "flexjob": False})
+    sats = {"gyldig_fra": "2026-11-01", "kostpris_pr_time": "210"}
+    svar = klient.post(f"/api/medarbejdere/{t.id}/sats", headers=H, json=sats | {"produktive_timer_aar": "1400"})
+    assert svar.status_code == 422 and "timelønnen" in svar.json()["detail"]
+    assert klient.post(f"/api/medarbejdere/{t.id}/sats", headers=H, json=sats).status_code == 200
+    assert klient.get(f"/api/medarbejdere/{t.id}/satser").json()[0]["produktive_timer_aar"] is None
+    # Fastlønnet uden tal -> standarden 1.400; et andet tal kan stadig angives.
+    klient.post(f"/api/medarbejdere/{f.id}/sats", headers=H, json=sats | {"kostpris_pr_time": "390"})
+    assert klient.get(f"/api/medarbejdere/{f.id}/satser").json()[0]["produktive_timer_aar"] == "1400.00"
+    klient.post(f"/api/medarbejdere/{f.id}/sats", headers=H, json=sats | {"produktive_timer_aar": "1300"})
+    assert klient.get(f"/api/medarbejdere/{f.id}/satser").json()[0]["produktive_timer_aar"] == "1300.00"

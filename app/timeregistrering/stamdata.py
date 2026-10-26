@@ -63,9 +63,20 @@ def satser(session: Session, employee_id: int) -> list[TimeEmployeeRate]:
                                 .order_by(TimeEmployeeRate.valid_from.desc())))
 
 
+# Standard for fastlønnede (bygherren 26.10.2026). Kan rettes pr. medarbejder.
+STANDARD_PRODUKTIVE_TIMER = Decimal(1400)
+
+
 def ny_sats(session: Session, e: TimeEmployee, gyldig_fra: date, normtid: Decimal | None, kostpris: Decimal,
-            produktive_timer: Decimal, note: str | None, af_staff_id: int) -> TimeEmployeeRate:
-    if produktive_timer <= 0:
+            produktive_timer: Decimal | None, note: str | None, af_staff_id: int) -> TimeEmployeeRate:
+    """Timelønnede har ingen produktive timer – kostprisen tager udgangspunkt i timelønnen. Fastlønnede får
+    STANDARD_PRODUKTIVE_TIMER, hvis intet er angivet."""
+    if e.employment == "timeloennet":
+        if produktive_timer is not None:
+            raise StamdataFejl("Timelønnede har ingen produktive timer – kostprisen tager udgangspunkt i timelønnen")
+    elif produktive_timer is None:
+        produktive_timer = STANDARD_PRODUKTIVE_TIMER
+    if produktive_timer is not None and produktive_timer <= 0:
         raise StamdataFejl("Produktive timer pr. år skal være større end 0")
     if kostpris < 0:
         raise StamdataFejl("Kostprisen kan ikke være negativ")

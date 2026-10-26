@@ -10,7 +10,7 @@ Samme regler som kommandoen `python -m app.personale.bruger`:
 - Invitation (app/personale/invitation.py): en velkomstmail fra info@ sendes, når medarbejderen oprettes, og kan
   sendes igen med `POST /api/medarbejdere/{id}/invitation`. Oprettelsen lykkes, også hvis mailen ikke kan sendes.
 - Timeregistreringens stamdata (app/timeregistrering/stamdata.py): ansættelsesform, flexjob og satser (normtid,
-  kostpris pr. time og produktive timer pr. år) med gyldig-fra-dato. En ny sats overskriver aldrig den gamle.
+  kostpris pr. time og produktive timer pr. år – kun fastlønnede, standard 1.400) med gyldig-fra-dato. En ny sats overskriver aldrig den gamle.
   Kostpriser ses og rettes KUN af administratorer (hele routeren kræver admin). Ændringer logges i time_audit.
 """
 
@@ -39,7 +39,8 @@ def _sats_json(r) -> dict | None:
         return None
     return {"fra": r.valid_from.isoformat(), "til": r.valid_to.isoformat() if r.valid_to else None,
             "normtid": None if r.weekly_norm is None else str(r.weekly_norm), "kostpris_pr_time": str(r.cost_per_hour),
-            "produktive_timer_aar": str(r.productive_hours_year), "note": r.note}
+            "produktive_timer_aar": None if r.productive_hours_year is None else str(r.productive_hours_year),
+            "note": r.note}
 
 
 def _tid_json(session: Session, m: Staff) -> dict:
@@ -202,7 +203,8 @@ class NySats(BaseModel):
     gyldig_fra: date
     normtid: Decimal | None = Field(default=None, ge=0, le=168, max_digits=5, decimal_places=2)
     kostpris_pr_time: Decimal = Field(ge=0, max_digits=15, decimal_places=2)
-    produktive_timer_aar: Decimal = Field(gt=0, max_digits=7, decimal_places=2)
+    # Tom for timelønnede; tom for fastlønnede = standarden (1.400).
+    produktive_timer_aar: Decimal | None = Field(default=None, gt=0, max_digits=7, decimal_places=2)
     note: str | None = Field(default=None, max_length=500)
 
 
