@@ -9,9 +9,10 @@ af databasen i time_audit med aktøren fra `saet_aktoer()`.
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import db
 from app.timeregistrering.models import ANSAETTELSER, TimeEmployee, TimeEmployeeRate
 from app.timeregistrering.satser import placer_periode
 
@@ -22,7 +23,7 @@ class StamdataFejl(Exception):
 
 def saet_aktoer(session: Session, staff_id: int) -> None:
     """Hvem der laver ændringerne i denne transaktion – revisionssporet (time_audit) skriver det på hver række."""
-    session.execute(text("SELECT set_config('app.actor_id', :id, true)"), {"id": str(int(staff_id))})
+    db.saet_aktoer(session, staff_id)
 
 
 def ansat(session: Session, staff_id: int) -> TimeEmployee | None:

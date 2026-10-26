@@ -28,15 +28,20 @@ class Adgang:
 
 def hent_adgang(session: Session, client_id: int, system: str) -> Adgang:
     """Hent en kundes aktive adgang med dekrypteret (men beskyttet) token."""
-    credential = session.scalars(
+    # Kun gældende tokens (ikke tilbagekaldte). Har kunden flere aftaler i systemet, gættes der aldrig.
+    credentials = session.scalars(
         select(Credential).where(
             Credential.client_id == client_id,
             Credential.system == system,
             Credential.status == "aktiv",
+            Credential.revoked_at.is_(None),
         )
-    ).one_or_none()
-    if credential is None:
+    ).all()
+    if not credentials:
         raise AdgangMangler(f"Kunde {client_id} har ingen aktiv adgang til {system}")
+    if len(credentials) > 1:
+        raise AdgangMangler(f"Kunde {client_id} har flere aktive aftaler i {system} – aftalen skal vælges")
+    credential = credentials[0]
     return Adgang(
         client_id=credential.client_id,
         system=credential.system,

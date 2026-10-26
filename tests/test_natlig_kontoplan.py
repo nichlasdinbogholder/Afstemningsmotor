@@ -18,6 +18,7 @@ from app.kunder.adgange import gem_token
 from app.kunder.models import Client
 from app.planlaegning.natlig_kontoplan import ETIKET, _tjek_tid, lav_plist, main
 from app.regnskab.models import Account
+from tests.hjaelp_token import laeg_token
 
 
 @pytest.fixture
@@ -32,7 +33,7 @@ def _kunde(session, nr, token, status="aktiv"):
     k = Client(navn=f"Kunde {nr}", kundenummer=nr, regnskabssystem="economic", status=status)
     session.add(k)
     session.flush()
-    gem_token(session, k.id, "economic", token + nr)
+    laeg_token(session, k.id, "economic", token + nr)
     session.commit()
     return k
 

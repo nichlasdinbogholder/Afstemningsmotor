@@ -24,6 +24,7 @@ from app.audit.models import AuditLog
 from app.config import get_settings
 from app.kunder.models import Client, Credential
 from app.regnskab.models import Account
+from tests.hjaelp_token import laeg_token
 
 BASE = "https://restapi.e-conomic.com"
 
@@ -56,10 +57,9 @@ def app_secret(monkeypatch) -> str:
 @pytest.fixture
 def kunde(db_session, token):
     k = Client(navn="Kontoplan ApS", kundenummer="KP-1", regnskabssystem="economic")
-    adgang = Credential(system="economic")
-    adgang.saet_token(token)
-    k.credentials.append(adgang)
     db_session.add(k)
+    db_session.flush()
+    laeg_token(db_session, k.id, "economic", token)
     db_session.commit()
     return k
 
@@ -125,7 +125,7 @@ def test_henter_alle_sider_og_gemmer_med_tenant_id(db_session, kunde, token, app
     assert falsk.kald[1].url.params["skipPages"] == "1"
     assert db_session.scalars(
         select(AuditLog.handling).where(AuditLog.client_id == kunde.id)
-    ).all() == ["kontoplan_hentet"]
+    ).all() == ["token_gemt", "kontoplan_hentet"]
 
 
 def test_ny_hentning_opdaterer_og_fjerner_forsvundne_konti(db_session, kunde, app_secret):

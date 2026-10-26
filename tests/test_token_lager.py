@@ -19,6 +19,7 @@ from app.audit.models import AuditLog
 from app.kunder.adgange import UgyldigAdgang, gem_token
 from app.kunder.gem_token import main as gem_token_main
 from app.kunder.models import Client, Credential
+from tests.hjaelp_token import laeg_token
 
 
 @pytest.fixture
@@ -40,7 +41,7 @@ def _raa_kolonne(session, credential_id: int) -> str:
 
 
 def test_tokenkolonnen_kan_ikke_laeses_uden_noeglen(db_session, kunde, token):
-    credential = gem_token(db_session, kunde.id, "dinero", token)
+    credential = laeg_token(db_session, kunde.id, "dinero", token)
     raa = _raa_kolonne(db_session, credential.id)
 
     # Tokenet står hverken direkte eller i simpel omkodning i databasen.
@@ -56,8 +57,8 @@ def test_samme_token_giver_forskellig_tekst_i_databasen(db_session, kunde, token
     to = Client(navn="Token 2 ApS", kundenummer="TOK-2", regnskabssystem="dinero")
     db_session.add(to)
     db_session.flush()
-    a = gem_token(db_session, kunde.id, "dinero", token)
-    b = gem_token(db_session, to.id, "dinero", token)
+    a = laeg_token(db_session, kunde.id, "dinero", token)
+    b = laeg_token(db_session, to.id, "dinero", token)
     # Man kan altså ikke se på databasen, at to kunder har samme token.
     assert _raa_kolonne(db_session, a.id) != _raa_kolonne(db_session, b.id)
 
@@ -72,22 +73,25 @@ def test_dekryptering_giver_praecis_det_oprindelige(db_session, kunde, token, va
         "specialtegn": token + "-æøå/+=!\"'§",
         "langt": token * 20,
     }[variant]
-    gem_token(db_session, kunde.id, "dinero", original)
+    laeg_token(db_session, kunde.id, "dinero", original)
     db_session.expunge_all()  # tving frisk læsning fra databasen
 
     assert hent_token(db_session, kunde.id, "dinero").klartekst() == original
 
 
 def test_nyt_token_erstatter_det_gamle(db_session, kunde, token):
-    gem_token(db_session, kunde.id, "dinero", token, organisation_id="111")
-    gem_token(db_session, kunde.id, "dinero", token + "-nyt")
+    laeg_token(db_session, kunde.id, "dinero", token, organisation_id="111")
+    laeg_token(db_session, kunde.id, "dinero", token + "-nyt")
     db_session.expunge_all()
 
     adgang = hent_adgang(db_session, kunde.id, "dinero")
     assert adgang.token.klartekst() == token + "-nyt"
     assert adgang.organisation_id == "111"  # beholdes, når den ikke angives
-    adgange = db_session.scalars(select(Credential).where(Credential.client_id == kunde.id)).all()
-    assert len(adgange) == 1
+    # Det gamle token overskrives aldrig: det tilbagekaldes, og det nye er en ny række (spec 26.10.2026).
+    adgange = db_session.scalars(select(Credential).where(Credential.client_id == kunde.id)
+                                 .order_by(Credential.id)).all()
+    assert [(a.status, a.revoked_at is not None) for a in adgange] == [("tilbagekaldt", True), ("aktiv", False)]
+    assert adgange[0].ledger_id == adgange[1].ledger_id and adgange[1].fingerprint == (token + "-nyt")[-4:]
     handlinger = db_session.scalars(
         select(AuditLog.handling).where(AuditLog.client_id == kunde.id).order_by(AuditLog.id)
     ).all()
@@ -95,7 +99,7 @@ def test_nyt_token_erstatter_det_gamle(db_session, kunde, token):
 
 
 def test_audit_log_indeholder_ikke_tokenet(db_session, kunde, token):
-    gem_token(db_session, kunde.id, "dinero", token)
+    laeg_token(db_session, kunde.id, "dinero", token)
     alt = db_session.execute(text("SELECT detaljer::text FROM audit_log")).scalars().all()
     assert all(token not in (d or "") for d in alt)
 
@@ -103,23 +107,23 @@ def test_audit_log_indeholder_ikke_tokenet(db_session, kunde, token):
 @pytest.mark.parametrize("forkert", ["", "   ", " med-mellemrum ", None])
 def test_ugyldige_tokens_afvises_uden_at_blive_vist(db_session, kunde, forkert):
     with pytest.raises(UgyldigAdgang) as fejl:
-        gem_token(db_session, kunde.id, "dinero", forkert)
+        laeg_token(db_session, kunde.id, "dinero", forkert)
     if forkert and forkert.strip():
         assert forkert.strip() not in str(fejl.value)
 
 
 def test_ukendt_system_og_kunde_afvises(db_session, kunde, token):
     with pytest.raises(UgyldigAdgang, match="Ukendt system"):
-        gem_token(db_session, kunde.id, "billy", token)
+        laeg_token(db_session, kunde.id, "billy", token)
     with pytest.raises(UgyldigAdgang, match="findes ikke"):
-        gem_token(db_session, 999_999, "dinero", token)
+        laeg_token(db_session, 999_999, "dinero", token)
 
 
 # --- 3. Print og logning afslører ikke tokenet ------------------------------
 
 
 def test_print_af_objekterne_afsloerer_ikke_tokenet(db_session, kunde, token, capsys):
-    credential = gem_token(db_session, kunde.id, "dinero", token)
+    credential = laeg_token(db_session, kunde.id, "dinero", token)
     adgang = hent_adgang(db_session, kunde.id, "dinero")
     hemmeligt = hent_token(db_session, kunde.id, "dinero")
 
@@ -135,7 +139,7 @@ def test_print_af_objekterne_afsloerer_ikke_tokenet(db_session, kunde, token, ca
 
 
 def test_logning_af_objekterne_afsloerer_ikke_tokenet(db_session, kunde, token):
-    credential = gem_token(db_session, kunde.id, "dinero", token)
+    credential = laeg_token(db_session, kunde.id, "dinero", token)
     adgang = hent_adgang(db_session, kunde.id, "dinero")
 
     buffer = io.StringIO()
@@ -156,7 +160,7 @@ def test_logning_af_objekterne_afsloerer_ikke_tokenet(db_session, kunde, token):
 
 
 def test_exception_og_fejlrapport_afsloerer_ikke_tokenet(db_session, kunde, token):
-    gem_token(db_session, kunde.id, "dinero", token)
+    laeg_token(db_session, kunde.id, "dinero", token)
     adgang = hent_adgang(db_session, kunde.id, "dinero")
     try:
         raise RuntimeError("kald til Dinero fejlede", adgang, adgang.token)
@@ -176,7 +180,11 @@ def test_kommando_gemmer_token_fra_skjult_input(db_session, kunde, token, monkey
     monkeypatch.setattr(modul, "ny_session", lambda: _GenbrugSession(db_session))
     monkeypatch.setattr(modul.getpass, "getpass", lambda _prompt: token)
 
-    kode = gem_token_main(["--kundenummer", "TOK-1", "--system", "dinero", "--organisation-id", "42"])
+    from tests.hjaelp_token import TEST_ADMIN, token_admin
+
+    token_admin(db_session)
+    kode = gem_token_main(["--kundenummer", "TOK-1", "--system", "dinero", "--organisation-id", "42",
+                           "--af", TEST_ADMIN])
 
     ud = capsys.readouterr()
     assert kode == 0

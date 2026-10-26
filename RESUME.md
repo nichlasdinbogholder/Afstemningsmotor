@@ -662,3 +662,45 @@ selskabsdimension). Fire faser; ét trin ad gangen med PR og merge.
 - Timelønnede: ingen produktive timer – kostprisen pr. time tager udgangspunkt i timelønnen. Eksisterende satser for
   timelønnede fik feltet tømt af migreringen c41d8e2f9a63.
 - Eksisterende satser for fastlønnede (fx 1.926) er IKKE ændret automatisk – læg en ny sats ind for at skifte til 1.400.
+
+# Kundeoversigten (spec 26.10.2026)
+Nyt modul i hub'en – fire faser, ét trin ad gangen (PR + merge pr. trin). Kun Din Bogholder (ingen tenant).
+
+## Beslutninger (bygherren 26.10.2026)
+- Kundetabellen `clients` UDVIDES (ingen ny). Livscyklus = `clients.status`: `emne` (nyt), `aktiv`/`pause` (= kunde),
+  `opsagt` (= ophørt/arkiveret). Ingen `lifecycle`- eller `archived_at`-kolonne: arkiveret = opsagt (besluttet 23.10).
+- CVR forbliver unik på tværs af ALLE kunder (også arkiverede) – genaktivér i stedet for at oprette igen.
+- Roller: login-rollerne er uændrede (administrator/medarbejder; kun administrator sætter tokens og ser ledervisningen –
+  "teamleder" = administrator). PÅ KUNDEN: ansvarlig (overordnet ansvar) og assistent (det daglige arbejde – feltet
+  "daglig medarbejder" er omdøbt til `assistent_id`). Assistenten har SAMME adgang som den ansvarlige.
+- Fravær registreres i timeregistreringen; er den ansvarlige fraværende, vises kunden på ASSISTENTENS liste (intet
+  stedfortræder-felt).
+- Kontaktpersoner = `contacts` (udvidet), tokens = `credentials` (udvidet) – ét token-lager, én dekryptering.
+- Afregningsform og pris bliver i `time_client_terms`; `kunde_agreements` har pakke, varsel, prisændring, start/slut.
+- Salgsfakturaer (trin 10): egen tabel, men KUN de fakturaer, Din Bogholder har sendt TIL kunden (fra Din Bogholders
+  eget regnskab) – ikke kundens egne salgsfakturaer. Tabellen laves i trin 10.
+- CVR-data hentes fra Erhvervsstyrelsens CVR (datacvr.virk.dk) – trin 2.
+- Notifikationer: et notifikationsikon i højre hjørne, som medarbejderen holder øje med dagligt.
+- "Afbryd forbindelse sletter det krypterede token" er FJERNET fra kravene: et token tilbagekaldes (revoked_at), og
+  rækken med det krypterede felt bliver stående.
+- Fingeraftrykket er bevidst de sidste fire tegn af tokenet.
+
+## Afvigelser fra spec'ens SQL (bevidste)
+- `customers`/`users` hedder `clients`/`staff`; id'er er INTEGER; kolonnen hedder `client_id` (repoets regel og tests).
+- `kunde_contacts` og `kunde_credentials` laves ikke – `contacts` og `credentials` er udvidet (se ovenfor).
+- `kunde_notes`/`kunde_documents` laves ikke – `notes` (nu med `opdateret`) og `documents` (nu med `arkiveret`) i app/crm.
+- `fiscal_year_end` er tekst 'dd-mm' (gentager sig hvert år), ikke DATE.
+- `kunde_owner_history.changed_by` kan være tom (ændring uden for hub'en, fx kommandolinjen). Perioder: valid_to er
+  eksklusiv; EXCLUDE-regel forhindrer overlap; et nyt skift samme dag retter dagens række.
+- Spec'ens trigger `kunde_lifecycle_guard` er delt i to: `kunde_lifecycle_guard` (FØR: ingen sletning, ingen genåbning
+  uden `app.genaabning`) og `kunde_owner_history_skriv` (EFTER: historik + log – rækken skal findes først).
+- Token-triggeren hedder `kunde_credential_guard` (+ `kunde_credential_log`) og blokerer også DELETE og genoplivning.
+
+## Bygget
+- **Fase 1, trin 1 (26.10.2026):** migreringen `ce3cd96fe13e` – kunde_-tabellerne, udvidelserne og triggerne.
+  Eksisterende data flyttes: momsperiode/regnskabsår/lønkørselsdag → `kunde_obligations`; nuværende ansvarlig →
+  første række i `kunde_owner_history`; hver eksisterende adgang → kundens første `kunde_ledgers` (fingeraftryk kommer,
+  når tokenet udskiftes). Ubrugte felter `aftaletype` og `opgave_frekvens` er fjernet. Migreringen er afprøvet op og
+  ned med data i den gamle form. `gem_token` kræver nu en administrator (`--af`) og udskifter ved tilbagekald + ny række.
+- HUSK i fase 2 (trin 6-7, flere aftaler pr. kunde): `synk/kontoplan.py`, `synk/planlaegger.py` og `synk/bekraeft.py`
+  forudsætter ét aktivt token pr. kunde pr. system – de skal arbejde pr. aftale (`kunde_ledgers`).

@@ -19,7 +19,6 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Text,
-    UniqueConstraint,
     false,
     func,
     text,
@@ -31,10 +30,9 @@ from app.db import Base, kun_vaerdier
 from app.sikkerhed.kryptering import krypter_token
 
 SYSTEMER = ("economic", "dinero")
-KUNDE_STATUSSER = ("aktiv", "pause", "opsagt")
-OPGAVE_FREKVENSER = ("maanedligt", "kvartalsvis", "aarligt")
-MOMSPERIODER = ("maaned", "kvartal", "halvaar")
-AFTALETYPER = ("fast_pris", "timer")
+# Livscyklus (bygherren 26.10.2026): 'emne' = endnu ikke kunde; 'aktiv'/'pause' = kunde; 'opsagt' = ophørt (arkiveret).
+# Al hentning, rykkere, timeregistrering og Svend bruger kun 'aktiv' – så et emne kommer aldrig med.
+KUNDE_STATUSSER = ("emne", "aktiv", "pause", "opsagt")
 # Årsager til at arkivere en kunde (bygherren 23.10.2026) – vælges, når en administrator arkiverer.
 ARKIV_AARSAGER = ("pris_for_hoej", "engangsopgave", "uoverensstemmelse", "egen_bogholder")
 ADGANG_STATUSSER = ("aktiv", "udloebet", "tilbagekaldt")
@@ -45,18 +43,10 @@ class Client(Base):
     __table_args__ = (
         kun_vaerdier("regnskabssystem", SYSTEMER),
         kun_vaerdier("status", KUNDE_STATUSSER),
-        kun_vaerdier("opgave_frekvens", OPGAVE_FREKVENSER),
-        kun_vaerdier("momsperiode", MOMSPERIODER),
-        kun_vaerdier("aftaletype", AFTALETYPER),
         kun_vaerdier("arkiv_aarsag", ARKIV_AARSAGER),
         # En årsag giver kun mening på en arkiveret (opsagt) kunde.
         CheckConstraint("arkiv_aarsag IS NULL OR status = 'opsagt'", name="arkiv_aarsag_kun_paa_opsagt"),
         CheckConstraint("cvr ~ '^[0-9]{8}$'", name="cvr_8_cifre"),
-        # Regnskabsårets slutning som dag-måned, fx '31-12' eller '30-06'.
-        CheckConstraint(
-            "regnskabsaar_slut ~ '^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])$'",
-            name="regnskabsaar_slut_dd_mm",
-        ),
         CheckConstraint("antal_ansatte >= 0", name="antal_ansatte_ikke_negativ"),
         kun_vaerdier("payment_allocation_order", ("costs_first", "principal_first")),
         kun_vaerdier("dunning_mode", ("off", "preview")),
@@ -71,7 +61,6 @@ class Client(Base):
         CheckConstraint("collection_min_amount >= 0", name="inkasso_minimum_ikke_negativ"),
         CheckConstraint("fi_kreditornummer IS NULL OR fi_kreditornummer ~ '^[0-9]{8}$'",
                         name="fi_kreditornummer_8_cifre"),
-        CheckConstraint("loenkoersel_dag BETWEEN 1 AND 31", name="loenkoersel_dag_1_31"),
         CheckConstraint(
             "opsagt_dato IS NULL OR startdato IS NULL OR opsagt_dato >= startdato",
             name="opsagt_efter_start",
@@ -87,9 +76,7 @@ class Client(Base):
     by: Mapped[str | None] = mapped_column(String(100))
     virksomhedsform: Mapped[str | None] = mapped_column(String(50))
     branche: Mapped[str | None] = mapped_column(String(255))
-    regnskabsaar_slut: Mapped[str | None] = mapped_column(String(5))
     antal_ansatte: Mapped[int | None] = mapped_column(Integer)
-    opgave_frekvens: Mapped[str | None] = mapped_column(String(20))
     status: Mapped[str] = mapped_column(String(20), server_default="aktiv")
     startdato: Mapped[date | None] = mapped_column(Date)
     opsagt_dato: Mapped[date | None] = mapped_column(Date)
@@ -99,12 +86,15 @@ class Client(Base):
     # Intern kunde (fx Din Bogholder selv): KUN administratorer kan spørge Svend om den og se samtalerne om den
     # (bygherren 26.10.2026) – også selv om en medarbejder står som ansvarlig.
     kun_admin: Mapped[bool] = mapped_column(Boolean, server_default=false())
+    # Kundens to roller (bygherren 26.10.2026) – defineret ét sted: app/kunder/roller.py.
+    # ANSVARLIG har det overordnede ansvar (ændringer skrives i kunde_owner_history af en trigger);
+    # ASSISTENT laver det daglige arbejde og overtager kunden, når den ansvarlige er fraværende.
     ansvarlig_medarbejder_id: Mapped[int | None] = mapped_column(
         ForeignKey("staff.id", ondelete="SET NULL"), index=True
     )
-    daglig_medarbejder_id: Mapped[int | None] = mapped_column(
-        ForeignKey("staff.id", ondelete="SET NULL"), index=True
-    )
+    assistent_id: Mapped[int | None] = mapped_column(ForeignKey("staff.id", ondelete="SET NULL"), index=True)
+    # Kundegruppe: holding, driftsselskab og personlig virksomhed, der hænger sammen.
+    group_id: Mapped[int | None] = mapped_column(ForeignKey("kunde_groups.id", ondelete="RESTRICT"), index=True)
     regnskabssystem: Mapped[str | None] = mapped_column(String(20))
     aftalenummer: Mapped[str | None] = mapped_column(String(50))
     kassekladde_navn: Mapped[str | None] = mapped_column(String(255))
@@ -139,9 +129,7 @@ class Client(Base):
     # Konti i KUNDENS kontoplan, hvor bankafstemningen bogfører indbetalte gebyrer og renter.
     fee_income_account: Mapped[int | None] = mapped_column(Integer)
     interest_income_account: Mapped[int | None] = mapped_column(Integer)
-    momsperiode: Mapped[str | None] = mapped_column(String(20))
     loensystem: Mapped[str | None] = mapped_column(String(100))
-    loenkoersel_dag: Mapped[int | None] = mapped_column(SmallInteger)
     revisor_firma: Mapped[str | None] = mapped_column(String(255))
     revisor_kontakt: Mapped[str | None] = mapped_column(String(255))
     revisor_telefon: Mapped[str | None] = mapped_column(String(50))
@@ -152,7 +140,6 @@ class Client(Base):
     debitorstyring: Mapped[bool] = mapped_column(Boolean, server_default=false())
     eboks_adgang: Mapped[bool] = mapped_column(Boolean, server_default=false())
     pleo: Mapped[bool] = mapped_column(Boolean, server_default=false())
-    aftaletype: Mapped[str | None] = mapped_column(String(20))
     oprettet: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -168,27 +155,38 @@ class Client(Base):
         return f"<Client id={self.id} kundenummer={self.kundenummer!r} navn={self.navn!r}>"
 
 
+KONTAKTES_AF = ("alle", "ansvarlig")
+
+
 class Contact(Base):
+    """Kontaktpersoner. Slettes aldrig – arkiveres (arkiveret sat). Underskriver og "må kontaktes af" er to
+    uafhængige felter."""
+
     __tablename__ = "contacts"
     __table_args__ = (
-        # Højst én primær kontaktperson pr. kunde.
+        # Højst én primær kontaktperson pr. kunde blandt dem, der ikke er arkiveret.
         Index(
             "uq_contacts_en_primaer_pr_kunde",
             "client_id",
             unique=True,
-            postgresql_where=text("primaer"),
+            postgresql_where=text("primaer AND arkiveret IS NULL"),
         ),
+        kun_vaerdier("maa_kontaktes_af", KONTAKTES_AF),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     client_id: Mapped[int] = mapped_column(
-        ForeignKey("clients.id", ondelete="CASCADE"), index=True
+        ForeignKey("clients.id", ondelete="RESTRICT"), index=True
     )
     navn: Mapped[str] = mapped_column(String(255))
     rolle: Mapped[str | None] = mapped_column(String(100))
     telefon: Mapped[str | None] = mapped_column(String(50))
     email: Mapped[str | None] = mapped_column(String(255))
     primaer: Mapped[bool] = mapped_column(Boolean, server_default=false())
+    underskriver: Mapped[bool] = mapped_column(Boolean, server_default=false())
+    maa_kontaktes_af: Mapped[str] = mapped_column(String(10), server_default="alle")
+    oprettet: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    arkiveret: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     client: Mapped[Client] = relationship(back_populates="contacts")
 
@@ -211,13 +209,19 @@ class Credential(Base):
     __table_args__ = (
         kun_vaerdier("system", SYSTEMER),
         kun_vaerdier("status", ADGANG_STATUSSER),
-        UniqueConstraint("client_id", "system", name="uq_credentials_client_system"),
+        # Højst ét gældende token pr. regnskabsaftale. Et token udskiftes ved at tilbagekalde det gamle
+        # (revoked_at) og indsætte et nyt – det krypterede felt kan aldrig ændres (trigger kunde_credential_guard).
+        Index("uq_credentials_et_aktivt_pr_aftale", "ledger_id", unique=True,
+              postgresql_where=text("revoked_at IS NULL")),
+        CheckConstraint("(revoked_at IS NULL) = (status <> 'tilbagekaldt')", name="tilbagekaldt_har_tidspunkt"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     client_id: Mapped[int] = mapped_column(
-        ForeignKey("clients.id", ondelete="CASCADE"), index=True
+        ForeignKey("clients.id", ondelete="RESTRICT"), index=True
     )
+    # Regnskabsaftalen, tokenet hører til (én kunde kan have flere).
+    ledger_id: Mapped[int] = mapped_column(ForeignKey("kunde_ledgers.id", ondelete="RESTRICT"), index=True)
     system: Mapped[str] = mapped_column(String(20))
     # deferred: kolonnen hentes først fra databasen, når den faktisk skal bruges.
     token_krypteret: Mapped[str] = mapped_column(Text, nullable=False, deferred=True)
@@ -225,6 +229,11 @@ class Credential(Base):
     organisation_id: Mapped[str | None] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(20), server_default="aktiv")
     sidst_fornyet: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Til visning: de sidste fire tegn af tokenet (bygherren 26.10.2026: bevidst). Tom for tokens fra før.
+    fingerprint: Mapped[str | None] = mapped_column(String(4))
+    set_by: Mapped[int | None] = mapped_column(ForeignKey("staff.id", ondelete="RESTRICT"), index=True)
+    set_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     oprettet: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -232,7 +241,9 @@ class Credential(Base):
     client: Mapped[Client] = relationship(back_populates="credentials")
 
     def saet_token(self, klartekst: str) -> None:
+        """Kun på en NY række – et gemt token kan ikke ændres (udskift = tilbagekald + ny række)."""
         self.token_krypteret = krypter_token(klartekst)
+        self.fingerprint = klartekst[-4:]
 
     def __repr__(self) -> str:
         # Tokenet (heller ikke det krypterede) vises aldrig.

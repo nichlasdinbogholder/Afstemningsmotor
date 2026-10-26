@@ -1,7 +1,10 @@
 """Læg et token ind for en kunde.
 
-    python -m app.kunder.gem_token --kundenummer K-1001 --system economic
-    python -m app.kunder.gem_token --kunde 12 --system dinero --organisation-id 123456
+    python -m app.kunder.gem_token --kundenummer K-1001 --system economic --af <administratorens e-mail>
+    python -m app.kunder.gem_token --kunde 12 --system dinero --organisation-id 123456 --af <e-mail>
+
+KUN en administrator kan sætte et token (--af skal være en aktiv administrator – databasen kontrollerer det også).
+Findes der et token i forvejen, tilbagekaldes det, og det nye gemmes som en ny række.
 
 Tokenet skrives IKKE på kommandolinjen (så havner det i terminalens historik).
 Kommandoen spørger efter det bagefter, og det, du indsætter, vises ikke på skærmen.
@@ -16,6 +19,7 @@ from sqlalchemy import select
 from app.db import ny_session
 from app.kunder.adgange import UgyldigAdgang, gem_token
 from app.kunder.models import SYSTEMER, Client
+from app.personale.models import Staff
 from app.sikkerhed.kryptering import KrypteringsFejl
 
 
@@ -27,6 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--system", required=True, choices=SYSTEMER)
     parser.add_argument("--organisation-id", help="Dinero: organisationens id")
     parser.add_argument("--aftale-id", help="e-conomic: aftalenummer")
+    parser.add_argument("--af", required=True, help="e-mail på administratoren, der lægger tokenet ind")
     args = parser.parse_args(argv)
 
     with ny_session() as session:
@@ -39,6 +44,10 @@ def main(argv: list[str] | None = None) -> int:
         if kunde is None:
             print("Fejl: Kunden findes ikke", file=sys.stderr)
             return 1
+        af = session.scalars(select(Staff).where(Staff.email == args.af.strip().lower())).one_or_none()
+        if af is None or not af.aktiv or af.rolle != "admin":
+            print("Fejl: --af skal være en aktiv administrator", file=sys.stderr)
+            return 1
 
         try:
             token = getpass.getpass(f"Indsæt token til {args.system} for {kunde.navn} (vises ikke): ")
@@ -47,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         try:
             credential = gem_token(
-                session, kunde.id, args.system, token,
+                session, kunde.id, args.system, token, staff_id=af.id,
                 organisation_id=args.organisation_id, aftale_id=args.aftale_id,
             )
             session.commit()
