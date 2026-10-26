@@ -23,7 +23,7 @@ from app.bilag.models import (
 from app.crm.models import Document, Handover, Note, Task
 from app.jobs.models import Job
 from app.kontoudtog.models import Statement, StatementLine
-from app.kunder.models import Client, Contact, Credential
+from app.kunder.models import Client, Contact, Credential, Raadgiver
 from app.kunder.tabeller import (
     KundeAgreement,
     KundeAlias,
@@ -110,6 +110,7 @@ __all__ = [
     "AuditLog",
     "Client",
     "Contact",
+    "Raadgiver",
     "Credential",
     "KundeAgreement",
     "KundeAlias",
