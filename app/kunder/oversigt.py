@@ -1,15 +1,16 @@
 """Kundeoversigtens liste (Kundeoversigten, trin 4): standard "mine kunder", sorteret efter navn (bygherren 26.10.2026:
 næste frist og dækningsgrad er ikke relevante i oversigten – dækningsgraden bruges i ledervisningen, trin 18).
 
-Kolonner: kunde og CVR, ansvarlig og assistent, afregningsform og månedspris, system og forbindelsesstatus, næste frist
-med dage til, månedens status og dækningsgrad (bygherren 26.10.2026):
-- MÅNEDENS STATUS = fuldførte af denne måneds opgaver (kunde_tasks), fx "6 af 10". Tom, når måneden ingen opgaver har.
+Kolonner: kunde, kundenummer, CVR, ansvarlig og assistent, afregningsform (kun abonnement/timeafregning – ingen pris),
+system og forbindelsesstatus (bygherren 26.10.2026):
+- Månedens status og frister (kunde_tasks) vises IKKE her – de hører til under Controlling (bygherren 26.10.2026).
+  `maanedens_status()` er bevaret til Controlling.
 - DÆKNINGSGRAD = KUN for abonnementskunder, seneste HELE måned: (abonnementspris + timer uden for abonnementet ×
   salgspris − alle registrerede timer på kunden × medarbejderens kostpris) / indtægten. Satser slås op på hver
   arbejdsdag (time_salgspris/time_kostpris). Mangler en sats, vises "mangler sats" – aldrig et gættet tal.
 - Bilagsdækning (andel af bankposteringer af typen finans med bilag; leverandørbetalinger tæller ikke) bygges i et
   selvstændigt trin – e-conomic sender ikke med på posteringen, om der er et bilag.
-Filtre: mine, ansvarlig, afregningsform, system, livscyklus (aktiv/pause), forfaldne frister, døde forbindelser,
+Filtre: mine, ansvarlig, afregningsform, system, livscyklus (onboarding/aktiv/pause), døde forbindelser,
 manglende hvidvask. Alt regnes her på serveren – webdelen viser kun.
 
 "Mine kunder" = kunder, hvor man er ansvarlig ELLER assistent (app/kunder/roller.py).
@@ -41,7 +42,6 @@ class Filtre:
     afregning: str | None = None          # abonnement | timeafregning
     system: str | None = None             # economic | dinero
     status: str | None = None             # aktiv | pause
-    forfaldne: bool = False
     doede_forbindelser: bool = False
     mangler_hvidvask: bool = False
 
@@ -57,12 +57,7 @@ def _forbindelser(session: Session, ider: list[int]) -> dict[int, str]:
     return ud
 
 
-def _naeste_frister(session: Session, ider: list[int]) -> dict[int, date]:
-    return dict(session.execute(select(KundeTask.client_id, func.min(KundeTask.due_date)).where(
-        KundeTask.client_id.in_(ider), KundeTask.completed_at.is_(None)).group_by(KundeTask.client_id)).all())
-
-
-def _maanedens_status(session: Session, ider: list[int], dag: date) -> dict[int, tuple[int, int]]:
+def maanedens_status(session: Session, ider: list[int], dag: date) -> dict[int, tuple[int, int]]:
     """(fuldførte, i alt) af denne måneds opgaver pr. kunde."""
     periode = dag.replace(day=1)
     raekker = session.execute(select(KundeTask.client_id, func.count(KundeTask.completed_at), func.count()).where(
@@ -118,24 +113,17 @@ def liste(session: Session, medarbejder: Staff, dag: date, f: Filtre) -> list[di
     kunder = {k.id: k for k in session.scalars(select(Client).where(Client.id.in_(ider)))}
     navne = dict(session.execute(select(Staff.id, Staff.navn)).all())
     forbindelser = _forbindelser(session, ider)
-    frister = _naeste_frister(session, ider)
     hvidvask = _hvidvask_ok(session, ider)
-    status = _maanedens_status(session, ider, dag)
 
     ud = []
     for r in raekker:
         k = kunder[r["id"]]
         forbindelse = forbindelser.get(k.id)
-        frist = frister.get(k.id)
         r = r | {
             "assistent": navne.get(k.assistent_id), "assistent_id": k.assistent_id,
             "system_kode": k.regnskabssystem,
             "forbindelse": forbindelse, "forbindelse_tekst": FORBINDELSE_TEKST[forbindelse],
-            "naeste_frist": frist.isoformat() if frist else None,
-            "dage_til_frist": (frist - dag).days if frist else None,
             "hvidvask_ok": k.id in hvidvask,
-            "maanedens_opgaver": None if k.id not in status else {"fuldfoert": status[k.id][0],
-                                                                  "i_alt": status[k.id][1]},
             "min_kunde": medarbejder.id in (k.ansvarlig_medarbejder_id, k.assistent_id),
         }
         if f.mine and not r["min_kunde"]:
@@ -147,8 +135,6 @@ def liste(session: Session, medarbejder: Staff, dag: date, f: Filtre) -> list[di
         if f.system and k.regnskabssystem != f.system:
             continue
         if f.status and k.status != f.status:
-            continue
-        if f.forfaldne and not (frist and frist < dag):
             continue
         if f.doede_forbindelser and forbindelse not in DOEDE:
             continue

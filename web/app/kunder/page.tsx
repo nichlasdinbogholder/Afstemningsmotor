@@ -27,7 +27,7 @@ export default function Side() {
   const [visOpret, setVisOpret] = useState(false);
   // Filtrene (trin 4). Standard: mine kunder. Selve filtreringen og sorteringen sker på serveren.
   const [filtre, setFiltre] = useState({ mine: true, ansvarlig_id: "", afregning: "", system: "", status: "",
-    forfaldne: false, doede_forbindelser: false, mangler_hvidvask: false });
+    doede_forbindelser: false, mangler_hvidvask: false });
   const hentListe = useCallback(() => {
     const q = new URLSearchParams();
     for (const [n, v] of Object.entries(filtre)) if (v) q.set(n, String(v));
@@ -95,7 +95,7 @@ export default function Side() {
           <option value="aktiv">Aktiv</option>
           <option value="pause">Pause</option>
         </select>
-        {([["forfaldne", "Forfaldne frister"], ["doede_forbindelser", "Døde forbindelser"],
+        {([["doede_forbindelser", "Døde forbindelser"],
            ["mangler_hvidvask", "Mangler hvidvask"]] as const).map(([n, tekst]) => (
           <label key={n} className="flex items-center gap-1.5">
             <input type="checkbox" checked={filtre[n]} onChange={(e) => setFiltre({ ...filtre, [n]: e.target.checked })} />
@@ -113,7 +113,6 @@ export default function Side() {
                 <th className="px-3 py-2">Ansvarlig</th>
                 <th className="px-3 py-2">Afregning</th><th className="px-3 py-2">System</th>
                 <th className="px-3 py-2" title="Andel af bankposteringer af typen finans med bilag – bygges i et senere trin">Bilagsdækning</th>
-                <th className="px-3 py-2" title="Fuldførte af denne måneds opgaver">Månedens status</th>
                 <th className="px-3 py-2">Status</th>
                 {admin && <th className="px-3 py-2" title="Intern kunde: kun administratorer kan spørge Svend om den">Kun admin hos Svend <AdminLaas /></th>}
                 {admin && <th className="px-3 py-2" />}
@@ -144,10 +143,6 @@ export default function Side() {
                       </div>
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-400">kommer senere</td>
-                    <td className="px-3 py-2">
-                      {k.maanedens_opgaver ? `${k.maanedens_opgaver.fuldfoert} af ${k.maanedens_opgaver.i_alt}`
-                        : <span className="text-slate-400">–</span>}
-                    </td>
                     <td className="px-3 py-2">{STATUS[k.status]}</td>
                     {admin && (
                       <td className="px-3 py-2 text-center">
@@ -168,7 +163,7 @@ export default function Side() {
                   </tr>
                   {admin && arkiverer === k.id && valg && (
                     <tr className="border-b border-slate-100 bg-slate-50">
-                      <td colSpan={11} className="px-3 py-3">
+                      <td colSpan={10} className="px-3 py-3">
                         <Arkivering kunde={k} valg={valg} luk={() => setArkiverer(null)}
                                     gem={(d) => udfoer(() => send(`/api/kundekartotek/${k.id}/arkiver`, d),
                                                        `${k.navn} er arkiveret`)} />
@@ -178,7 +173,7 @@ export default function Side() {
                 </Fragment>
               ))}
               {viste.length === 0 && (
-                <tr><td colSpan={11} className="px-3 py-6 text-center text-slate-500">Ingen kunder fundet.</td></tr>
+                <tr><td colSpan={10} className="px-3 py-6 text-center text-slate-500">Ingen kunder fundet.</td></tr>
               )}
             </tbody>
           </table>
