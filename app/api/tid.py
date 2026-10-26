@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.api.data import kraev_header
 from app.api.login import db, nuvaerende_medarbejder
-from app.kunder.models import Client
+from app.kunder.models import I_DRIFT, Client
 from app.personale.models import Staff
 from app.timeregistrering import registrering as reg
 from app.timeregistrering.models import TimeTaskType
@@ -47,7 +47,7 @@ def uge(dato: date, m: Staff = Depends(nuvaerende_medarbejder), session: Session
                    if not (t.blocked_for_hourly and e.employment == "timeloennet")
                    and not (t.only_hourly and e.employment != "timeloennet")]
     kunder = [{"id": k.id, "navn": k.navn, "kundenummer": k.kundenummer}
-              for k in session.scalars(select(Client).where(Client.status == "aktiv").order_by(Client.navn))]
+              for k in session.scalars(select(Client).where(Client.status.in_(I_DRIFT)).order_by(Client.navn))]
     return {
         "aar": aar, "uge": nr, "dage": [d.isoformat() for d in reg.ugens_dage(dato)],
         "status": u.status if u else "kladde",

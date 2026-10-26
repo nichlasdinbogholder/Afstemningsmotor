@@ -36,7 +36,7 @@ from app.adaptere.regnskab.base import (
 )
 from app.audit.models import AuditLog
 from app.db import ny_session
-from app.kunder.models import Client, Credential
+from app.kunder.models import I_DRIFT, Client, Credential
 from app.regnskab.models import Account
 from app.sikkerhed.hemmeligheder import rediger
 from app.sikkerhed.kryptering import KrypteringsFejl
@@ -111,7 +111,7 @@ def kunder_til_kontoplan(session: Session) -> list[Client]:
               & (Credential.system == Client.regnskabssystem))
         .where(
             Credential.status == "aktiv",
-            Client.status == "aktiv",
+            Client.status.in_(I_DRIFT),
             Client.regnskabssystem.in_(understoettede_systemer()),
             Client.id.not_in(slaaet_fra),
         )

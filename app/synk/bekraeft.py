@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 import app.models  # noqa: F401
 from app.adaptere.regnskab.base import hent_adapter, understoettede_systemer
 from app.db import ny_session
-from app.kunder.models import Client, Credential
+from app.kunder.models import I_DRIFT, Client, Credential
 from app.regnskab.models import CustomerCache, EntryCache, OpenEntryCache, SupplierCache
 from app.sikkerhed.hemmeligheder import rediger
 from app.synk.models import SyncState
@@ -70,7 +70,7 @@ def bekraeft(session: Session, kundenummer: str, adapter_fabrik=hent_adapter,
     kunde = session.scalars(select(Client).where(Client.kundenummer == kundenummer)).one_or_none()
     if not tjek(kunde is not None, f"Kunde {kundenummer} findes"):
         return _slut(tjek)
-    tjek(kunde.status == "aktiv", "Kunden har status 'aktiv'", f"status: {kunde.status}")
+    tjek(kunde.status in I_DRIFT, "Kunden har status 'aktiv' eller 'onboarding'", f"status: {kunde.status}")
     tjek(kunde.regnskabssystem in understoettede_systemer(), "Regnskabssystemet understøttes",
          f"{kunde.regnskabssystem}")
     adgang = session.scalar(select(func.count()).select_from(Credential).where(

@@ -30,9 +30,14 @@ from app.db import Base, kun_vaerdier
 from app.sikkerhed.kryptering import krypter_token
 
 SYSTEMER = ("economic", "dinero")
-# Livscyklus (bygherren 26.10.2026): 'emne' = endnu ikke kunde; 'aktiv'/'pause' = kunde; 'opsagt' = ophørt (arkiveret).
-# Al hentning, rykkere, timeregistrering og Svend bruger kun 'aktiv' – så et emne kommer aldrig med.
-KUNDE_STATUSSER = ("emne", "aktiv", "pause", "opsagt")
+# Livscyklus (bygherren 26.10.2026): 'emne' = endnu ikke kunde; 'onboarding' (ved at blive onboardet), 'aktiv' og
+# 'pause' = kunde; 'opsagt' = ophørt (arkiveret).
+KUNDE_STATUSSER = ("emne", "onboarding", "aktiv", "pause", "opsagt")
+# KUNDER I DRIFT: 'onboarding' har SAMME funktion som 'aktiv' (bygherren 26.10.2026) – hentning, regler, rykkere,
+# timeregistrering, Svend og CVR. Brug altid denne – aldrig status == "aktiv" alene.
+I_DRIFT = ("aktiv", "onboarding")
+# Kundeoversigten viser kunder (ikke emner og ikke arkiverede).
+I_OVERSIGTEN = ("onboarding", "aktiv", "pause")
 # Årsager til at arkivere en kunde (bygherren 23.10.2026) – vælges, når en administrator arkiverer.
 ARKIV_AARSAGER = ("pris_for_hoej", "engangsopgave", "uoverensstemmelse", "egen_bogholder")
 ADGANG_STATUSSER = ("aktiv", "udloebet", "tilbagekaldt")

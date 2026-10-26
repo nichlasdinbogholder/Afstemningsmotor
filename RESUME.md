@@ -716,3 +716,20 @@ Nyt modul i hub'en – fire faser, ét trin ad gangen (PR + merge pr. trin). Kun
   medarbejdere ser alle kontakter – "må kun kontaktes af den ansvarlige" vises tydeligt (ingen skjules); kun
   kundens ansvarlige, assistent og administratorer opretter/retter/arkiverer. Kundekortet er lavet nu med alle faner;
   kun Kontaktpersoner virker – resten bygges i trin 5.
+- **Fase 1, trin 4 (26.10.2026):** listevisningen (`app/kunder/oversigt.py`): "Mine kunder" som standard (ansvarlig
+  eller assistent), sorteret efter nærmeste frist, kolonner kunde/CVR, ansvarlig/assistent, afregning/pris,
+  system/forbindelse, næste frist med dage til; filtrene ansvarlig, afregning, system, livscyklus, forfaldne frister,
+  døde forbindelser, manglende hvidvask. Bygherrens definitioner (26.10.2026):
+  - Bilagsdækning = andel af månedens BANKPOSTERINGER AF TYPEN FINANS, der har et bilag. Leverandørbetalinger tæller
+    IKKE (de har intet bilag). NB: e-conomic sender ikke med på posteringen, om der er bilag – det skal slås op pr.
+    bilag (læsning). Bygges som eget trin, når opslaget er efterprøvet mod Din Bogholders rigtige e-conomic.
+  - Månedens status = "x af y" fuldførte af denne måneds opgaver (kunde_tasks – fyldes fra trin 11-12).
+  - Dækningsgrad = KUN abonnementskunder, seneste hele måned: (abonnementspris + timer uden for abonnementet ×
+    salgspris − alle registrerede timer × kostpris) / indtægt. Alle registrerede timer tæller (ugegodkendelse er
+    endnu ikke bygget).
+- Rettelser til oversigten (bygherren 26.10.2026): kun firmanavn i kundekolonnen + egne kolonner til kundenr. og CVR;
+  ansvarlig vælges IKKE i oversigten, men på kundekortet (admin: status, ansvarlig, assistent); næste frist og
+  dækningsgrad er ikke relevante i oversigten; afregning viser kun abonnement/timeafregning (ingen pris); listen er
+  sorteret efter navn.
+- Ny status ONBOARDING (kunder, der er ved at blive onboardet) – samme funktion som Aktiv overalt (`I_DRIFT`). Pause
+  beholdes. En ny kunde oprettes som Aktiv eller Onboarding.

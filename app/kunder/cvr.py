@@ -29,7 +29,7 @@ from tenacity import Retrying, retry_if_exception, stop_after_attempt, wait_expo
 from app.config import get_settings
 from app.jobs.koe import laeg_i_koe
 from app.jobs.register import JobKontekst, jobtype
-from app.kunder.models import Client
+from app.kunder.models import I_DRIFT, I_OVERSIGTEN, Client
 from app.kunder.tabeller import KundeAlias, KundeCvrChange, KundeCvrSnapshot, KundeLog
 from app.notifikationer.tjeneste import administratorer, send_notifikation
 from app.sikkerhed.hemmeligheder import registrer_hemmelighed
@@ -265,7 +265,7 @@ def planlaeg(session: Session, nu: datetime) -> int:
     if not cvr_slaaet_til():
         return 0
     dag = nu.astimezone(TIDSZONE).date()
-    kunder = session.scalars(select(Client).where(Client.status == "aktiv", Client.cvr.is_not(None)))
+    kunder = session.scalars(select(Client).where(Client.status.in_(I_DRIFT), Client.cvr.is_not(None)))
     return sum(laeg_opslag_i_koe(session, k, dag) for k in kunder)
 
 
@@ -274,7 +274,7 @@ def cvr_job(job: JobKontekst) -> None:
     if not cvr_slaaet_til():
         return
     kunde = job.session.get(Client, job.client_id)
-    if kunde is None or kunde.status not in ("aktiv", "pause") or not kunde.cvr:
+    if kunde is None or kunde.status not in I_OVERSIGTEN or not kunde.cvr:
         return
     opdater(job.session, kunde)
 

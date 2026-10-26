@@ -17,12 +17,11 @@ from sqlalchemy.orm import Session
 
 from app.api.data import kraev_header
 from app.api.login import db, nuvaerende_medarbejder
-from app.kunder import kontakter
+from app.kunder import kartotek, kontakter
 from app.kunder.models import Client
 from app.personale.models import Staff
 
 router = APIRouter(prefix="/api/kundekort", dependencies=[Depends(nuvaerende_medarbejder)])
-STATUS = {"emne": "Emne", "aktiv": "Aktiv", "pause": "Pause", "opsagt": "Arkiveret"}
 IKKE_TILLADT = "Kun kundens ansvarlige, assistent eller en administrator kan rette kontaktpersoner"
 
 
@@ -38,9 +37,11 @@ def hoved(kunde_id: int, m: Staff = Depends(nuvaerende_medarbejder), session: Se
     k = _kunde(session, kunde_id)
     ansvarlig = session.get(Staff, k.ansvarlig_medarbejder_id) if k.ansvarlig_medarbejder_id else None
     assistent = session.get(Staff, k.assistent_id) if k.assistent_id else None
-    return {"id": k.id, "navn": k.navn, "kundenummer": k.kundenummer, "cvr": k.cvr, "status": STATUS[k.status],
-            "ansvarlig": ansvarlig.navn if ansvarlig else None, "assistent": assistent.navn if assistent else None,
-            "kan_rette": kontakter.maa_rette(k, m)}
+    return {"id": k.id, "navn": k.navn, "kundenummer": k.kundenummer, "cvr": k.cvr,
+            "status": kartotek.STATUS_TEKST[k.status], "status_kode": k.status,
+            "ansvarlig": ansvarlig.navn if ansvarlig else None, "ansvarlig_id": k.ansvarlig_medarbejder_id,
+            "assistent": assistent.navn if assistent else None, "assistent_id": k.assistent_id,
+            "kan_rette": kontakter.maa_rette(k, m), "admin": m.rolle == "admin"}
 
 
 @router.get("/{kunde_id}/kontakter")

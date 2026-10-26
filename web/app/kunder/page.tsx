@@ -4,10 +4,9 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useMig } from "@/components/Ramme";
 import { hent, send } from "@/lib/api";
-import { dato } from "@/lib/format";
-import { afregningTekst, type KartotekKunde, type Valg } from "@/lib/kartotek";
+import { type KartotekKunde, type Valg } from "@/lib/kartotek";
 
-const STATUS = { aktiv: "Aktiv", pause: "Pause", opsagt: "Arkiveret" };
+const STATUS = { emne: "Emne", onboarding: "Onboarding", aktiv: "Aktiv", pause: "Pause", opsagt: "Arkiveret" };
 
 // Kun dansk skrivemåde: 1500 · 1.500 · 1.500,50 – "1500.5" afvises, så et beløb aldrig gættes.
 function danskTal(v: string): string | null {
@@ -25,7 +24,14 @@ export default function Side() {
   const [besked, setBesked] = useState<{ tekst: string; fejl?: boolean } | null>(null);
   const [arkiverer, setArkiverer] = useState<number | null>(null);
   const [visOpret, setVisOpret] = useState(false);
-  const hentListe = useCallback(() => { hent<KartotekKunde[]>("/api/kundekartotek").then(setListe); }, []);
+  // Filtrene (trin 4). Standard: mine kunder. Selve filtreringen og sorteringen sker på serveren.
+  const [filtre, setFiltre] = useState({ mine: true, ansvarlig_id: "", afregning: "", system: "", status: "",
+    forfaldne: false, doede_forbindelser: false, mangler_hvidvask: false });
+  const hentListe = useCallback(() => {
+    const q = new URLSearchParams();
+    for (const [n, v] of Object.entries(filtre)) if (v) q.set(n, String(v));
+    hent<KartotekKunde[]>(`/api/kundekartotek?${q}`).then(setListe);
+  }, [filtre]);
   useEffect(() => { hentListe(); hent<Valg>("/api/kundekartotek/valg").then(setValg); }, [hentListe]);
 
   async function udfoer(handling: () => Promise<unknown>, ok: string): Promise<boolean> {
@@ -58,8 +64,44 @@ export default function Side() {
 
       {besked && <p className={`rounded-md px-3 py-2 text-sm ${besked.fejl ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>{besked.tekst}</p>}
 
-      <input value={soeg} onChange={(e) => setSoeg(e.target.value)} placeholder="Søg på navn, kundenr., CVR eller ansvarlig"
-             className="w-96 rounded-md border border-slate-300 px-3 py-1.5 text-sm" />
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <input value={soeg} onChange={(e) => setSoeg(e.target.value)} placeholder="Søg på navn, kundenr., CVR eller ansvarlig"
+               className="w-80 rounded-md border border-slate-300 px-3 py-1.5" />
+        <label className="flex items-center gap-1.5 font-medium">
+          <input type="checkbox" checked={filtre.mine} onChange={(e) => setFiltre({ ...filtre, mine: e.target.checked })} />
+          Mine kunder
+        </label>
+        <select aria-label="Ansvarlig" value={filtre.ansvarlig_id} onChange={(e) => setFiltre({ ...filtre, ansvarlig_id: e.target.value })}
+                className="rounded-md border border-slate-300 px-2 py-1.5">
+          <option value="">Alle ansvarlige</option>
+          {valg?.medarbejdere.map((m) => <option key={m.id} value={m.id}>{m.navn}</option>)}
+        </select>
+        <select aria-label="Afregning" value={filtre.afregning} onChange={(e) => setFiltre({ ...filtre, afregning: e.target.value })}
+                className="rounded-md border border-slate-300 px-2 py-1.5">
+          <option value="">Alle afregningsformer</option>
+          <option value="abonnement">Abonnement</option>
+          <option value="timeafregning">Timeafregning</option>
+        </select>
+        <select aria-label="System" value={filtre.system} onChange={(e) => setFiltre({ ...filtre, system: e.target.value })}
+                className="rounded-md border border-slate-300 px-2 py-1.5">
+          <option value="">Alle systemer</option>
+          {valg?.systemer.map((s) => <option key={s.kode} value={s.kode}>{s.navn}</option>)}
+        </select>
+        <select aria-label="Livscyklus" value={filtre.status} onChange={(e) => setFiltre({ ...filtre, status: e.target.value })}
+                className="rounded-md border border-slate-300 px-2 py-1.5">
+          <option value="">Alle statusser</option>
+          <option value="onboarding">Onboarding</option>
+          <option value="aktiv">Aktiv</option>
+          <option value="pause">Pause</option>
+        </select>
+        {([["forfaldne", "Forfaldne frister"], ["doede_forbindelser", "Døde forbindelser"],
+           ["mangler_hvidvask", "Mangler hvidvask"]] as const).map(([n, tekst]) => (
+          <label key={n} className="flex items-center gap-1.5">
+            <input type="checkbox" checked={filtre[n]} onChange={(e) => setFiltre({ ...filtre, [n]: e.target.checked })} />
+            {tekst}
+          </label>
+        ))}
+      </div>
 
       {!liste ? <p className="text-slate-500">Henter …</p> : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
@@ -67,8 +109,10 @@ export default function Side() {
             <thead className="border-b border-slate-200 text-left text-xs font-semibold text-slate-600">
               <tr>
                 <th className="px-3 py-2">Kunde</th><th className="px-3 py-2">Kundenr.</th><th className="px-3 py-2">CVR</th>
-                <th className="px-3 py-2">System</th><th className="px-3 py-2">Ansvarlig</th>
-                <th className="px-3 py-2">Startdato</th><th className="px-3 py-2">Afregning</th>
+                <th className="px-3 py-2">Ansvarlig</th>
+                <th className="px-3 py-2">Afregning</th><th className="px-3 py-2">System</th>
+                <th className="px-3 py-2" title="Andel af bankposteringer af typen finans med bilag – bygges i et senere trin">Bilagsdækning</th>
+                <th className="px-3 py-2" title="Fuldførte af denne måneds opgaver">Månedens status</th>
                 <th className="px-3 py-2">Status</th>
                 {admin && <th className="px-3 py-2" title="Intern kunde: kun administratorer kan spørge Svend om den">Kun admin hos Svend</th>}
                 {admin && <th className="px-3 py-2" />}
@@ -78,24 +122,31 @@ export default function Side() {
               {viste.map((k) => (
                 <Fragment key={k.id}>
                   <tr className="border-b border-slate-100">
-                    <td className="px-3 py-2 font-medium text-slate-900"><Link href={`/kunder/kort/?id=${k.id}`} className="hover:text-brand-700 hover:underline">{k.navn}</Link></td>
+                    <td className="px-3 py-2">
+                      <Link href={`/kunder/kort/?id=${k.id}`} className="font-medium text-slate-900 hover:text-brand-700 hover:underline">{k.navn}</Link>
+                    </td>
                     <td className="px-3 py-2">{k.kundenummer}</td>
                     <td className="px-3 py-2">{k.cvr}</td>
-                    <td className="px-3 py-2">{k.system}</td>
                     <td className="px-3 py-2">
-                      {admin && valg ? (
-                        <select value={k.ansvarlig_id ?? ""} aria-label={`Ansvarlig for ${k.navn}`}
-                                onChange={(e) => udfoer(() => send(`/api/kundekartotek/${k.id}/ansvarlig`, {
-                                  ansvarlig_id: e.target.value ? Number(e.target.value) : null }),
-                                  `Ansvarlig for ${k.navn} er ændret`)}
-                                className="rounded-md border border-slate-300 px-2 py-1 text-sm">
-                          <option value="">Ingen</option>
-                          {valg.medarbejdere.map((m) => <option key={m.id} value={m.id}>{m.navn}</option>)}
-                        </select>
-                      ) : (k.ansvarlig ?? <span className="text-slate-400">Ingen</span>)}
+                      {k.ansvarlig ?? <span className="text-slate-400">Ingen</span>}
+                      <div className="text-xs text-slate-500">Assistent: {k.assistent ?? "ingen"}</div>
                     </td>
-                    <td className="px-3 py-2">{dato(k.startdato)}</td>
-                    <td className="px-3 py-2">{afregningTekst(k) || <span className="text-slate-400">Ikke sat</span>}</td>
+                    <td className="px-3 py-2">
+                      {/* Kun afregningsformen – ikke prisen (bygherren 26.10.2026). */}
+                      {k.afregning === "abonnement" ? "Abonnement" : k.afregning === "timeafregning" ? "Timeafregning"
+                        : <span className="text-slate-400">Ikke sat</span>}
+                    </td>
+                    <td className="px-3 py-2">
+                      {k.system}
+                      <div className={`text-xs ${k.forbindelse === "afvist" || k.forbindelse === "fejlet" ? "font-semibold text-red-700" : k.forbindelse === "aktiv" ? "text-emerald-700" : "text-slate-500"}`}>
+                        {k.forbindelse_tekst}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-slate-400">kommer senere</td>
+                    <td className="px-3 py-2">
+                      {k.maanedens_opgaver ? `${k.maanedens_opgaver.fuldfoert} af ${k.maanedens_opgaver.i_alt}`
+                        : <span className="text-slate-400">–</span>}
+                    </td>
                     <td className="px-3 py-2">{STATUS[k.status]}</td>
                     {admin && (
                       <td className="px-3 py-2 text-center">
@@ -116,7 +167,7 @@ export default function Side() {
                   </tr>
                   {admin && arkiverer === k.id && valg && (
                     <tr className="border-b border-slate-100 bg-slate-50">
-                      <td colSpan={10} className="px-3 py-3">
+                      <td colSpan={11} className="px-3 py-3">
                         <Arkivering kunde={k} valg={valg} luk={() => setArkiverer(null)}
                                     gem={(d) => udfoer(() => send(`/api/kundekartotek/${k.id}/arkiver`, d),
                                                        `${k.navn} er arkiveret`)} />
@@ -126,7 +177,7 @@ export default function Side() {
                 </Fragment>
               ))}
               {viste.length === 0 && (
-                <tr><td colSpan={10} className="px-3 py-6 text-center text-slate-500">Ingen kunder fundet.</td></tr>
+                <tr><td colSpan={11} className="px-3 py-6 text-center text-slate-500">Ingen kunder fundet.</td></tr>
               )}
             </tbody>
           </table>
@@ -137,7 +188,7 @@ export default function Side() {
 }
 
 type NyData = { navn: string; kundenummer: string; cvr: string | null; system: string; ansvarlig_id: number | null;
-  startdato: string; afregning: string; abonnementspris: string | null };
+  startdato: string; afregning: string; abonnementspris: string | null; status: string };
 
 function NyKunde({ valg, gem, luk }: { valg: Valg; gem: (d: NyData) => Promise<boolean>; luk: () => void }) {
   const [navn, setNavn] = useState("");
@@ -147,6 +198,7 @@ function NyKunde({ valg, gem, luk }: { valg: Valg; gem: (d: NyData) => Promise<b
   const [ansvarlig, setAnsvarlig] = useState("");
   const [startdato, setStartdato] = useState("");
   const [afregning, setAfregning] = useState("");
+  const [status, setStatus] = useState("aktiv");
   const [pris, setPris] = useState("");
   const [fejl, setFejl] = useState<string | null>(null);
 
@@ -161,7 +213,7 @@ function NyKunde({ valg, gem, luk }: { valg: Valg; gem: (d: NyData) => Promise<b
     }
     setFejl(null);
     const ok = await gem({ navn, kundenummer, cvr: cvr.trim() || null, system,
-      ansvarlig_id: ansvarlig ? Number(ansvarlig) : null, startdato, afregning, abonnementspris });
+      ansvarlig_id: ansvarlig ? Number(ansvarlig) : null, startdato, afregning, abonnementspris, status });
     if (ok) luk();
   }
 
@@ -186,6 +238,12 @@ function NyKunde({ valg, gem, luk }: { valg: Valg; gem: (d: NyData) => Promise<b
         </label>
         <label>Startdato for samarbejdet
           <input type="date" required value={startdato} onChange={(e) => setStartdato(e.target.value)} className={felt} />
+        </label>
+        <label>Status
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className={felt}>
+            <option value="aktiv">Aktiv</option>
+            <option value="onboarding">Onboarding</option>
+          </select>
         </label>
         <label>Afregningsform
           <select required value={afregning} onChange={(e) => setAfregning(e.target.value)} className={felt}>

@@ -2,10 +2,15 @@
 import { beloeb } from "./format";
 
 export type KartotekKunde = {
-  id: number; navn: string; kundenummer: string; cvr: string | null; status: "aktiv" | "pause" | "opsagt";
+  id: number; navn: string; kundenummer: string; cvr: string | null; status: "emne" | "onboarding" | "aktiv" | "pause" | "opsagt";
   system: string; ansvarlig: string | null; ansvarlig_id: number | null; startdato: string | null;
   afregning: "abonnement" | "timeafregning" | null; abonnementspris: string | null;
   ophoersdato: string | null; aarsag: string | null; arkiveret_af: string | null; kun_admin: boolean;
+  // Kun i Kundeoversigten (trin 4) – regnet på serveren.
+  assistent?: string | null; forbindelse?: string | null; forbindelse_tekst?: string;
+  naeste_frist?: string | null; dage_til_frist?: number | null; hvidvask_ok?: boolean; min_kunde?: boolean;
+  maanedens_opgaver?: { fuldfoert: number; i_alt: number } | null;
+  daekningsgrad?: { procent: string | null; tekst: string | null } | null; daekning_periode?: string | null;
 };
 export type Valg = {
   medarbejdere: { id: number; navn: string }[];

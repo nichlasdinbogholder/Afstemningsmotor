@@ -24,7 +24,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.audit.models import AuditLog
-from app.kunder.models import Client
+from app.kunder.models import I_DRIFT, Client
 from app.sikkerhed.hemmeligheder import rediger
 from app.synk.models import CURSOR_TYPER, RESSOURCER, SyncState
 
@@ -103,7 +103,7 @@ def klar_til_koersel(session: Session, ressource: str | None = None) -> list[tup
         select(SyncState.client_id, SyncState.ressource)
         .join(Client, Client.id == SyncState.client_id)
         .where(
-            Client.status == "aktiv",
+            Client.status.in_(I_DRIFT),
             SyncState.status != "deaktiveret",
             SyncState.naeste_koersel <= func.now(),
         )
@@ -235,7 +235,7 @@ def synk_transaktion(
     """
     _tjek_ressource(ressource)
     kunde_status = session.scalar(select(Client.status).where(Client.id == client_id))
-    if kunde_status != "aktiv":
+    if kunde_status not in I_DRIFT:
         raise KundeIkkeAktiv(f"Kunde {client_id} har status '{kunde_status}' – synkroniseres ikke")
 
     hent_tilstand(session, client_id, ressource)
