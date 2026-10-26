@@ -40,6 +40,7 @@ from app.kunder.tabeller import (
     KundeTask,
     KundeTaskType,
 )
+from app.notifikationer.models import Notification
 from app.opkraevning.models import (
     BillingPeriod,
     CollectionCase,
@@ -133,6 +134,7 @@ __all__ = [
     "Handover",
     "Job",
     "Note",
+    "Notification",
     "OpenEntryCache",
     "Staff",
     "Statement",

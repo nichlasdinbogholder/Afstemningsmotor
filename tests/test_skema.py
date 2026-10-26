@@ -29,7 +29,7 @@ TABELLER = {
     # Kundeoversigten (spec 26.10.2026)
     "kunde_groups", "kunde_aliases", "kunde_owner_history", "kunde_cvr_snapshot", "kunde_cvr_changes",
     "kunde_agreements", "kunde_ledgers", "kunde_authorities", "kunde_obligations", "kunde_task_types",
-    "kunde_tasks", "kunde_aml", "kunde_checklists", "kunde_log",
+    "kunde_tasks", "kunde_aml", "kunde_checklists", "kunde_log", "notifications",
 }
 
 
@@ -82,6 +82,7 @@ def test_alle_staff_kolonner_peger_paa_staff(inspektor):
         "kunde_tasks": {"completed_by"},
         "kunde_checklists": {"completed_by"},
         "kunde_log": {"actor_staff_id"},
+        "notifications": {"staff_id"},
         "tasks": {"ansvarlig_id"},
         "time_entries": {"created_by"},
         "notes": {"staff_id"},
@@ -129,6 +130,7 @@ def test_alle_staff_kolonner_peger_paa_staff(inspektor):
         ("kunde_obligations", "payroll_frequency"),
         ("kunde_aml", "risk_level"),
         ("kunde_checklists", "kind"),
+        ("notifications", "alvor"),
         ("clients", "arkiv_aarsag"),
         ("credentials", "system"),
         ("credentials", "status"),

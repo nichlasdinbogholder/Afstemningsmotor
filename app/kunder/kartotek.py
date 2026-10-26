@@ -14,7 +14,7 @@
 - Alt logges i audit_log (kunde_oprettet, kunde_ansvarlig, kunde_kun_admin, kunde_arkiveret, kunde_genaktiveret) med hvem og fra/til.
 """
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import or_, select, text
@@ -22,6 +22,8 @@ from sqlalchemy.orm import Session
 
 from app.audit.models import AuditLog
 from app.db import saet_aktoer
+from app.kunder.cvr import laeg_opslag_i_koe
+from app.tid import TIDSZONE
 from app.kunder.models import ARKIV_AARSAGER, SYSTEMER, Client
 from app.personale.models import Staff
 from app.timeregistrering.satser import ManglerSats, nye_vilkaar
@@ -104,6 +106,8 @@ def opret(session: Session, af: Staff, navn: str, kundenummer: str, cvr: str | N
         "udfoert_af": af.email, "system": system, "startdato": startdato.isoformat(), "afregning": afregning,
         "abonnementspris": None if abonnementspris is None else str(abonnementspris)}))
     session.flush()
+    # Stamdata fra CVR-registret hentes med det samme (job i kø – opslaget forsinker ikke oprettelsen).
+    laeg_opslag_i_koe(session, kunde, datetime.now(TIDSZONE).date(), prioritet=10)
     return kunde
 
 
