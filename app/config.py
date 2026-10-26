@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     kunde_cvr_api_bruger: str | None = None
     kunde_cvr_api_kode: SecretStr | None = None
     kunde_cvr_sync_cron: str = "0 6 * * *"   # dagligt opslag på alle aktive kunder (dansk tid)
+    # Datafordeleren (bygherren 26.10.2026): CVR-virksomhedsdata med en gratis API-nøgle – app/kunder/datafordeler.py.
+    datafordeler_cvr_url: str = "https://graphql.datafordeler.dk/CVR/v2"
+    datafordeler_api_key: SecretStr | None = None
 
     # Fejlrapporter (Sentry). Tom = slået fra. Selve adressen (DSN) er en hemmelighed.
     sentry_dsn: SecretStr | None = None

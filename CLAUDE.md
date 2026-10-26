@@ -267,6 +267,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     notifikation til ansvarlig + administratorer. Job `kunde_cvr_opdater` ved oprettelse (prioritet 10) og dagligt
     (scheduler, KUNDE_CVR_SYNC_CRON 06.00). `python -m app.kunder.cvr proeve --cvr <nr> [--felter] | opdater
     --kundenummer <nr> | aendringer`. Reelle ejere læses først i trin 15. Opsætning: DEPLOY.md "CVR-registret".
+  - `app/kunder/datafordeler.py` (bygherren 26.10.2026): CVR via DATAFORDELEREN (GraphQL, gratis API-nøgle
+    DATAFORDELER_API_KEY – nøglen står i adressen, så adressen skrives ALDRIG i fejl). Stamdata på kundekortet = navn,
+    CVR-nummer, virksomhedsform og regnskabsperiode – hentes AUTOMATISK, tastes aldrig manuelt. Trin 1: `skema`-kommandoen
+    viser feltnavnene; hentningen bygges ud fra det rigtige svar (DEPLOY.md "Datafordeleren").
   - `kontakter.py` + `app/api/kundekort.py` (trin 3): KUNDEKORTET `/kunder/kort/?id=&fane=` (web/app/kunder/kort/; kundenavnet i
     Kundeoversigten er et link) – faner Stamdata · Kontaktpersoner · Aftale · Frister · Integrationer · Salgsfakturaer ·
     Dokumenter · Noter · Log · Timer (kun Kontaktpersoner er bygget). Kontakter: præcis én primær (den første bliver
