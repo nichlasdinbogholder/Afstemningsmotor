@@ -6,7 +6,12 @@ Datafordelerens CVR-tjeneste. Selve hentningen til kundekortet bygges ud fra det
 - Kun læsning. Nøglen ligger kun i .env (DATAFORDELER_API_KEY) og registreres i logfilteret. Datafordeleren vil
   have nøglen i adressen (?apiKey=…) – derfor skrives adressen ALDRIG i en fejlbesked, kun statuskoden.
 
+Datamodellen (aflæst af skemaet på serveren 26.10.2026): CVR_Virksomhed (CVRNummer, id, status, start-/ophørsdato)
+og CVR_Navn / CVR_Virksomhedsform, der peger på virksomheden med CVREnhedsId. Alle har perioder (virkningFra/-Til og
+registreringTil): den GÆLDENDE værdi er den uden slutdato. Er der mere end én gældende værdi, er det en fejl – aldrig et gæt.
+
 Kommando (på serveren):
+    python -m app.kunder.datafordeler proeve --cvr 12345678     (slår én virksomhed op og viser den – gemmer intet)
     python -m app.kunder.datafordeler skema [--alle]   (henter <adresse>/schema; ellers spørges tjenesten direkte)
 """
 
@@ -29,6 +34,15 @@ query {
 """
 # Typer, der er relevante for stamdata. Med --alle vises alle typer.
 RELEVANTE = ("virksomhed", "navn", "virksomhedsform", "regnskab", "attribut")
+
+
+PERIODE = "virkningFra virkningTil registreringTil"
+VIRKSOMHED = ("query($cvr: Long!) { CVR_Virksomhed(first: 100, where: {CVRNummer: {eq: $cvr}}) "
+              "{ nodes { id CVRNummer status virksomhedStartdato virksomhedOphoersdato " + PERIODE + " } } }")
+NAVN = ("query($id: String!) { CVR_Navn(first: 100, where: {CVREnhedsId: {eq: $id}}) "
+        "{ nodes { vaerdi sekvens " + PERIODE + " } } }")
+VIRKSOMHEDSFORM = ("query($id: String!) { CVR_Virksomhedsform(first: 100, where: {CVREnhedsId: {eq: $id}}) "
+                   "{ nodes { vaerdi vaerdiTekst " + PERIODE + " } } }")
 
 
 class DatafordelerFejl(Exception):
@@ -116,6 +130,35 @@ def skema_udsnit(tekst: str, alle: bool = False) -> str:
     return "\n".join(ud).strip() or "(ingen relevante typer fundet – prøv med --alle)"
 
 
+def _gaeldende(nodes: list[dict], hvad: str) -> dict | None:
+    """Den værdi, der gælder nu: uden slutdato for virkning og registrering. Flere = fejl (gætter aldrig)."""
+    nu = [n for n in nodes if n.get("virkningTil") is None and n.get("registreringTil") is None]
+    if len(nu) > 1:
+        raise DatafordelerFejl(f"Datafordeleren har {len(nu)} gældende værdier for {hvad} – kan ikke afgøre hvilken")
+    return nu[0] if nu else None
+
+
+def slaa_op(cvr: str, transport: httpx.BaseTransport | None = None) -> dict:
+    """Navn, CVR-nummer, virksomhedsform og status for én virksomhed. Kun læsning."""
+    if not (cvr or "").isdigit() or len(cvr) != 8:
+        raise DatafordelerFejl("CVR-nummeret skal være 8 cifre")
+    virksomheder = forespoerg(VIRKSOMHED, {"cvr": int(cvr)}, transport)["CVR_Virksomhed"]["nodes"]
+    v = _gaeldende(virksomheder, "virksomheden")
+    if v is None:
+        raise DatafordelerFejl(f"CVR-nummeret {cvr} findes ikke hos Datafordeleren"
+                               + (f" ({len(virksomheder)} historiske registreringer)" if virksomheder else ""))
+    if str(v.get("CVRNummer")) != cvr:
+        raise DatafordelerFejl("Datafordeleren returnerede en anden virksomhed end den, der blev spurgt efter")
+    navn = _gaeldende(forespoerg(NAVN, {"id": v["id"]}, transport)["CVR_Navn"]["nodes"], "navnet")
+    form = _gaeldende(forespoerg(VIRKSOMHEDSFORM, {"id": v["id"]}, transport)["CVR_Virksomhedsform"]["nodes"],
+                      "virksomhedsformen")
+    return {"cvr": cvr, "navn": navn["vaerdi"] if navn else None,
+            "virksomhedsform": form["vaerdiTekst"] if form else None,
+            "virksomhedsform_kode": form["vaerdi"] if form else None,
+            "status": v.get("status"), "startdato": v.get("virksomhedStartdato"),
+            "ophoersdato": v.get("virksomhedOphoersdato")}
+
+
 def _typenavn(t: dict | None) -> str:
     if not t:
         return "?"
@@ -146,7 +189,20 @@ def main(argv: list[str] | None = None) -> int:
     under = parser.add_subparsers(dest="kommando", required=True)
     sk = under.add_parser("skema", help="vis felterne for navn, virksomhedsform og regnskabsår (ingen kundedata)")
     sk.add_argument("--alle", action="store_true", help="vis alle typer")
+    pr = under.add_parser("proeve", help="slå én virksomhed op og vis den (gemmer intet)")
+    pr.add_argument("--cvr", required=True)
     args = parser.parse_args(argv)
+    if args.kommando == "proeve":
+        try:
+            data = slaa_op(args.cvr.replace(" ", ""))
+        except DatafordelerFejl as fejl:
+            print(f"Fejl: {fejl}", file=sys.stderr)
+            return 2
+        for felt, tekst in (("cvr", "CVR-nummer"), ("navn", "Navn"), ("virksomhedsform", "Virksomhedsform"),
+                            ("virksomhedsform_kode", "Virksomhedsform (kode)"), ("status", "Status"),
+                            ("startdato", "Startdato"), ("ophoersdato", "Ophørsdato")):
+            print(f"{tekst + ':':<24}{data[felt] if data[felt] is not None else '(tom – ikke i svaret)'}")
+        return 0
     # Først skemaet fra /schema; virker det ikke, spørges tjenesten direkte (GraphQL's egen beskrivelse).
     try:
         print(skema_udsnit(hent_skema(), args.alle))
