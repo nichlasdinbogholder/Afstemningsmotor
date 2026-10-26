@@ -61,3 +61,36 @@ def test_fejl_viser_aldrig_noeglen(slaaet_til, status, tekst):
 def test_graphql_fejl_vises(slaaet_til):
     with pytest.raises(datafordeler.DatafordelerFejl, match="Ukendt felt"):
         datafordeler.forespoerg("{x}", transport=_transport(svar={"errors": [{"message": "Ukendt felt x"}]}))
+
+
+def test_fejl_viser_datafordelerens_forklaring_men_ikke_noeglen(slaaet_til):
+    svar = {"errors": [{"message": f"Introspection er slået fra ({NOEGLE})"}]}
+    with pytest.raises(datafordeler.DatafordelerFejl, match=r"status 400\): Introspection er slået fra") as fejl:
+        datafordeler.forespoerg("{x}", transport=_transport(status=400, svar=svar))
+    assert NOEGLE not in str(fejl.value)
+
+
+SDL = """schema { query: Query }
+type Query {
+  CVR_Virksomhed(where: X): CVR_VirksomhedConnection
+}
+type CVR_Navn {
+  vaerdi: String
+  CVREnhedsId: Long
+}
+type CVR_Person {
+  navn: String
+}
+"""
+
+
+def test_skemaet_hentes_fra_schema_adressen(slaaet_til):
+    kald = []
+
+    def h(request):
+        kald.append(request)
+        return httpx.Response(200, text=SDL)
+    udsnit = datafordeler.skema_udsnit(datafordeler.hent_skema(transport=httpx.MockTransport(h)))
+    assert kald[0].method == "GET" and kald[0].url.path == "/CVR/v2/schema"
+    assert "type CVR_Navn {\n  vaerdi: String" in udsnit and "CVR_Person" not in udsnit
+    assert "type Query" in udsnit
