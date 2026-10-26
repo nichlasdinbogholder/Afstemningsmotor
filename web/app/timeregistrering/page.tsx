@@ -30,7 +30,7 @@ type Kladde = {
 
 const DAG = ["Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"];
 const STATUS: Record<string, string> = { kladde: "Kladde", afleveret: "Afleveret", afvist: "Afvist", godkendt: "Godkendt" };
-const AFREGNING: Record<string, string> = { abonnement: "Abonnement", timeafregning: "Timeafregning" };
+const AFREGNING: Record<string, string> = { abonnement: "Abonnement", timeafregning: "Timeafregning", intern: "Intern – faktureres ikke" };
 const ART: Record<string, string> = { kunde: "Kundearbejde", intern: "Intern tid", fravaer: "Fravær" };
 
 function iDag(): string {

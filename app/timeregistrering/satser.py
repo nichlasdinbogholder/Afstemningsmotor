@@ -11,6 +11,8 @@ Kommando (kun læsning, undtagen når en ny pris/vilkår lægges ind):
     python -m app.timeregistrering.satser salgspris --fra 2027-01-01 --pris 725,00 --af <admin-e-mail>
     python -m app.timeregistrering.satser vilkaar --kundenummer <nr> --fra 2026-10-01 --model abonnement --pris 1500 \
         --af <admin-e-mail>
+    python -m app.timeregistrering.satser vilkaar --kundenummer <nr> --fra 2026-10-01 --model intern --af <admin-e-mail>
+        (intern = vores eget firma; kun på kunder med "Kun admin hos Svend")
 Ændringer kræver --af: en aktiv administrator. Den står som aktør i time_audit og i audit_log.
 """
 
@@ -36,7 +38,7 @@ class Satser:
     salgspris: Decimal                   # pr. time, ekskl. moms
     kostpris: Decimal | None = None      # pr. time (kun når der er spurgt om en medarbejder)
     normtid: Decimal | None = None       # timer pr. uge (kan være tom for en medarbejder)
-    afregning: str | None = None         # 'abonnement' | 'timeafregning' (kun når der er spurgt om en kunde)
+    afregning: str | None = None         # 'abonnement' | 'timeafregning' | 'intern' (kun når der er spurgt om en kunde)
     abonnementspris: Decimal | None = None
 
 
@@ -98,10 +100,17 @@ def nye_vilkaar(session: Session, client_id: int, fra: date, afregning: str, abo
                 af_staff_id: int | None) -> TimeClientTerms:
     """Kundens afregningsform fra en dato. Allerede registrerede linjer ændres ikke – de har deres egen kopi."""
     if afregning not in AFREGNINGER:
-        raise ManglerSats("Afregningsformen skal være abonnement eller timeafregning")
+        raise ManglerSats("Afregningsformen skal være abonnement, timeafregning eller intern")
     if afregning == "abonnement" and abonnementspris is None:
         raise ManglerSats("Et abonnement kræver en abonnementspris")
-    if afregning == "timeafregning":
+    if afregning == "intern":
+        from app.kunder.models import Client  # her, ellers importerer kunder og timeregistrering hinanden i ring
+
+        kunde = session.get(Client, client_id)
+        if kunde is None or not kunde.kun_admin:
+            raise ManglerSats("Afregningsformen Intern kan kun bruges på interne kunder (markeret \"Kun admin hos "
+                              "Svend\"), så en rigtig kunde aldrig ved en fejl bliver gratis")
+    if afregning in ("timeafregning", "intern"):
         abonnementspris = None
     alle = list(session.scalars(select(TimeClientTerms).where(TimeClientTerms.client_id == client_id)))
     samme, foer, efter = placer_periode(alle, fra)
@@ -191,6 +200,11 @@ def main(argv: list[str] | None = None) -> int:
             if kunde is not None:
                 print(f"  {kunde.navn}: {s.afregning}" + (f", {_kr(s.abonnementspris)} pr. måned"
                                                          if s.afregning == "abonnement" else ""))
+                print("  Afregningsperioder:")
+                for v in session.scalars(select(TimeClientTerms).where(TimeClientTerms.client_id == kunde.id)
+                                         .order_by(TimeClientTerms.valid_from)):
+                    til = f"{v.valid_to:%d.%m.%Y}" if v.valid_to else "og frem"
+                    print(f"    fra {v.valid_from:%d.%m.%Y} {til}: {v.billing_model}")
             return 0
         bruger = session.scalars(select(Staff).where(Staff.email == args.af.strip().lower())).one_or_none()
         if bruger is None or not bruger.aktiv or bruger.rolle != "admin":

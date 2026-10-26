@@ -1,7 +1,7 @@
 """Kundekartoteket i hub'en (siden Kunde → Kundeoversigt / Arkiverede kunder), bygherren 23.10.2026.
 
 - Oprettelse (KUN administratorer): navn, kundenummer, CVR, regnskabssystem, ansvarlig medarbejder, STARTDATO for
-  samarbejdet og afregningsform (timeafregning eller abonnement med pris) – afregningsformen gælder fra startdatoen.
+  samarbejdet og afregningsform (timeafregning, abonnement med pris eller intern = vores eget firma) – afregningsformen gælder fra startdatoen.
   Kundens adgang (token) lægges stadig ind med `python -m app.kunder.gem_token` (skjult indtastning).
 - Arkivering (KUN administratorer): årsag (pris for høj, engangsopgave, uoverensstemmelse, har ansat egen bogholder)
   og dato for samarbejdets OPHØR. Kunden får status 'opsagt' og stoppes helt – ingen hentning fra regnskabssystemet,
@@ -98,8 +98,9 @@ def opret(session: Session, af: Staff, navn: str, kundenummer: str, cvr: str | N
         if m is None or not m.aktiv:
             raise KartotekFejl("Den ansvarlige skal være en aktiv medarbejder")
     saet_aktoer(session, af.id)
+    # Intern afregning (vores eget firma) gør altid kunden intern hos Svend – Intern kræver kun_admin.
     kunde = Client(navn=navn, kundenummer=kundenummer, cvr=cvr, regnskabssystem=system, status=status,
-                   startdato=startdato, ansvarlig_medarbejder_id=ansvarlig_id)
+                   startdato=startdato, ansvarlig_medarbejder_id=ansvarlig_id, kun_admin=afregning == "intern")
     session.add(kunde)
     session.flush()
     try:
@@ -189,6 +190,10 @@ def saet_kun_admin(session: Session, af: Staff, client_id: int, kun_admin: bool)
         raise KartotekFejl("Kunden findes ikke")
     if kunde.kun_admin == kun_admin:
         return kunde
+    if not kun_admin and session.execute(text(
+            "SELECT 1 FROM time_client_terms WHERE client_id = :k AND billing_model = 'intern' "
+            "AND (valid_to IS NULL OR valid_to > CURRENT_DATE)"), {"k": kunde.id}).first():
+        raise KartotekFejl("Kunden har afregningsformen Intern og skal forblive intern – skift afregningsform først")
     kunde.kun_admin = kun_admin
     session.add(AuditLog(client_id=kunde.id, staff_id=af.id, handling="kunde_kun_admin", detaljer={
         "udfoert_af": af.email, "kun_admin": kun_admin}))
