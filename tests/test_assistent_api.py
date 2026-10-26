@@ -485,3 +485,23 @@ def test_intern_kunde_kun_for_administratorer(db_session, klient, medarbejder, m
     assert klient.get(f"/api/v1/assistant/conversations/{s.id}/messages").status_code == 200
     assert "Hvad tjener kollegerne" in [r["spoergsmaal"] for r in
                                         klient.get("/api/v1/assistant/log").json()["spoergsmaal"]]
+
+
+# Bygherren 26.10.2026: man kan spørge Svend om de kunder, man er ANSVARLIG eller ASSISTENT for – ikke andre.
+def test_assistenten_kan_ogsaa_spoerge_svend(db_session, klient, medarbejder, anden, monkeypatch):
+    hjaelper = _kunde(db_session, "Hjaelp Murer ApS", anden)
+    hjaelper.assistent_id = medarbejder.id
+    fremmed = _kunde(db_session, "Fremmed El ApS", anden)
+    db_session.flush()
+    navne = [k["navn"] for k in klient.get("/api/v1/assistant/kunder").json()]
+    assert hjaelper.navn in navne and fremmed.navn not in navne
+    s = klient.post("/api/v1/assistant/conversations", headers=H, json={"kunde_id": hjaelper.id})
+    assert s.status_code == 200
+    assert klient.post("/api/v1/assistant/conversations", headers=H,
+                       json={"kunde_id": fremmed.id}).status_code == 403
+    # Mister man rollen som assistent, er adgangen væk med det samme.
+    hjaelper.assistent_id = None
+    db_session.flush()
+    _falsk_model(monkeypatch, ["x"])
+    assert klient.post(f"/api/v1/assistant/conversations/{s.json()['id']}/messages", headers=H,
+                       json={"tekst": "Hej"}).status_code == 403

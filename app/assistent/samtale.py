@@ -20,13 +20,14 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from sqlalchemy import select, text
+from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session
 
 from app.assistent.models import AssistantConversation, AssistantMessage, KbDocument
 from app.assistent.satskontrol import er_foraeldet
 from app.config import get_settings
 from app.kunder.models import Client
+from app.kunder.roller import arbejder_paa
 from app.personale.models import Staff
 from app.sikkerhed.hemmeligheder import registrer_hemmelighed
 
@@ -118,13 +119,14 @@ def materialetekst(materiale: list[KbDocument]) -> str:
 
 
 def tilknyttede_kunder(session: Session, medarbejder: Staff) -> list[Client]:
-    """De kunder, medarbejderen må slå op hos i Svend (beslutning 18.10.2026): en ADMINISTRATOR må alle aktive
-    kunder; en medarbejder kun de aktive kunder, hun er ANSVARLIG for. Kontrolleres på serveren ved hvert kald –
-    aldrig kun i brugerfladen."""
+    """De kunder, medarbejderen må slå op hos i Svend: en ADMINISTRATOR må alle aktive kunder; en medarbejder kun de
+    aktive kunder, hun er ANSVARLIG eller ASSISTENT for (bygherren 26.10.2026 – se app/kunder/roller.py).
+    Kontrolleres på serveren ved hvert kald – aldrig kun i brugerfladen."""
     q = select(Client).where(Client.status == "aktiv")
     if medarbejder.rolle != "admin":
-        # Interne kunder (fx Din Bogholder selv) er kun for administratorer – også hvis man er ansvarlig.
-        q = q.where(Client.ansvarlig_medarbejder_id == medarbejder.id, Client.kun_admin.is_(False))
+        # Interne kunder (fx Din Bogholder selv) er kun for administratorer – også hvis man er ansvarlig/assistent.
+        q = q.where(or_(Client.ansvarlig_medarbejder_id == medarbejder.id, Client.assistent_id == medarbejder.id),
+                    Client.kun_admin.is_(False))
     return session.scalars(q.order_by(Client.navn)).all()
 
 
@@ -134,7 +136,7 @@ def er_tilknyttet(session: Session, medarbejder: Staff, client_id: int) -> bool:
         return False
     if medarbejder.rolle == "admin":
         return True
-    return k.ansvarlig_medarbejder_id == medarbejder.id and not k.kun_admin
+    return arbejder_paa(k, medarbejder) and not k.kun_admin
 
 
 def maa_se_samtale(session: Session, medarbejder: Staff, samtale: AssistantConversation) -> bool:

@@ -65,7 +65,7 @@ class NySamtale(BaseModel):
     kunde_id: int | None = None
 
 
-IKKE_TILKNYTTET = "Du er ikke ansvarlig for den kunde og kan ikke spørge til dens regnskab"
+IKKE_TILKNYTTET = "Du er hverken ansvarlig eller assistent på den kunde og kan ikke spørge til dens regnskab"
 
 
 @router.get("/kunder")

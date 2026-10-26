@@ -704,3 +704,5 @@ Nyt modul i hub'en – fire faser, ét trin ad gangen (PR + merge pr. trin). Kun
   ned med data i den gamle form. `gem_token` kræver nu en administrator (`--af`) og udskifter ved tilbagekald + ny række.
 - HUSK i fase 2 (trin 6-7, flere aftaler pr. kunde): `synk/kontoplan.py`, `synk/planlaegger.py` og `synk/bekraeft.py`
   forudsætter ét aktivt token pr. kunde pr. system – de skal arbejde pr. aftale (`kunde_ledgers`).
+- Svend (26.10.2026): en medarbejder kan spørge om de aktive kunder, hun er ANSVARLIG ELLER ASSISTENT for (før kun
+  ansvarlig). Administratorer: alle aktive. Interne kunder (kun_admin) stadig kun administratorer.
