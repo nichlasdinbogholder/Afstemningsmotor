@@ -275,11 +275,12 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     retter (`kontakter.maa_rette`); slettes aldrig (arkiveres); alt i kunde_log. `/api/kundekort/{id}`, `…/kontakter`,
     `POST …/kontakter`, `POST /api/kundekort/kontakter/{kid}[/primaer|/arkiver]`.
   - `oversigt.py` (trin 4): listen i Kundeoversigten – `GET /api/kundekartotek?mine=&ansvarlig_id=&afregning=&system=&status=
-    &forfaldne=&doede_forbindelser=&mangler_hvidvask=`; "mine" = ansvarlig ELLER assistent (standard i webdelen); sorteret
+    &doede_forbindelser=&mangler_hvidvask=`; "mine" = ansvarlig ELLER assistent (standard i webdelen); sorteret
     efter navn. Kolonner (bygherren 26.10.2026): Kunde (kun navn) · Kundenr. · CVR · Ansvarlig (kun visning – status,
     ansvarlig og assistent sættes af admin på KUNDEKORTET) · Afregning (kun abonnement/timeafregning, ingen pris) · System
-    · Bilagsdækning · Månedens status · Status. Næste frist og dækningsgrad vises IKKE i oversigten
-    (`oversigt.daekningsgrader()` gemmes til ledervisningen). Forbindelse = dårligste af kundens kunde_ledgers.
+    · Bilagsdækning · Status. Næste frist, månedens status og dækningsgrad vises IKKE i oversigten – de hører til
+    Controlling (`oversigt.maanedens_status()`/`daekningsgrader()` er bevaret). Filtrene: søgefelt på egen linje,
+    rullemenuer med overskrift, "Vis kun"-knapper (mine kunder, døde forbindelser = afvist/fejlet, mangler hvidvask), Nulstil. Forbindelse = dårligste af kundens kunde_ledgers.
     MÅNEDENS STATUS = "x af y" af denne måneds kunde_tasks. DÆKNINGSGRAD (kun abonnementskunder, seneste hele måned) =
     (abonnementspris + særskilte timer × salgspris − alle timer × kostpris) / indtægt; satser på arbejdsdagen; mangler en
     sats: "mangler sats" (`DAEKNING_SQL`). BILAGSDÆKNING (andel bankposteringer af typen finans med bilag – ikke
