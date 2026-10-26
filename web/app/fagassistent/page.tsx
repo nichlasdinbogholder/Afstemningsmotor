@@ -6,6 +6,7 @@ import { tidspunkt } from "@/lib/format";
 import Satskontrol from "@/components/assistent/Satskontrol";
 import Videnbase from "@/components/assistent/Videnbase";
 import { useMig } from "@/components/Ramme";
+import AdminLaas from "@/components/AdminLaas";
 
 // Loggen over spørgsmål til fagassistenten. Administratorer ser alle; en medarbejder ser kun sine egne.
 // Listen viser, hvor fagligheden halter – gennemgå den ugentligt den første måned.
@@ -37,7 +38,7 @@ export default function Side() {
             ...(mig?.rolle === "admin" ? [{ id: "satskontrol" as const, t: "Satskontrol" }] : [])].map((f) => (
             <button key={f.id} type="button" onClick={() => setFane(f.id)}
                     className={`-mb-px border-b-2 px-4 py-2 text-sm ${fane === f.id ? "border-brand-600 font-medium text-slate-900" : "border-transparent text-slate-600 hover:text-slate-900"}`}>
-              {f.t}
+              {f.t}{f.id === "satskontrol" && <AdminLaas className="ml-1.5" />}
             </button>
           ))}
         </div>

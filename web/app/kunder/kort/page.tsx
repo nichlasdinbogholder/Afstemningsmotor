@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { hent, send } from "@/lib/api";
+import AdminLaas from "@/components/AdminLaas";
 
 // Kundekortet (Kundeoversigten). Trin 3: hovedet og fanen Kontaktpersoner – de øvrige faner bygges i trin 5.
 // Alle regler (hvem må rette, præcis én primær) afgøres på serveren (/api/kundekort).
@@ -72,6 +73,7 @@ function Kundekort() {
         </p>
         {hoved.admin && valg && hoved.status_kode !== "opsagt" && (
           <div className="mt-3 flex flex-wrap items-end gap-4 text-sm">
+            <span className="flex items-center gap-1 pb-1.5 text-xs text-amber-700"><AdminLaas /> Kun administratorer</span>
             <label className="flex flex-col text-slate-600">Status
               <select value={hoved.status_kode} onChange={(e) => aendr("status", { status: e.target.value }, "Status er ændret")}
                       className="mt-1 rounded-md border border-slate-300 px-2 py-1 text-slate-900">
