@@ -126,8 +126,9 @@ def test_slaa_op_bruger_den_gaeldende_vaerdi(slaaet_til):
 
 
 def test_slaa_op_gaetter_aldrig(slaaet_til):
-    with pytest.raises(datafordeler.DatafordelerFejl, match="findes ikke"):
-        datafordeler.slaa_op("12345678", transport=_cvr_transport([], [], []))
+    assert datafordeler.slaa_op("12345678", transport=_cvr_transport([], [], [])) is None
+    assert datafordeler.slaa_op("12345678", transport=_cvr_transport([{"id": "E1", "CVRNummer": 12345678, **GAMMEL}],
+                                                                     [], [])) is None    # kun historik = ophørt
     to = [{"id": "E1", "CVRNummer": 12345678, **NU}]
     with pytest.raises(datafordeler.DatafordelerFejl, match="2 gældende værdier for navnet"):
         datafordeler.slaa_op("12345678", transport=_cvr_transport(to, [{"vaerdi": "A", **NU}, {"vaerdi": "B", **NU}], []))

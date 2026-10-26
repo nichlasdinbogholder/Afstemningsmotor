@@ -13,6 +13,10 @@ type Hoved = {
   ansvarlig: string | null; ansvarlig_id: number | null; assistent: string | null; assistent_id: number | null;
   kan_rette: boolean; admin: boolean;
 };
+type Stamdata = {
+  navn: string | null; cvr: string | null; virksomhedsform: string | null; status: string | null; hentet: string | null;
+  regnskabsperiode: { fra: string; til: string; navn: string } | null; regnskabsperiode_advarsel: string | null;
+};
 type Valg = { medarbejdere: { id: number; navn: string }[] };
 type Kontakt = {
   id: number; navn: string; rolle: string | null; telefon: string | null; email: string | null;
@@ -109,6 +113,7 @@ function Kundekort() {
         ))}
       </nav>
       {fane === "kontakter" ? <Kontakter hoved={hoved} />
+        : fane === "stamdata" ? <StamdataFane hoved={hoved} />
         : <p className="text-sm text-slate-500">Denne fane bygges i et senere trin.</p>}
     </div>
   );
@@ -238,5 +243,43 @@ function KontaktFormular({ start, ny, gem, luk }: {
         <button type="button" onClick={luk} className="rounded-md border border-slate-300 px-4 py-2 hover:bg-slate-50">Annullér</button>
       </div>
     </form>
+  );
+}
+
+// Stamdata (bygherren 26.10.2026): hentes automatisk – navn og virksomhedsform fra CVR, regnskabsperioden fra kundens
+// regnskabssystem. Intet tastes her. Afvigelser mellem CVR og regnskabssystemet regnes på serveren.
+function StamdataFane({ hoved }: { hoved: Hoved }) {
+  const [d, setD] = useState<Stamdata | null>(null);
+  useEffect(() => { hent<Stamdata>(`/api/kundekort/${hoved.id}/stamdata`).then(setD); }, [hoved.id]);
+  if (!d) return <p className="text-slate-500">Henter …</p>;
+  const dato = (iso: string) => new Date(iso).toLocaleDateString("da-DK");
+  const tom = <span className="text-slate-400">–</span>;
+  const felter: [string, React.ReactNode, string][] = [
+    ["Virksomhedens navn", d.navn ?? tom, "CVR"],
+    ["CVR-nummer", d.cvr ?? tom, "Kundekartoteket"],
+    ["Virksomhedsform", d.virksomhedsform ?? tom, "CVR"],
+    ["Regnskabsperiode", d.regnskabsperiode ? `${dato(d.regnskabsperiode.fra)} – ${dato(d.regnskabsperiode.til)}` : tom,
+     "Regnskabssystemet"],
+  ];
+  return (
+    <div className="space-y-4 text-sm">
+      <p className="text-slate-600">
+        {d.hentet ? `Hentet automatisk fra CVR ${dato(d.hentet)}.`
+          : hoved.cvr ? "Ikke hentet fra CVR endnu – det sker automatisk hver morgen kl. 6."
+          : "Kunden har intet CVR-nummer, så der kan ikke hentes stamdata fra CVR."}
+        {" "}Regnskabsperioden er det regnskabsår i kundens regnskabssystem, der gælder i dag.
+      </p>
+      {d.regnskabsperiode_advarsel && (
+        <p className="rounded-md bg-amber-50 px-3 py-2 font-medium text-amber-900">{d.regnskabsperiode_advarsel}</p>
+      )}
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-lg border border-slate-200 bg-white p-4">
+        {felter.map(([tekst, vaerdi, kilde]) => (
+          <div key={tekst}>
+            <dt className="text-xs font-medium text-slate-500">{tekst} <span className="font-normal text-slate-400">· {kilde}</span></dt>
+            <dd className="mt-0.5 text-base text-slate-900">{vaerdi}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
 }
