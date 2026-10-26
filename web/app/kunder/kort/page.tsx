@@ -596,8 +596,8 @@ type FristerSvar = {
   kan_rette: boolean;
 };
 
-// Frister (bygherren 26.10.2026): hvor ofte kunden indberetter moms og lønsumsafgift til Skat. Gemmes med det samme.
-// Grundlaget for planlægningen senere – fristdatoerne beregnes på serveren ud fra dette.
+// Frister (bygherren 26.10.2026): kundens ordning hos Skat for moms og lønsumsafgift. KUN administratorer retter (det
+// styrer planlægningen). Fristdatoerne slås op i Skats fristkalender og vises i AI Planlægning.
 function FristerFane({ hoved }: { hoved: Hoved }) {
   const [d, setD] = useState<FristerSvar | null>(null);
   const [besked, setBesked] = useState<{ tekst: string; fejl?: boolean } | null>(null);
@@ -613,7 +613,10 @@ function FristerFane({ hoved }: { hoved: Hoved }) {
 
   return (
     <div className="space-y-4 text-sm">
-      <p className="text-slate-600">Hvor ofte indberetter kunden til Skat? Valget bruges senere til planlægningen af kundens frister.</p>
+      <p className="flex items-center gap-2 text-slate-600">
+        Kundens ordning hos Skat. Fristerne vises automatisk i <Link href="/ai-planlaegning/" className="font-medium text-brand-700 hover:underline">AI Planlægning</Link>.
+        <AdminLaas />
+      </p>
       {besked && <p className={`rounded-md px-3 py-2 ${besked.fejl ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>{besked.tekst}</p>}
       {d.frister.map((f) => (
         <div key={f.kode} className="rounded-lg border border-slate-200 bg-white p-4">
@@ -637,7 +640,7 @@ function FristerFane({ hoved }: { hoved: Hoved }) {
           </div>
         </div>
       ))}
-      {!d.kan_rette && <p className="text-slate-500">Kun kundens ansvarlige, assistent eller en administrator kan rette fristerne.</p>}
+      {!d.kan_rette && <p className="text-slate-500">Kun administratorer kan rette fristerne, da de styrer planlægningen af kunderne.</p>}
     </div>
   );
 }

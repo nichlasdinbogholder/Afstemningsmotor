@@ -16,7 +16,7 @@ Alle medarbejdere ser kortet og kontaktpersonerne. Kun kundens ansvarlige, assis
 - `POST /api/kundekort/{id}/aftale`                  upload PDF (filen sendes direkte; navnet i headeren X-Filnavn)
 - `GET  /api/kundekort/{id}/aftale/{did}/pdf`        åbn PDF'en
 - `GET  /api/kundekort/{id}/frister`                 moms og lønsumsafgift: hvor ofte der indberettes til Skat
-- `POST /api/kundekort/{id}/frister`                 {frist: moms|loensumsafgift, periode} – ansvarlig/assistent/admin
+- `POST /api/kundekort/{id}/frister`                 {frist: moms|loensumsafgift, periode} – KUN admin
 - `GET  /api/kundekort/{id}/stamdata`                navn, CVR, virksomhedsform (CVR) + regnskabsperiode (regnskabssystemet)
 """
 
@@ -217,8 +217,7 @@ def frister_saet(kunde_id: int, data: Frist, m: Staff = Depends(nuvaerende_medar
         with session.begin_nested():
             k = frister.saet(session, m, kunde_id, data.frist, data.periode)
     except frister.IkkeTilladt:
-        raise HTTPException(status_code=403, detail="Kun kundens ansvarlige, assistent eller en administrator kan "
-                                                    "rette fristerne") from None
+        raise HTTPException(status_code=403, detail="Kun administratorer kan rette fristerne") from None
     except frister.FristFejl as fejl:
         raise HTTPException(status_code=422, detail=str(fejl)) from None
     session.commit()

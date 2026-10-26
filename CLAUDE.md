@@ -296,10 +296,24 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
     KUN ansvarlig/assistent/admin uploader, alle ser. DATABASEN: slettes/ændres aldrig – ny version arkiverer den gamle;
     én gældende pr. kunde. ALARMKLOKKE ved fanen, når der ikke er et gældende (`mangler_aftale` i kundekortets hoved) –
     ikke for interne kunder (afregning 'intern').
-  - `frister.py` + fanen Frister (bygherren 26.10.2026): MOMS (`kunde_obligations.vat_period`) og LØNSUMSAFGIFT
-    (`loensumsafgift_period`, erstatter has_loensumsafgift) – hver især maaned/kvartal/halvaar/aar/ingen (= ikke tilmeldt);
-    NULL = ikke valgt. Grundlaget for planlægningen senere. Kun ansvarlig/assistent/admin retter; hver ændring i kunde_log
-    med fra/til. `GET/POST /api/kundekort/{id}/frister` ({frist: moms|loensumsafgift, periode}).
+  - `frister.py` + fanen Frister (bygherren 26.10.2026): MOMS (`kunde_obligations.vat_period`: maaned/kvartal/halvaar/
+    ingen – Skat har ingen årlig moms) og LØNSUMSAFGIFT (`loensumsafgift_metode`: Skats metode_1-4/ingen); NULL = ikke
+    valgt. KUN ADMINISTRATORER retter (styrer planlægningen; låseikon). Hver ændring i kunde_log med fra/til.
+    `GET/POST /api/kundekort/{id}/frister` ({frist: moms|loensumsafgift, periode}).
+- `app/frister/` + `app/api/planlaegning.py` + siden `web/app/ai-planlaegning/` – AI PLANLÆGNING (bygherren 26.10.2026):
+  SKATS FRISTKALENDER `skat_frister` (afgift, ordning, periode, frist, kilde på skat.dk, status udkast/godkendt/afvist).
+  Fristerne BEREGNES ALDRIG (Skat har undtagelser) – kun GODKENDTE datoer bruges. KUN admin lægger ind (godkendt med det
+  samme, kilde skal være skat.dk), godkender udkast og tilbagekalder. DATABASEN: intet slettes, en frist kan aldrig
+  rettes, godkendt kan kun tilbagekaldes; én godkendt pr. afgift/ordning/periode. `kalender.kommende()`: kunder i drift
+  × deres ordning × godkendte frister, nærmeste først; advarsler når Skats datoer ikke rækker frem, eller en kunde
+  mangler valg. `/api/planlaegning/frister?fra=&til=&mine=&ansvarlig_id=&afgift=`, `/kalender` (+ POST, `/godkend`,
+  `/tilbagekald`). Næste trin: Svend henter fristerne fra skat.dk som udkast.
+  ÅRSAFSLUTNING (`kunde_obligations.aarsafslutning`, KUN to valg – bygherren 26.10.2026): 'aarsregnskab_oplysningsskema'
+  (årsregnskab 6 mdr. efter regnskabsårets slutning, klasse B; oplysningsskema 6 mdr. efter – slutter regnskabsåret
+  1. feb–31. mar: 1. september samme år, SKL § 12, stk. 2) eller 'aarsopgoerelse' (ALTID 20. maj året efter, rykkes ikke).
+  REGNES ud fra kundens regnskabsår (accounting_years) i `app/frister/aarsafslutning.py` (godkendt regeltabel); øvrige
+  frister rykkes fra weekend/helligdag til første hverdag (bankernes lukkedage 5/6, 24/12, 31/12 tæller ikke).
+  Ultimo + 6 mdr. = ultimo (31.12 → 30.06, 30.06 → 31.12). Advarsel, hvis en kunde har valgt men mangler regnskabsår.
   - `oversigt.py` (trin 4): listen i Kundeoversigten – `GET /api/kundekartotek?mine=&ansvarlig_id=&afregning=&system=&status=
     &doede_forbindelser=&mangler_hvidvask=`; "mine" = ansvarlig ELLER assistent (standard i webdelen); sorteret
     efter navn. Kolonner (bygherren 26.10.2026): Kunde (kun navn) · Kundenr. · CVR · Ansvarlig (kun visning – status,
