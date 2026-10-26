@@ -8,7 +8,16 @@ import { dato, tidspunkt } from "@/lib/format";
 type Medarbejder = {
   id: number; navn: string; email: string; rolle: "admin" | "medarbejder"; aktiv: boolean;
   forbundet_til_microsoft: boolean; sidst_logget_ind: string | null;
+  invitation: Invitation | null;
   tid: Tid;
+};
+// Seneste velkomstmail ("invitation") til medarbejderen – sendes fra info@dinbogholder.dk.
+type Invitation = { tidspunkt: string | null; status: "sendt" | "fejl" | "ikke_slaaet_til"; fejl: string | null };
+
+const INVITATION_TEKST = {
+  sendt: "Invitation sendt",
+  fejl: "Invitationen kunne ikke sendes",
+  ikke_slaaet_til: "Invitation ikke sendt – mail er ikke slået til endnu",
 };
 type Sats = { fra: string; til: string | null; normtid: string | null; kostpris_pr_time: string;
   produktive_timer_aar: string; note: string | null };
@@ -65,7 +74,17 @@ export default function Side() {
         </p>
       </div>
 
-      <NyMedarbejder gem={(d) => udfoer(() => send("/api/medarbejdere", d), `${d.email} er oprettet og kan nu logge ind`)} />
+      <NyMedarbejder gem={async (d) => {
+        let mail = "";
+        const ok = await udfoer(async () => {
+          const ny = await send<{ invitation_sendt: { status: Invitation["status"] } }>("/api/medarbejdere", d);
+          mail = ny.invitation_sendt.status === "sendt" ? " En invitation er sendt til mailen."
+            : ny.invitation_sendt.status === "ikke_slaaet_til" ? " Invitationen kunne ikke sendes endnu (mail er ikke slået til)."
+            : " Invitationen kunne ikke sendes – prøv \"Send invitation igen\".";
+        }, `${d.email} er oprettet og kan nu logge ind.`);
+        if (ok && mail) setBesked((b) => b && { ...b, tekst: b.tekst + mail });
+        return ok;
+      }} />
 
       {besked && <p className={`rounded-md px-3 py-2 text-sm ${besked.fejl ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>{besked.tekst}</p>}
 
@@ -104,7 +123,25 @@ export default function Side() {
                       {m.aktiv ? <span className="rounded bg-emerald-100 px-1.5 text-xs font-semibold text-emerald-800">Aktiv</span>
                                : <span className="rounded bg-slate-200 px-1.5 text-xs font-semibold text-slate-600">Lukket</span>}
                     </td>
-                    <td className="px-3 py-2">{m.sidst_logget_ind ? tidspunkt(m.sidst_logget_ind) : <span className="text-slate-400">aldrig</span>}</td>
+                    <td className="px-3 py-2">
+                      {m.sidst_logget_ind ? tidspunkt(m.sidst_logget_ind) : <span className="text-slate-400">aldrig</span>}
+                      {!m.sidst_logget_ind && m.aktiv && !mig_selv && (
+                        <div className="mt-1 text-xs">
+                          {m.invitation && (
+                            <div className={m.invitation.status === "sendt" ? "text-slate-500" : "text-amber-700"}
+                                 title={m.invitation.fejl ?? undefined}>
+                              {INVITATION_TEKST[m.invitation.status]}{m.invitation.tidspunkt && ` ${tidspunkt(m.invitation.tidspunkt)}`}
+                            </div>
+                          )}
+                          <button type="button"
+                                  onClick={() => udfoer(() => send(`/api/medarbejdere/${m.id}/invitation`),
+                                                        `Invitationen er sendt igen til ${m.email}`)}
+                                  className="text-brand-600 hover:underline">
+                            {m.invitation ? "Send invitation igen" : "Send invitation"}
+                          </button>
+                        </div>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-right">
                       {!mig_selv && (m.aktiv ? (
                         <button onClick={() => window.confirm(`Luk adgangen for ${m.navn}? Den lukkes med det samme.`) &&

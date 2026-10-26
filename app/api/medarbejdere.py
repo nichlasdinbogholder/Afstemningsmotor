@@ -7,6 +7,8 @@ Samme regler som kommandoen `python -m app.personale.bruger`:
 - Man kan ikke ændre sin egen rolle eller lukke sin egen adgang, og der skal altid være mindst
   én aktiv administrator – så ingen kan låse alle ude.
 - Alt logges i audit_log med, hvem der gjorde det.
+- Invitation (app/personale/invitation.py): en velkomstmail fra info@ sendes, når medarbejderen oprettes, og kan
+  sendes igen med `POST /api/medarbejdere/{id}/invitation`. Oprettelsen lykkes, også hvis mailen ikke kan sendes.
 - Timeregistreringens stamdata (app/timeregistrering/stamdata.py): ansættelsesform, flexjob og satser (normtid,
   kostpris pr. time og produktive timer pr. år) med gyldig-fra-dato. En ny sats overskriver aldrig den gamle.
   Kostpriser ses og rettes KUN af administratorer (hele routeren kræver admin). Ændringer logges i time_audit.
@@ -24,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.api.data import kraev_header
 from app.api.login import db, kraev_admin
 from app.audit.models import AuditLog
+from app.personale import invitation
 from app.personale.models import STAFF_ROLLER, Staff
 from app.timeregistrering import stamdata
 
@@ -61,6 +64,7 @@ def _json(m: Staff, session: Session | None = None) -> dict:
     return ({} if session is None else {"tid": _tid_json(session, m)}) | {"id": m.id, "navn": m.navn, "email": m.email, "rolle": m.rolle, "aktiv": m.aktiv,
             "forbundet_til_microsoft": m.microsoft_oid is not None,
             "sidst_logget_ind": m.sidst_logget_ind.isoformat() if m.sidst_logget_ind else None,
+            "invitation": None if session is None else invitation.seneste(session, m.id),
             "oprettet": m.oprettet.isoformat() if isinstance(m.oprettet, datetime) else None}
 
 
@@ -97,6 +101,27 @@ def opret(data: NyMedarbejder, af: Staff = Depends(kraev_admin), session: Sessio
     session.flush()
     _log(session, af, "opret", m)
     session.commit()
+    # Først når medarbejderen er gemt, sendes velkomstmailen – går den galt, kan den sendes igen fra listen.
+    resultat = invitation.send_invitation(session, m, af)
+    session.commit()
+    return _json(m, session) | {"invitation_sendt": resultat}
+
+
+@router.post("/{medarbejder_id}/invitation", dependencies=[Depends(kraev_header)])
+def send_igen(medarbejder_id: int, af: Staff = Depends(kraev_admin), session: Session = Depends(db)) -> dict:
+    """Send velkomstmailen igen (fx hvis den ikke kan findes i Outlook)."""
+    m = session.get(Staff, medarbejder_id)
+    if m is None:
+        raise HTTPException(status_code=404, detail="Medarbejderen findes ikke")
+    if not m.aktiv:
+        raise HTTPException(status_code=409, detail="Adgangen er lukket – genåbn den, før du sender en invitation")
+    resultat = invitation.send_invitation(session, m, af)
+    session.commit()
+    if resultat["status"] == "ikke_slaaet_til":
+        raise HTTPException(status_code=503, detail="Invitationen kan ikke sendes endnu: udgående mail fra "
+                                                    "info@dinbogholder.dk er ikke slået til")
+    if resultat["status"] == "fejl":
+        raise HTTPException(status_code=502, detail=f"Invitationen kunne ikke sendes: {resultat['fejl']}")
     return _json(m, session)
 
 
