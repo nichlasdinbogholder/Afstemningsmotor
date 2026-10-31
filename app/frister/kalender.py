@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.audit.models import AuditLog
 from app.frister import aarsafslutning
-from app.frister.models import ORDNINGER, SkatFrist
+from app.frister.models import ORDNINGER, MasterafstemningBooking, SkatFrist
 from app.kunder.models import I_DRIFT, Client
 from app.kunder.tabeller import KundeObligations
 from app.personale.models import Staff
@@ -153,7 +153,7 @@ def kommende(session: Session, medarbejder: Staff, fra: date, til: date, f: Filt
         noegle = (s.afgift, s.ordning)
         seneste[noegle] = max(seneste.get(noegle, s.frist), s.frist)
 
-    raekker, ikke_valgt, brugte, uden_regnskabsaar = [], {a: [] for a in afgifter}, set(), []
+    raekker, ikke_valgt, brugte, uden_regnskabsaar, advarsler_kunder = [], {a: [] for a in afgifter}, set(), [], []
     for k in kunder:
         o = session.get(KundeObligations, k.id)
         for afgift in afgifter:
@@ -168,6 +168,14 @@ def kommende(session: Session, medarbejder: Staff, fra: date, til: date, f: Filt
                     AccountingYearCache.client_id == k.id, AccountingYearCache.til.is_not(None))))
                 if not aar:
                     uden_regnskabsaar.append(k.navn)
+                if ordning == "ekstern_revisor":
+                    for a in aar:
+                        raekke, advarsel = _masterafstemning(session, k, navne, a, fra, til)
+                        if raekke:
+                            raekker.append(raekke)
+                        if advarsel:
+                            advarsler_kunder.append(advarsel)
+                    continue
                 for a in aar:
                     for af in aarsafslutning.frister(ordning, a.til):
                         if fra <= af.frist <= til:
@@ -189,10 +197,37 @@ def kommende(session: Session, medarbejder: Staff, fra: date, til: date, f: Filt
         if navne_:
             advarsler.append(f"{len(navne_)} kunde(r) mangler valg for {FILTER_TEKST[afgift].lower()} på fanen "
                              f"Frister: {_navneliste(navne_)}")
+    advarsler += advarsler_kunder
     if uden_regnskabsaar:
         advarsler.append(f"{len(uden_regnskabsaar)} kunde(r) har valgt årsafslutning, men der er ikke hentet "
                          f"regnskabsår fra regnskabssystemet: {_navneliste(uden_regnskabsaar)}")
     return {"raekker": raekker, "advarsler": advarsler}
+
+
+def _masterafstemning(session: Session, k: Client, navne: dict, a: AccountingYearCache, fra: date,
+                      til: date) -> tuple[dict | None, str | None]:
+    """Ekstern revisor: masterafstemningen – senest-datoen som frist, og den bookede tid i Outlook, hvis den findes."""
+    from app.frister.masterafstemning import vindue
+
+    booking = session.scalars(select(MasterafstemningBooking).where(
+        MasterafstemningBooking.client_id == k.id, MasterafstemningBooking.regnskabsaar_slut == a.til)).first()
+    v = vindue(session, k, a.til)
+    if v.mangler and booking is None:
+        if a.til >= fra - timedelta(days=60):           # kun nyere regnskabsår giver en advarsel
+            return None, f"{k.navn}: masterafstemningen kan ikke planlægges – {v.mangler}."
+        return None, None
+    seneste = booking.seneste if booking else v.seneste
+    if not fra <= seneste <= til:
+        return None, None
+    tekst = "Masterafstemning (ekstern revisor)"
+    if booking and booking.status == "booket":
+        tekst += f" – booket {booking.start:%d.%m.%Y %H:%M}–{booking.slut:%H:%M}"
+    elif booking and booking.status == "ingen_tid":
+        tekst += " – ingen ledig tid i Outlook"
+    else:
+        tekst += f" – bookes fra {(booking.tidligst if booking else v.tidligst):%d.%m.%Y}"
+    return _raekke(k, navne, "aarsafslutning", tekst, periode_tekst(a.fra or a.til, a.til), seneste, fra,
+                   "regnskabsåret + Skats momsfrist"), None
 
 
 def _navneliste(navne: list[str]) -> str:
